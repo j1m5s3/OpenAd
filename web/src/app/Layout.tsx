@@ -8,7 +8,7 @@ import Typography from '@mui/material/Typography';
 import { NavLink, Outlet } from 'react-router';
 
 import { ConnectButton } from '../components/ConnectButton';
-import { routes } from './routes';
+import { routes } from './paths';
 
 const nav = [
   { to: routes.marketplace, label: 'Marketplace', end: true },

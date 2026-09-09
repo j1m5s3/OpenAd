@@ -16,8 +16,8 @@ dot_env = "../.env"
 is_zksync = false
 
 [networks.anvil]
-# `docker compose up -d anvil` from the repo root. Account #0 is imported as the "anvil"
-# Moccasin wallet:  uv run mox wallet import anvil   (key in ../docker-compose.yml)
+# `docker compose up -d anvil` from the repo root. Local setup deploys with
+# `--private-key` (Foundry account #0; key is in ../docker-compose.yml comments).
 url = "http://127.0.0.1:8545"
 chain_id = 31337
 prompt_live = false

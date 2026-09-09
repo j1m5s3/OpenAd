@@ -20,6 +20,8 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
       serve endpoint with house-ad fallback, indexer runner + handler registry, tests. _Done 2026-09-08._
 - [x] **0.4 Web and embed skeletons.** Vite/React/MUI/wagmi shell with routes; `<open-ad>` element
       with demo page and size check. _Done 2026-09-08._
+- [x] **0.5 Local run scripts.** PowerShell setup/up/down plus `stack:*` npm wrappers; titled
+      windows for api/indexer/web; docker-only down. _Done 2026-09-08._
 
 ## Phase 1 — Protocol contracts (Base Sepolia)
 

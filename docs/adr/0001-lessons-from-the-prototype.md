@@ -20,7 +20,7 @@ binding constraints on the redesign:
 1. **The prototype was custodial.** One platform private key deployed contracts, minted slots,
    and set ad pointers on behalf of users; `setNftAdInfo` was `onlyOwner` (contract owner =
    platform), so owning the NFT did not confer the right to place media. → OpenAd is
-   non-custodial; the NFT lease *is* the right; the platform key can only change
+   non-custodial; the NFT lease _is_ the right; the platform key can only change
    fee/treasury/moderator/market settings (`PROTOCOL.md` §1 principle 1).
 2. **Ad space was modelled as a permanent asset.** The Dutch auction sold the NFT outright with
    no duration or expiry. → Slots are permanent and owned by the publisher; periods are leased

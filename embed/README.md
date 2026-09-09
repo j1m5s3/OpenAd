@@ -20,12 +20,12 @@ Constraints: [`/docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) §6, [`/docs/CON
 ></open-ad>
 ```
 
-| Attribute | Required | Meaning |
-| --- | --- | --- |
-| `slot-id` | yes | The slot's token id. |
-| `api` | yes in production | Base URL of the OpenAd API (default `http://localhost:8000` for local dev). |
-| `width`, `height` | recommended | CSS pixel box; should equal the slot's `SlotSpec` dimensions. |
-| `house-src`, `house-href` | optional | Publisher fallback shown when nothing is serveable or on error. |
+| Attribute                 | Required          | Meaning                                                                     |
+| ------------------------- | ----------------- | --------------------------------------------------------------------------- |
+| `slot-id`                 | yes               | The slot's token id.                                                        |
+| `api`                     | yes in production | Base URL of the OpenAd API (default `http://localhost:8000` for local dev). |
+| `width`, `height`         | recommended       | CSS pixel box; should equal the slot's `SlotSpec` dimensions.               |
+| `house-src`, `house-href` | optional          | Publisher fallback shown when nothing is serveable or on error.             |
 
 Events (bubble, composed): `openad:render` with `detail: { slotId, status }` where `status` is
 `lease | house | empty | unknown | error`; `openad:error` on network/parse failure.

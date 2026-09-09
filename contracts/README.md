@@ -41,10 +41,13 @@ uv run vyper -p ./src <file.vy> -f abi          # compile a single file directly
 
 ### Wallets
 
-Deploy keys are Moccasin encrypted wallets, never `.env` values.
+Local Anvil deploy (`npm run stack:setup` / `mox run deploy --network anvil --private-key`)
+uses Foundry account #0 from the comments in `../docker-compose.yml`. No wallet import.
+
+Testnet and mainnet keys are Moccasin encrypted wallets, never `.env` values, and must be
+imported in a real terminal (Cursor agent terminals cannot accept paste):
 
 ```bash
-uv run mox wallet import anvil        # paste Anvil account #0 key from ../docker-compose.yml
 uv run mox wallet import base-sepolia # your testnet key; then set default_account_name in moccasin.toml
 ```
 

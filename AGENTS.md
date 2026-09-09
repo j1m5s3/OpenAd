@@ -33,24 +33,30 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 
 ## Where things are
 
-| Need | Location |
-| --- | --- |
-| Contract semantics | `docs/PROTOCOL.md` |
-| Contract signatures | `contracts/src/interfaces/*.vyi` |
-| Contract code / tests / deploy | `contracts/src/`, `contracts/tests/`, `contracts/script/deploy.py` |
-| Addresses + ABIs per chain | `contracts/deployments/<chainId>.json` (the only contracts → off-chain hand-off) |
-| API app, settings, routers, services | `api/src/openad/` (see `ARCHITECTURE.md` §3.1) |
-| Indexer | `api/src/openad/indexer/` |
-| Serve endpoint + media cache | `api/src/openad/serve/`, `api/src/openad/services/serve.py` |
-| Serve JSON contract | `api/src/openad/schemas/serve.py` ⇔ `embed/src/types.ts` |
-| Web app | `web/src/` (feature folders; wagmi for writes; API for reads) |
-| Embed element | `embed/src/open-ad.ts` |
-| Env vars | `.env.example` (all prefixed `OPENAD_`; web uses `VITE_`) |
-| Local infra | `docker-compose.yml` (Anvil + Postgres) |
+| Need                                 | Location                                                                         |
+| ------------------------------------ | -------------------------------------------------------------------------------- |
+| Contract semantics                   | `docs/PROTOCOL.md`                                                               |
+| Contract signatures                  | `contracts/src/interfaces/*.vyi`                                                 |
+| Contract code / tests / deploy       | `contracts/src/`, `contracts/tests/`, `contracts/script/deploy.py`               |
+| Addresses + ABIs per chain           | `contracts/deployments/<chainId>.json` (the only contracts → off-chain hand-off) |
+| API app, settings, routers, services | `api/src/openad/` (see `ARCHITECTURE.md` §3.1)                                   |
+| Indexer                              | `api/src/openad/indexer/`                                                        |
+| Serve endpoint + media cache         | `api/src/openad/serve/`, `api/src/openad/services/serve.py`                      |
+| Serve JSON contract                  | `api/src/openad/schemas/serve.py` ⇔ `embed/src/types.ts`                         |
+| Web app                              | `web/src/` (feature folders; wagmi for writes; API for reads)                    |
+| Embed element                        | `embed/src/open-ad.ts`                                                           |
+| Env vars                             | `.env.example` (all prefixed `OPENAD_`; web uses `VITE_`)                        |
+| Local infra                          | `docker-compose.yml` (Anvil + Postgres)                                          |
 
 ## Commands
 
 ```text
+# local stack (Windows; scripts/*.cmd bypass PowerShell execution policy)
+.\scripts\setup.cmd                                 # .env, docker, MockUSDC deploy, DB bootstrap, npm install (no wallet prompt)
+.\scripts\dev-up.cmd                                # starts docker if needed; titled windows: api, indexer, web (-Embed optional)
+.\scripts\dev-down.cmd                              # stops docker; next up restarts Anvil/Postgres (Anvil chain is ephemeral)
+# if npm.ps1 is blocked: use the .cmd files or npm.cmd run stack:*  (not `npm`)
+
 # infra
 docker compose up -d
 

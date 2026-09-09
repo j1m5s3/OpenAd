@@ -8,8 +8,8 @@ let it stand.
 
 1. [`GLOSSARY.md`](GLOSSARY.md) — the vocabulary. Read first; every other document assumes it.
 2. [`PROTOCOL.md`](PROTOCOL.md) — the on-chain protocol: entities, functions, events, pricing
-   math, access control, invariants. Function *signatures* are canonical in
-   `contracts/src/interfaces/*.vyi`; *semantics* are canonical here.
+   math, access control, invariants. Function _signatures_ are canonical in
+   `contracts/src/interfaces/*.vyi`; _semantics_ are canonical here.
 3. [`ARCHITECTURE.md`](ARCHITECTURE.md) — the whole system: packages, data flow, the
    write path vs. read path, the serving edge, environments, the deployments artifact.
 4. [`CONVENTIONS.md`](CONVENTIONS.md) — coding standards per language/package, testing rules,
@@ -20,14 +20,14 @@ let it stand.
 
 ## Which document to update when
 
-| You changed…                                        | Update…                                              |
-| --------------------------------------------------- | ---------------------------------------------------- |
-| A contract function, event, struct, or invariant    | `PROTOCOL.md` **and** the matching `.vyi` interface   |
-| A service, data flow, table, endpoint, or env var   | `ARCHITECTURE.md` (and the package README)           |
-| A coding rule, tool, or testing requirement         | `CONVENTIONS.md` and the matching `.cursor/rules/*.mdc` |
-| A term or its meaning                               | `GLOSSARY.md`                                        |
-| Task status, scope, or acceptance criteria          | `ROADMAP.md`                                         |
-| A decision with alternatives you rejected           | New file in `adr/` (copy `adr/0000-template.md`)      |
+| You changed…                                      | Update…                                                 |
+| ------------------------------------------------- | ------------------------------------------------------- |
+| A contract function, event, struct, or invariant  | `PROTOCOL.md` **and** the matching `.vyi` interface     |
+| A service, data flow, table, endpoint, or env var | `ARCHITECTURE.md` (and the package README)              |
+| A coding rule, tool, or testing requirement       | `CONVENTIONS.md` and the matching `.cursor/rules/*.mdc` |
+| A term or its meaning                             | `GLOSSARY.md`                                           |
+| Task status, scope, or acceptance criteria        | `ROADMAP.md`                                            |
+| A decision with alternatives you rejected         | New file in `adr/` (copy `adr/0000-template.md`)        |
 
 ## Status legend used in these docs
 

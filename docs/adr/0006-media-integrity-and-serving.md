@@ -14,7 +14,7 @@ must be fast.
 ## Decision
 
 1. A `MEDIA` creative stores `uri` (`https://` or `ipfs://`) and `content_hash =
-   keccak256(bytes)` on-chain, plus `mime`, `width`, `height`, `click_url`. These are immutable.
+keccak256(bytes)` on-chain, plus `mime`, `width`, `height`, `click_url`. These are immutable.
 2. The off-chain verifier fetches the bytes, checks hash, MIME, and dimensions, and stores the
    verified bytes in the platform's cache. Verification is repeated periodically.
 3. **The serving edge only ever serves verified cached bytes** (`/v1/serve/{slot}/media`).
@@ -45,4 +45,4 @@ must be fast.
 
 ## References
 
-- `PROTOCOL.md` §3.3, §7.  `ARCHITECTURE.md` §3.4, §3.5, §6, §8.
+- `PROTOCOL.md` §3.3, §7. `ARCHITECTURE.md` §3.4, §3.5, §6, §8.

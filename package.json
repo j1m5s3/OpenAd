@@ -7,6 +7,9 @@
     "embed"
   ],
   "scripts": {
+    "stack:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup.ps1",
+    "stack:up": "powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1",
+    "stack:down": "powershell -ExecutionPolicy Bypass -File scripts/dev-down.ps1",
     "dev:web": "npm run dev -w web",
     "dev:embed": "npm run dev -w embed",
     "build": "npm run build --workspaces --if-present",

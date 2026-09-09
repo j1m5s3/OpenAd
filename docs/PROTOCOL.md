@@ -12,10 +12,10 @@ Terms are defined in [`GLOSSARY.md`](GLOSSARY.md). Read it first.
 
 Three Vyper contracts on Base, settled in USDC:
 
-| Contract           | Responsibility                                                                                                  | Owner-of-record          |
-| ------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| `AdSlot`           | ERC-721 collection of slots. Holds each slot's `SlotSpec`, `Calendar`, and `Lease`s. Exposes ERC-4907 read views. | Platform (`set_market`)  |
-| `Marketplace`      | Per-slot sale `Terms`, Dutch pricing, `buy` (payment + fee split + lease write).                                   | Platform (fee/treasury)  |
+| Contract           | Responsibility                                                                                                    | Owner-of-record            |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `AdSlot`           | ERC-721 collection of slots. Holds each slot's `SlotSpec`, `Calendar`, and `Lease`s. Exposes ERC-4907 read views. | Platform (`set_market`)    |
+| `Marketplace`      | Per-slot sale `Terms`, Dutch pricing, `buy` (payment + fee split + lease write).                                  | Platform (fee/treasury)    |
 | `CreativeRegistry` | Creatives, publisher approvals/allowlists, moderator revocation.                                                  | Platform (`set_moderator`) |
 
 Design principles (do not violate without an ADR):
@@ -31,20 +31,20 @@ Design principles (do not violate without an ADR):
 
 ## 2. Roles and access control
 
-| Action                                                    | Platform owner | Moderator | Publisher (slot owner) | Advertiser | `Marketplace` contract |
-| --------------------------------------------------------- | :------------: | :-------: | :--------------------: | :--------: | :--------------------: |
-| `AdSlot.mint_slot`                                        |                |           | anyone ¹               | anyone ¹   |                        |
-| `AdSlot.set_calendar`                                     |                |           | ✔                      |            |                        |
-| `AdSlot.set_lease`                                        |                |           |                        |            | ✔ (only `market`)      |
-| `AdSlot.set_market`, `set_base_uri`                       | ✔              |           |                        |            |                        |
-| `Marketplace.set_terms`, `set_paused`                     |                |           | ✔                      |            |                        |
-| `Marketplace.buy`, `buy_with_permit`                      |                |           |                        | ✔          |                        |
-| `Marketplace.set_fee_bps`, `set_treasury`                 | ✔              |           |                        |            |                        |
-| `CreativeRegistry.register_media`, `register_nft`         |                |           |                        | anyone     |                        |
-| `CreativeRegistry.request_approval`                       |                |           |                        | creative owner |                    |
-| `CreativeRegistry.set_approval`, `revoke_approval`, `set_advertiser_allowed` |    |           | any address, scoped to itself ² |   |                    |
-| `CreativeRegistry.moderator_revoke`                       | ✔              | ✔         |                        |            |                        |
-| `CreativeRegistry.set_moderator`                          | ✔              |           |                        |            |                        |
+| Action                                                                       | Platform owner | Moderator |     Publisher (slot owner)      |   Advertiser   | `Marketplace` contract |
+| ---------------------------------------------------------------------------- | :------------: | :-------: | :-----------------------------: | :------------: | :--------------------: |
+| `AdSlot.mint_slot`                                                           |                |           |            anyone ¹             |    anyone ¹    |                        |
+| `AdSlot.set_calendar`                                                        |                |           |                ✔                |                |                        |
+| `AdSlot.set_lease`                                                           |                |           |                                 |                |   ✔ (only `market`)    |
+| `AdSlot.set_market`, `set_base_uri`                                          |       ✔        |           |                                 |                |                        |
+| `Marketplace.set_terms`, `set_paused`                                        |                |           |                ✔                |                |                        |
+| `Marketplace.buy`, `buy_with_permit`                                         |                |           |                                 |       ✔        |                        |
+| `Marketplace.set_fee_bps`, `set_treasury`                                    |       ✔        |           |                                 |                |                        |
+| `CreativeRegistry.register_media`, `register_nft`                            |                |           |                                 |     anyone     |                        |
+| `CreativeRegistry.request_approval`                                          |                |           |                                 | creative owner |                        |
+| `CreativeRegistry.set_approval`, `revoke_approval`, `set_advertiser_allowed` |                |           | any address, scoped to itself ² |                |                        |
+| `CreativeRegistry.moderator_revoke`                                          |       ✔        |     ✔     |                                 |                |                        |
+| `CreativeRegistry.set_moderator`                                             |       ✔        |           |                                 |                |                        |
 
 ¹ Minting is permissionless; the minter becomes the slot owner. Domain ownership is verified off-chain (see `ARCHITECTURE.md` § Domain verification).
 ² Approvals are keyed by `msg.sender`. A publisher approves with the wallet that owns their slots; `Marketplace.buy` checks approvals against `AdSlot.ownerOf(slot_id)` at buy time.
@@ -181,7 +181,7 @@ duration = start - open_at                   # == lead_seconds unless saturated
 `price(s, i)` at time `now`:
 
 - **reverts `"not open"`** if `now < open_at`
-- **reverts `"closed"`** if `now >= start`   (v1: no late buy; see § 9)
+- **reverts `"closed"`** if `now >= start` (v1: no late buy; see § 9)
 - otherwise, with integer arithmetic (floor division):
 
 ```text
@@ -215,22 +215,22 @@ Composition: snekmate `erc721` (+ `ownable`) module. Exports `IERC721`, `IERC721
 `IERC721Enumerable`, `owner`. Does **not** export snekmate's minter-gated `safe_mint`;
 minting goes through `mint_slot`.
 
-| Function | Access | Behaviour |
-| --- | --- | --- |
-| `mint_slot(spec: SlotSpec) -> uint256` | anyone | Requires `spec.domain` non-empty; if `kind == WEB_DISPLAY` requires `width > 0 and height > 0`; requires `kind <= 3`. Mints next token id to `msg.sender`, stores spec. Emits `SlotMinted`. Reverts: `"empty domain"`, `"bad dimensions"`, `"bad kind"`. |
-| `set_calendar(slot_id, period_seconds, first_period_start)` | slot owner | Requires `period_seconds >= MIN_PERIOD_SECONDS`; requires `last_leased_end[slot_id] <= block.timestamp` (no active or future lease). Sets `version += 1`. Emits `CalendarSet`. Reverts: `"not owner"`, `"period too short"`, `"leases outstanding"`. |
-| `set_lease(slot_id, period_index, user, creative_id)` | `market` only | Requires calendar set; computes `start,end`; requires `end > block.timestamp`; requires lease empty; requires `user != empty` and `creative_id > 0`. Writes lease; `last_leased_end = max(last_leased_end, end)`. Emits `LeaseSet`. Reverts: `"not market"`, `"no calendar"`, `"period ended"`, `"already leased"`, `"bad lease"`. |
-| `set_market(market)` | owner | Sets the sole lease writer. Emits `MarketSet`. |
-| `set_base_uri(uri)` | owner | Metadata base URI (points at the API's slot metadata route). |
-| `market() -> address` | view | |
-| `period_window(slot_id, period_index) -> (uint64, uint64)` | view | `(start, end)` per § 4.1. Reverts `"no calendar"`. |
-| `current_period(slot_id) -> (bool, uint256)` | view | `(exists, period_index)` for `block.timestamp`. |
-| `lease_of(slot_id, period_index) -> Lease` | view | Lease under the **current** calendar version (empty struct if none). |
-| `spec_of(slot_id) -> SlotSpec` | view | |
-| `calendar_of(slot_id) -> Calendar` | view | |
-| `last_leased_end_of(slot_id) -> uint64` | view | |
-| `userOf(tokenId) -> address` | view | ERC-4907 read: current period's lease user, or empty address. |
-| `userExpires(tokenId) -> uint256` | view | ERC-4907 read: current period's `end` if leased, else 0. |
+| Function                                                    | Access        | Behaviour                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mint_slot(spec: SlotSpec) -> uint256`                      | anyone        | Requires `spec.domain` non-empty; if `kind == WEB_DISPLAY` requires `width > 0 and height > 0`; requires `kind <= 3`. Mints next token id to `msg.sender`, stores spec. Emits `SlotMinted`. Reverts: `"empty domain"`, `"bad dimensions"`, `"bad kind"`.                                                                           |
+| `set_calendar(slot_id, period_seconds, first_period_start)` | slot owner    | Requires `period_seconds >= MIN_PERIOD_SECONDS`; requires `last_leased_end[slot_id] <= block.timestamp` (no active or future lease). Sets `version += 1`. Emits `CalendarSet`. Reverts: `"not owner"`, `"period too short"`, `"leases outstanding"`.                                                                               |
+| `set_lease(slot_id, period_index, user, creative_id)`       | `market` only | Requires calendar set; computes `start,end`; requires `end > block.timestamp`; requires lease empty; requires `user != empty` and `creative_id > 0`. Writes lease; `last_leased_end = max(last_leased_end, end)`. Emits `LeaseSet`. Reverts: `"not market"`, `"no calendar"`, `"period ended"`, `"already leased"`, `"bad lease"`. |
+| `set_market(market)`                                        | owner         | Sets the sole lease writer. Emits `MarketSet`.                                                                                                                                                                                                                                                                                     |
+| `set_base_uri(uri)`                                         | owner         | Metadata base URI (points at the API's slot metadata route).                                                                                                                                                                                                                                                                       |
+| `market() -> address`                                       | view          |                                                                                                                                                                                                                                                                                                                                    |
+| `period_window(slot_id, period_index) -> (uint64, uint64)`  | view          | `(start, end)` per § 4.1. Reverts `"no calendar"`.                                                                                                                                                                                                                                                                                 |
+| `current_period(slot_id) -> (bool, uint256)`                | view          | `(exists, period_index)` for `block.timestamp`.                                                                                                                                                                                                                                                                                    |
+| `lease_of(slot_id, period_index) -> Lease`                  | view          | Lease under the **current** calendar version (empty struct if none).                                                                                                                                                                                                                                                               |
+| `spec_of(slot_id) -> SlotSpec`                              | view          |                                                                                                                                                                                                                                                                                                                                    |
+| `calendar_of(slot_id) -> Calendar`                          | view          |                                                                                                                                                                                                                                                                                                                                    |
+| `last_leased_end_of(slot_id) -> uint64`                     | view          |                                                                                                                                                                                                                                                                                                                                    |
+| `userOf(tokenId) -> address`                                | view          | ERC-4907 read: current period's lease user, or empty address.                                                                                                                                                                                                                                                                      |
+| `userExpires(tokenId) -> uint256`                           | view          | ERC-4907 read: current period's `end` if leased, else 0.                                                                                                                                                                                                                                                                           |
 
 ERC-4907 note: `setUser` is intentionally **not** implemented (leases are only written by the
 market). Do not advertise the ERC-4907 interface id via ERC-165; the views are provided for
@@ -240,19 +240,19 @@ tooling compatibility only.
 
 Composition: snekmate `ownable`. `@nonreentrant` on `buy` and `buy_with_permit`.
 
-| Function | Access | Behaviour |
-| --- | --- | --- |
-| `set_terms(slot_id, start_price, floor_price, lead_seconds, sale_end, approval_mode)` | slot owner | Requires `start_price >= floor_price`, `lead_seconds > 0`, `approval_mode <= 1`. Overwrites terms; `paused` unchanged. Emits `TermsSet`. Reverts: `"not owner"`, `"bad prices"`, `"bad lead"`, `"bad mode"`. |
-| `set_paused(slot_id, paused)` | slot owner | Emits `PausedSet`. |
-| `USDC()`, `AD_SLOT()`, `REGISTRY()` | view | Immutable addresses. |
-| `fee_bps() -> uint16`, `treasury() -> address` | view | |
-| `terms_of(slot_id) -> Terms` | view | Empty struct (`lead_seconds == 0`) means no terms. |
-| `price(slot_id, period_index) -> uint256` | view | § 4.2. Reverts `"no terms"` if `lead_seconds == 0`. |
-| `quote(slot_id, period_index) -> Quote` | view | Non-reverting UI helper: `(sellable: bool, reason: String[32], price, fee, open_at, start, end)`. `reason` is the revert string `buy` would produce, or empty. |
-| `buy(slot_id, period_index, creative_id, max_price)` | anyone (becomes lessee) | See ordered checks below. |
-| `buy_with_permit(slot_id, period_index, creative_id, max_price, deadline, v, r, s)` | anyone | Calls `USDC.permit(msg.sender, self, max_price, deadline, v, r, s)` **non-reverting** (a failed permit is ignored; the subsequent `transferFrom` enforces allowance), then behaves as `buy`. Rationale: permit front-running griefing (ADR-0004). |
-| `set_fee_bps(fee_bps)` | owner | Requires `<= MAX_FEE_BPS`. Emits `FeeSet`. Reverts `"fee too high"`. |
-| `set_treasury(treasury)` | owner | Requires non-empty. Emits `TreasurySet`. Reverts `"bad treasury"`. |
+| Function                                                                              | Access                  | Behaviour                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `set_terms(slot_id, start_price, floor_price, lead_seconds, sale_end, approval_mode)` | slot owner              | Requires `start_price >= floor_price`, `lead_seconds > 0`, `approval_mode <= 1`. Overwrites terms; `paused` unchanged. Emits `TermsSet`. Reverts: `"not owner"`, `"bad prices"`, `"bad lead"`, `"bad mode"`.                                      |
+| `set_paused(slot_id, paused)`                                                         | slot owner              | Emits `PausedSet`.                                                                                                                                                                                                                                |
+| `USDC()`, `AD_SLOT()`, `REGISTRY()`                                                   | view                    | Immutable addresses.                                                                                                                                                                                                                              |
+| `fee_bps() -> uint16`, `treasury() -> address`                                        | view                    |                                                                                                                                                                                                                                                   |
+| `terms_of(slot_id) -> Terms`                                                          | view                    | Empty struct (`lead_seconds == 0`) means no terms.                                                                                                                                                                                                |
+| `price(slot_id, period_index) -> uint256`                                             | view                    | § 4.2. Reverts `"no terms"` if `lead_seconds == 0`.                                                                                                                                                                                               |
+| `quote(slot_id, period_index) -> Quote`                                               | view                    | Non-reverting UI helper: `(sellable: bool, reason: String[32], price, fee, open_at, start, end)`. `reason` is the revert string `buy` would produce, or empty.                                                                                    |
+| `buy(slot_id, period_index, creative_id, max_price)`                                  | anyone (becomes lessee) | See ordered checks below.                                                                                                                                                                                                                         |
+| `buy_with_permit(slot_id, period_index, creative_id, max_price, deadline, v, r, s)`   | anyone                  | Calls `USDC.permit(msg.sender, self, max_price, deadline, v, r, s)` **non-reverting** (a failed permit is ignored; the subsequent `transferFrom` enforces allowance), then behaves as `buy`. Rationale: permit front-running griefing (ADR-0004). |
+| `set_fee_bps(fee_bps)`                                                                | owner                   | Requires `<= MAX_FEE_BPS`. Emits `FeeSet`. Reverts `"fee too high"`.                                                                                                                                                                              |
+| `set_treasury(treasury)`                                                              | owner                   | Requires non-empty. Emits `TreasurySet`. Reverts `"bad treasury"`.                                                                                                                                                                                |
 
 `buy` performs these checks **in this order** (tests rely on the order for revert strings):
 
@@ -273,23 +273,23 @@ the external interaction; the whole transaction is atomic either way.
 
 Composition: snekmate `ownable`.
 
-| Function | Access | Behaviour |
-| --- | --- | --- |
-| `register_media(uri, content_hash, mime, width, height, click_url) -> uint256` | anyone | Requires `content_hash != 0`, `len(uri) > 0`, `len(mime) > 0`, `width > 0`, `height > 0`. Stores `Creative{kind=MEDIA, advertiser=msg.sender}`. Emits `CreativeRegistered`. Reverts: `"bad hash"`, `"bad uri"`, `"bad mime"`, `"bad dimensions"`. |
-| `register_nft(nft_chain_id, nft_contract, nft_token_id, nft_standard, click_url) -> uint256` | anyone | Requires `nft_standard in {1,2}`, `nft_contract != empty`. If `nft_chain_id == chain.id` and `nft_standard == ERC721`, requires `IERC721(nft_contract).ownerOf(nft_token_id) == msg.sender` (same-chain proof); cross-chain ownership is verified off-chain. Emits `CreativeRegistered` and `NftCreativeRegistered`. Reverts: `"bad standard"`, `"bad contract"`, `"not nft owner"`. |
-| `request_approval(publisher, creative_id)` | creative owner | Requires creative active; status for `[publisher][id]` must be `NONE` or `REJECTED`; sets `REQUESTED`. Emits `ApprovalRequested`. Reverts: `"not creative owner"`, `"inactive"`, `"bad status"`. |
-| `set_approval(creative_id, approved: bool)` | any address (publisher scope = `msg.sender`) | Requires creative exists. Sets `APPROVED` or `REJECTED` for `[msg.sender][id]`. Emits `ApprovalSet`. |
-| `revoke_approval(creative_id)` | any address (scope = `msg.sender`) | Sets `REVOKED` for `[msg.sender][id]`. Emits `ApprovalSet(status=REVOKED)`. |
-| `set_advertiser_allowed(advertiser, allowed)` | any address (scope = `msg.sender`) | Emits `AdvertiserAllowed`. |
-| `moderator_revoke(creative_id)` | owner or moderator | Sets `revoked = True`. Emits `CreativeRevoked`. Reverts `"not moderator"`. |
-| `set_moderator(moderator)` | owner | Emits `ModeratorSet`. |
-| `moderator() -> address`, `next_id() -> uint256` | view | |
-| `get_creative(creative_id) -> Creative` | view | Reverts `"no creative"` if `id == 0 or id >= next_id`. |
-| `is_active(creative_id) -> bool` | view | Exists and `not revoked`. |
-| `is_blocked_for(publisher, creative_id) -> bool` | view | `revoked or approvals[publisher][id] in {REJECTED, REVOKED}`. |
-| `is_approved_for(publisher, creative_id) -> bool` | view | `is_active and not is_blocked_for and (approvals[publisher][id] == APPROVED or allowed_advertisers[publisher][creative.advertiser])`. |
-| `approval_status(publisher, creative_id) -> uint8` | view | |
-| `is_advertiser_allowed(publisher, advertiser) -> bool` | view | |
+| Function                                                                                     | Access                                       | Behaviour                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `register_media(uri, content_hash, mime, width, height, click_url) -> uint256`               | anyone                                       | Requires `content_hash != 0`, `len(uri) > 0`, `len(mime) > 0`, `width > 0`, `height > 0`. Stores `Creative{kind=MEDIA, advertiser=msg.sender}`. Emits `CreativeRegistered`. Reverts: `"bad hash"`, `"bad uri"`, `"bad mime"`, `"bad dimensions"`.                                                                                                                                    |
+| `register_nft(nft_chain_id, nft_contract, nft_token_id, nft_standard, click_url) -> uint256` | anyone                                       | Requires `nft_standard in {1,2}`, `nft_contract != empty`. If `nft_chain_id == chain.id` and `nft_standard == ERC721`, requires `IERC721(nft_contract).ownerOf(nft_token_id) == msg.sender` (same-chain proof); cross-chain ownership is verified off-chain. Emits `CreativeRegistered` and `NftCreativeRegistered`. Reverts: `"bad standard"`, `"bad contract"`, `"not nft owner"`. |
+| `request_approval(publisher, creative_id)`                                                   | creative owner                               | Requires creative active; status for `[publisher][id]` must be `NONE` or `REJECTED`; sets `REQUESTED`. Emits `ApprovalRequested`. Reverts: `"not creative owner"`, `"inactive"`, `"bad status"`.                                                                                                                                                                                     |
+| `set_approval(creative_id, approved: bool)`                                                  | any address (publisher scope = `msg.sender`) | Requires creative exists. Sets `APPROVED` or `REJECTED` for `[msg.sender][id]`. Emits `ApprovalSet`.                                                                                                                                                                                                                                                                                 |
+| `revoke_approval(creative_id)`                                                               | any address (scope = `msg.sender`)           | Sets `REVOKED` for `[msg.sender][id]`. Emits `ApprovalSet(status=REVOKED)`.                                                                                                                                                                                                                                                                                                          |
+| `set_advertiser_allowed(advertiser, allowed)`                                                | any address (scope = `msg.sender`)           | Emits `AdvertiserAllowed`.                                                                                                                                                                                                                                                                                                                                                           |
+| `moderator_revoke(creative_id)`                                                              | owner or moderator                           | Sets `revoked = True`. Emits `CreativeRevoked`. Reverts `"not moderator"`.                                                                                                                                                                                                                                                                                                           |
+| `set_moderator(moderator)`                                                                   | owner                                        | Emits `ModeratorSet`.                                                                                                                                                                                                                                                                                                                                                                |
+| `moderator() -> address`, `next_id() -> uint256`                                             | view                                         |                                                                                                                                                                                                                                                                                                                                                                                      |
+| `get_creative(creative_id) -> Creative`                                                      | view                                         | Reverts `"no creative"` if `id == 0 or id >= next_id`.                                                                                                                                                                                                                                                                                                                               |
+| `is_active(creative_id) -> bool`                                                             | view                                         | Exists and `not revoked`.                                                                                                                                                                                                                                                                                                                                                            |
+| `is_blocked_for(publisher, creative_id) -> bool`                                             | view                                         | `revoked or approvals[publisher][id] in {REJECTED, REVOKED}`.                                                                                                                                                                                                                                                                                                                        |
+| `is_approved_for(publisher, creative_id) -> bool`                                            | view                                         | `is_active and not is_blocked_for and (approvals[publisher][id] == APPROVED or allowed_advertisers[publisher][creative.advertiser])`.                                                                                                                                                                                                                                                |
+| `approval_status(publisher, creative_id) -> uint8`                                           | view                                         |                                                                                                                                                                                                                                                                                                                                                                                      |
+| `is_advertiser_allowed(publisher, advertiser) -> bool`                                       | view                                         |                                                                                                                                                                                                                                                                                                                                                                                      |
 
 ---
 
@@ -336,7 +336,7 @@ At time `t`, for slot `s`, the serving edge returns:
    - `REGISTRY.is_active(C)` (not moderator-revoked),
    - `not REGISTRY.is_blocked_for(ownerOf(s), C)`,
    - if `L.approval_mode == REQUIRED`: `REGISTRY.is_approved_for(ownerOf(s), C)`.
-   These are evaluated against **indexed** state, never live chain calls.
+     These are evaluated against **indexed** state, never live chain calls.
 3. If serveable → serve `C`. Otherwise → serve the publisher's house ad if configured, else "empty".
 
 Consequences: a publisher can stop a running ad by `set_approval(id, False)` or
@@ -358,36 +358,36 @@ Property tests (`contracts/tests/`) must cover each of these.
 7. **Creative immutability.** All `Creative` fields except `revoked` are constant after registration.
 8. **Approval scoping.** `set_approval`/`revoke_approval`/`set_advertiser_allowed` only ever modify state under `[msg.sender]`.
 9. **Lease validity.** Every lease has `user != empty`, `creative_id > 0`, and was written with `end > block.timestamp` at write time.
-10. **Buy atomicity.** Either the lease is written *and* both transfers succeed, or nothing changes.
+10. **Buy atomicity.** Either the lease is written _and_ both transfers succeed, or nothing changes.
 
 ---
 
 ## 9. Known limitations and deferred items
 
-| Item | Status | Notes |
-| --- | --- | --- |
-| Late buy (buy the remainder of a started period at pro-rated floor) | Deferred (v1.1) | `price` reverts `"closed"` at `start`. Design: `price = floor * (end - now) / period_seconds` for `start <= now < end`. |
-| Calendar change while leases outstanding | Deferred (v2) | Requires calendar epochs. v1 rule: pause, wait for leases to run out, then `set_calendar`. |
-| On-chain refunds / disputes | Deferred | Delivery is time-based (billboard model). Serve counts are reported off-chain. |
-| Approval portability on slot transfer | By design | Approvals are keyed by publisher address; a new owner starts with none. |
-| Full ERC-4907 (`setUser`) | By design | Read views only. |
-| Pricing autopilot (VRGDA-style adjustment) | Deferred (v2) | Publisher-side; no protocol change needed initially. |
-| English / sealed-bid auctions | Deferred | Only if data shows many simultaneous bidders per period. |
-| Operators (ERC-721 `approve`/`setApprovalForAll`) acting as publisher | Deferred | v1 requires `ownerOf == msg.sender`. |
-| Sublease / secondary market for leases | Deferred (v2) | Would require lease transfer in `AdSlot`. |
+| Item                                                                  | Status          | Notes                                                                                                                   |
+| --------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Late buy (buy the remainder of a started period at pro-rated floor)   | Deferred (v1.1) | `price` reverts `"closed"` at `start`. Design: `price = floor * (end - now) / period_seconds` for `start <= now < end`. |
+| Calendar change while leases outstanding                              | Deferred (v2)   | Requires calendar epochs. v1 rule: pause, wait for leases to run out, then `set_calendar`.                              |
+| On-chain refunds / disputes                                           | Deferred        | Delivery is time-based (billboard model). Serve counts are reported off-chain.                                          |
+| Approval portability on slot transfer                                 | By design       | Approvals are keyed by publisher address; a new owner starts with none.                                                 |
+| Full ERC-4907 (`setUser`)                                             | By design       | Read views only.                                                                                                        |
+| Pricing autopilot (VRGDA-style adjustment)                            | Deferred (v2)   | Publisher-side; no protocol change needed initially.                                                                    |
+| English / sealed-bid auctions                                         | Deferred        | Only if data shows many simultaneous bidders per period.                                                                |
+| Operators (ERC-721 `approve`/`setApprovalForAll`) acting as publisher | Deferred        | v1 requires `ownerOf == msg.sender`.                                                                                    |
+| Sublease / secondary market for leases                                | Deferred (v2)   | Would require lease transfer in `AdSlot`.                                                                               |
 
 ---
 
 ## 10. Deployment parameters
 
-| Parameter | Anvil (31337) | Base Sepolia (84532) | Base (8453) |
-| --- | --- | --- | --- |
-| USDC | `MockUSDC` from `contracts/src/mocks/MockUSDC.vy` | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` (Circle testnet USDC — verify before deploying) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` (native USDC — verify before deploying) |
-| `fee_bps` | 250 | 250 | TBD by platform |
-| `treasury` | deployer | platform testnet wallet | platform multisig |
-| `moderator` | deployer | platform testnet wallet | platform ops wallet |
-| `AdSlot` name / symbol | `OpenAd Slot` / `OASLT` | same | same |
-| `base_uri` | `http://localhost:8000/v1/slots/` | testnet API URL + `/v1/slots/` | production API URL + `/v1/slots/` |
+| Parameter              | Anvil (31337)                                     | Base Sepolia (84532)                                                                         | Base (8453)                                                                          |
+| ---------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| USDC                   | `MockUSDC` from `contracts/src/mocks/MockUSDC.vy` | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` (Circle testnet USDC — verify before deploying) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` (native USDC — verify before deploying) |
+| `fee_bps`              | 250                                               | 250                                                                                          | TBD by platform                                                                      |
+| `treasury`             | deployer                                          | platform testnet wallet                                                                      | platform multisig                                                                    |
+| `moderator`            | deployer                                          | platform testnet wallet                                                                      | platform ops wallet                                                                  |
+| `AdSlot` name / symbol | `OpenAd Slot` / `OASLT`                           | same                                                                                         | same                                                                                 |
+| `base_uri`             | `http://localhost:8000/v1/slots/`                 | testnet API URL + `/v1/slots/`                                                               | production API URL + `/v1/slots/`                                                    |
 
 Deploy order: `CreativeRegistry` → `AdSlot` → `Marketplace(USDC, AdSlot, CreativeRegistry)` →
 `AdSlot.set_market(Marketplace)` → `Marketplace.set_treasury`, `set_fee_bps` →
