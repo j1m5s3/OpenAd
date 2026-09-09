@@ -1,0 +1,25 @@
+[project]
+name = "openad-contracts"
+version = "0.1.0"
+description = "OpenAd protocol smart contracts (Vyper), managed with Moccasin."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "moccasin",
+    # snekmate is a PyPI package; Vyper 0.4 resolves `from snekmate... import ...` from the
+    # venv's sys.path, so we deliberately do NOT use `mox install` (it rewrites moccasin.toml
+    # with the Windows code page / doubled CRs). Keep it here, pinned.
+    "snekmate>=0.1.2",
+    "pytest",
+    "hypothesis",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "fork: tests that fork a public network (need an RPC URL; skipped by default)",
+]
+addopts = "-m 'not fork'"

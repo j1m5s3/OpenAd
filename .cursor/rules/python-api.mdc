@@ -1,0 +1,38 @@
+---
+description: Python/FastAPI conventions for the OpenAd api package (api, serve, indexer)
+globs: api/**/*.py
+alwaysApply: false
+---
+
+# Python (`api/`)
+
+- Python 3.12, `uv run …` for every command. `ruff` and `mypy --strict` must pass.
+- Layers: `routers/` (HTTP only) → `services/` (logic, no FastAPI imports) → `models/`
+  (SQLAlchemy 2.0 typed). `schemas/` are Pydantic v2; never return ORM objects.
+- Config only through `openad.config.Settings` (`OPENAD_` prefix). No `os.environ` elsewhere.
+- Logging via `openad.logging.get_logger()`. No `print`.
+- Async everywhere (`AsyncSession`, `AsyncWeb3`, `httpx.AsyncClient`).
+- `openad.serve` must not import `openad.chain`. Only the indexer talks to the RPC.
+- Indexer handlers are idempotent upserts keyed by on-chain ids; one handler per event in
+  `docs/PROTOCOL.md` §6, registered with `@on_event("Contract", "EventName")`.
+- Money as `int` base units; timestamps as `int` seconds; ISO strings only in schemas.
+- Domain errors: raise `openad.errors.*`; a single handler in `main.py` maps them to HTTP.
+- Every model change ships an Alembic revision.
+
+```python
+# ✅ router → service → schema
+@router.get("/slots/{slot_id}", response_model=SlotOut)
+async def get_slot(slot_id: int, session: SessionDep) -> SlotOut:
+    return SlotOut.model_validate(await slots.get_slot(session, slot_id))
+
+# ❌ business logic, raw env, print in a router
+@router.get("/slots/{slot_id}")
+async def get_slot(slot_id: int):
+    print(os.environ["OPENAD_DATABASE_URL"]); ...
+```
+
+## Tests
+
+- `pytest` + `pytest-asyncio`; SQLite in-memory via the `session` fixture in `tests/conftest.py`.
+- Services: unit tests. Routers: `httpx.AsyncClient` against `create_app()`.
+- Indexer: feed synthetic decoded events to handlers; assert rows.

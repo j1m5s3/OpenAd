@@ -1,0 +1,35 @@
+---
+description: OpenAd architecture invariants and workflow. Read AGENTS.md and docs/ before changing anything.
+alwaysApply: true
+---
+
+# OpenAd core rules
+
+Source of truth is `docs/` (GLOSSARY → PROTOCOL → ARCHITECTURE → CONVENTIONS → ROADMAP → adr/).
+`AGENTS.md` is the entry point. Code that disagrees with the docs is a bug; fix one or the other
+in the same change.
+
+## Invariants (never violate without a new ADR in docs/adr/)
+
+- Non-custodial: `api/` and `web/` never sign user transactions or hold keys that move funds or write leases.
+- Slots are permanent NFTs; periods are leased; leases expire by time. Nothing "sells" a slot.
+- One transaction to buy (Dutch auction). No bids, escrow, settle step, or keepers.
+- `Marketplace` holds no USDC after any transaction (fee → treasury, rest → publisher).
+- Serving (`api/src/openad/serve/`, `embed/`) never reads the chain and never proxies advertiser URLs.
+- Every state change emits exactly one event listed in `docs/PROTOCOL.md` §6; every event has one indexer handler.
+- Money = integer USDC base units (`uint256` / `int` / `bigint`). Time = Unix seconds.
+
+## Workflow
+
+- Take the first unchecked task in `docs/ROADMAP.md`; read only its Pointers; meet its Acceptance.
+- Spec first: change `docs/PROTOCOL.md` + `contracts/src/interfaces/*.vyi` before contract code.
+- Use `docs/GLOSSARY.md` terms exactly (slot, period, lease, terms, creative, approval, publisher, advertiser).
+- Update the affected doc and the ROADMAP checkbox in the same change.
+- Conventional commits scoped by package: `feat(contracts): …`, `fix(api): …`, `docs: …`.
+- Never create file or directory names ending in whitespace.
+
+## Commands (see AGENTS.md for the full list)
+
+- contracts: `cd contracts && uv run mox compile && uv run mox test`
+- api: `cd api && uv run ruff check && uv run mypy src && uv run pytest`
+- web/embed: `npm run typecheck && npm run lint && npm run test && npm run build`

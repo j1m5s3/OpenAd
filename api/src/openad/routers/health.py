@@ -1,0 +1,16 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Request
+
+from openad import __version__
+from openad.schemas.health import HealthResponse
+
+router = APIRouter(tags=["health"])
+
+
+@router.get("/health", response_model=HealthResponse)
+async def health(request: Request) -> HealthResponse:
+    settings = request.app.state.settings
+    return HealthResponse(
+        status="ok", version=__version__, chain_id=settings.chain_id, env=settings.env
+    )

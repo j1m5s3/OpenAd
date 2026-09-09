@@ -1,0 +1,182 @@
+# pragma version ~=0.4.0
+"""
+@title ICreativeRegistry
+@notice Canonical interface of the CreativeRegistry contract: immutable creatives (hosted
+        media with content hash, or NFT references), per-publisher approvals and allowlists,
+        and moderator revocation.
+@dev    Semantics: docs/PROTOCOL.md §3.3, §5.3, §6. ADR-0004, ADR-0006.
+"""
+
+# --------------------------------------------------------------------------- structs
+
+struct Creative:
+    advertiser: address
+    kind: uint8              # CreativeKind: 0 MEDIA, 1 NFT_REF
+    uri: String[512]         # MEDIA: https:// or ipfs:// ; NFT_REF: ""
+    content_hash: bytes32    # MEDIA: keccak256(bytes) ; NFT_REF: empty
+    mime: String[64]         # MEDIA only
+    width: uint16            # MEDIA only (must equal slot width at buy)
+    height: uint16           # MEDIA only
+    click_url: String[512]   # https:// ; may be "" for NFT_REF
+    nft_chain_id: uint64     # NFT_REF only
+    nft_contract: address    # NFT_REF only
+    nft_token_id: uint256    # NFT_REF only
+    nft_standard: uint8      # NftStandard: 0 NONE, 1 ERC721, 2 ERC1155
+    revoked: bool            # set only by moderator_revoke
+
+# ApprovalStatus (uint8): 0 NONE, 1 REQUESTED, 2 APPROVED, 3 REJECTED, 4 REVOKED
+
+# --------------------------------------------------------------------------- events
+
+event CreativeRegistered:
+    creative_id: indexed(uint256)
+    advertiser: indexed(address)
+    kind: uint8
+    content_hash: bytes32
+    uri: String[512]
+    mime: String[64]
+    width: uint16
+    height: uint16
+    click_url: String[512]
+
+event NftCreativeRegistered:
+    creative_id: indexed(uint256)
+    nft_chain_id: uint64
+    nft_contract: address
+    nft_token_id: uint256
+    nft_standard: uint8
+
+event ApprovalRequested:
+    publisher: indexed(address)
+    creative_id: indexed(uint256)
+    advertiser: address
+
+event ApprovalSet:
+    publisher: indexed(address)
+    creative_id: indexed(uint256)
+    status: uint8
+
+event AdvertiserAllowed:
+    publisher: indexed(address)
+    advertiser: indexed(address)
+    allowed: bool
+
+event CreativeRevoked:
+    creative_id: indexed(uint256)
+    by: address
+
+event ModeratorSet:
+    moderator: address
+
+# --------------------------------------------------------------------------- advertiser
+
+@external
+def register_media(
+    uri: String[512],
+    content_hash: bytes32,
+    mime: String[64],
+    width: uint16,
+    height: uint16,
+    click_url: String[512],
+) -> uint256:
+    """
+    @notice Register an immutable hosted-media creative owned by msg.sender.
+    @dev    Reverts "bad hash", "bad uri", "bad mime", "bad dimensions".
+    @return creative_id (first id is 1).
+    """
+    ...
+
+@external
+def register_nft(
+    nft_chain_id: uint64,
+    nft_contract: address,
+    nft_token_id: uint256,
+    nft_standard: uint8,
+    click_url: String[512],
+) -> uint256:
+    """
+    @notice Register an NFT-reference creative. Same-chain ERC-721 ownership is checked
+            on-chain; other cases are verified off-chain.
+    @dev    Reverts "bad standard", "bad contract", "not nft owner".
+    """
+    ...
+
+@external
+def request_approval(publisher: address, creative_id: uint256):
+    """
+    @notice Ask a publisher to approve a creative. Creative owner only.
+    @dev    Reverts "not creative owner", "inactive", "bad status".
+    """
+    ...
+
+# --------------------------------------------------------------------------- publisher (scope = msg.sender)
+
+@external
+def set_approval(creative_id: uint256, approved: bool):
+    """@notice APPROVE or REJECT a creative for msg.sender's slots. Reverts "no creative"."""
+    ...
+
+@external
+def revoke_approval(creative_id: uint256):
+    """@notice Mark a creative REVOKED for msg.sender's slots (stops serving)."""
+    ...
+
+@external
+def set_advertiser_allowed(advertiser: address, allowed: bool):
+    """@notice Blanket-approve (or un-approve) an advertiser for msg.sender's slots."""
+    ...
+
+# --------------------------------------------------------------------------- moderator / owner
+
+@external
+def moderator_revoke(creative_id: uint256):
+    """@notice Globally revoke a creative. Owner or moderator only. Reverts "not moderator"."""
+    ...
+
+@external
+def set_moderator(moderator: address):
+    """@notice Set the moderator address. Owner only."""
+    ...
+
+# --------------------------------------------------------------------------- views
+
+@external
+@view
+def moderator() -> address:
+    ...
+
+@external
+@view
+def next_id() -> uint256:
+    ...
+
+@external
+@view
+def get_creative(creative_id: uint256) -> Creative:
+    """@dev Reverts "no creative" for id == 0 or id >= next_id."""
+    ...
+
+@external
+@view
+def is_active(creative_id: uint256) -> bool:
+    ...
+
+@external
+@view
+def is_blocked_for(publisher: address, creative_id: uint256) -> bool:
+    ...
+
+@external
+@view
+def is_approved_for(publisher: address, creative_id: uint256) -> bool:
+    ...
+
+@external
+@view
+def approval_status(publisher: address, creative_id: uint256) -> uint8:
+    ...
+
+@external
+@view
+def is_advertiser_allowed(publisher: address, advertiser: address) -> bool:
+    ...

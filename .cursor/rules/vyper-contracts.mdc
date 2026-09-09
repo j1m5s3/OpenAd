@@ -1,0 +1,38 @@
+---
+description: Vyper/Moccasin conventions for OpenAd contracts (AdSlot, Marketplace, CreativeRegistry)
+globs: contracts/**/*.vy,contracts/**/*.vyi,contracts/**/*.py
+alwaysApply: false
+---
+
+# Vyper contracts
+
+- `# pragma version ~=0.4.0` first line. One contract per file, named after the contract.
+- Compose with snekmate modules (`initializes:` / `exports:`). Never copy library code in.
+- `implements:` the matching `.vyi` in `contracts/src/interfaces/`. Signatures there and
+  semantics in `docs/PROTOCOL.md` are canonical; change all three together.
+- Naming: ERC-standard functions keep camelCase (`ownerOf`, `userOf`); OpenAd functions and
+  params are `snake_case`; events/structs `PascalCase`; constants `UPPER_SNAKE`.
+- Order inside a function: access check → input validation → effects → external calls.
+  `@nonreentrant` on anything that transfers tokens.
+- Revert strings exactly as listed in `docs/PROTOCOL.md` (short, lowercase). Tests assert on them.
+- ERC-20 calls: `extcall IERC20(t).transferFrom(a, b, v, default_return_value=True)`.
+- Forbidden: `selfdestruct`, `payable` functions, proxies, `raw_call` (except the documented
+  non-reverting `permit` in `buy_with_permit`), dynamic-size assumptions on strings.
+- Storage widths from PROTOCOL §3: `String[253]` domain, `String[512]` uri/click_url,
+  `String[64]` mime, `uint64` timestamps, `uint16` pixels/bps.
+- NatSpec (`@notice/@param/@return/@dev`) on every external function.
+
+```vyper
+# ✅ snekmate composition; do not export the minter-gated safe_mint
+from snekmate.auth import ownable
+from snekmate.tokens import erc721
+initializes: ownable
+initializes: erc721[ownable := ownable]
+exports: (erc721.IERC721, erc721.IERC721Metadata, erc721.IERC721Enumerable, ownable.owner)
+```
+
+## Tests (titanoboa via `uv run mox test`)
+
+- One file per contract + `test_invariants.py` (hypothesis) for PROTOCOL §8.
+- Time via `boa.env.time_travel(seconds=…)`; never sleep. Fork tests marked `@pytest.mark.fork`.
+- Deploy scripts are idempotent and always rewrite `deployments/<chainId>.json`.

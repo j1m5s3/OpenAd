@@ -1,0 +1,51 @@
+# Moccasin project configuration (keep this file ASCII-only; see README "Windows note").
+# Reference: https://cyfrin.github.io/moccasin/all_moccasin_toml_parameters.html
+# Protocol semantics: ../docs/PROTOCOL.md   Deploy parameters: PROTOCOL.md section 10
+#
+# Contract dependencies (snekmate) are installed into the uv venv via pyproject.toml, NOT via
+# `mox install`; Vyper 0.4 resolves `from snekmate... import ...` from the venv's sys.path.
+
+[project]
+src = "src"
+out = "out"
+dot_env = "../.env"
+
+# ------------------------------------------------------------------ local
+[networks.pyevm]
+# In-process EVM used by `mox test`. Fast; time is controlled with boa.env.time_travel.
+is_zksync = false
+
+[networks.anvil]
+# `docker compose up -d anvil` from the repo root. Account #0 is imported as the "anvil"
+# Moccasin wallet:  uv run mox wallet import anvil   (key in ../docker-compose.yml)
+url = "http://127.0.0.1:8545"
+chain_id = 31337
+prompt_live = false
+save_to_db = false
+default_account_name = "anvil"
+
+# ------------------------------------------------------------------ staging
+[networks.base-sepolia]
+url = "$BASE_SEPOLIA_RPC_URL"
+chain_id = 84532
+prompt_live = true
+save_to_db = true
+explorer_uri = "https://api-sepolia.basescan.org/api"
+explorer_type = "etherscan"
+
+[networks.base-sepolia.contracts.usdc]
+# Circle testnet USDC on Base Sepolia - verify before deploying (PROTOCOL.md section 10).
+address = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+
+# ------------------------------------------------------------------ production
+[networks.base]
+url = "$BASE_RPC_URL"
+chain_id = 8453
+prompt_live = true
+save_to_db = true
+explorer_uri = "https://api.basescan.org/api"
+explorer_type = "etherscan"
+
+[networks.base.contracts.usdc]
+# Native USDC on Base - verify before deploying (PROTOCOL.md section 10).
+address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"

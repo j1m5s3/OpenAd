@@ -1,0 +1,25 @@
+{
+  "name": "openad",
+  "private": true,
+  "description": "OpenAd monorepo root: npm workspaces for the TypeScript packages (web, embed). Python packages (contracts, api) are managed with uv.",
+  "workspaces": [
+    "web",
+    "embed"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w web",
+    "dev:embed": "npm run dev -w embed",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write \"{web,embed}/**/*.{ts,tsx,css,json,md}\" \"docs/**/*.md\" \"*.md\"",
+    "format:check": "prettier --check \"{web,embed}/**/*.{ts,tsx,css,json,md}\" \"docs/**/*.md\" \"*.md\""
+  },
+  "devDependencies": {
+    "prettier": "^3.3.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

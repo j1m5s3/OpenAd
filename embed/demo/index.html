@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenAd embed demo</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; max-width: 720px; margin: 3rem auto; padding: 0 1rem; color: #111827; }
+      .ad { border: 1px dashed #cbd5e1; display: inline-block; }
+      code { background: #f1f5f9; padding: 0 .3em; border-radius: 4px; }
+      pre { background: #f8fafc; padding: 1rem; overflow: auto; }
+    </style>
+    <script type="module" src="/src/index.ts"></script>
+  </head>
+  <body>
+    <h1>OpenAd embed demo</h1>
+    <p>
+      A publisher page with one 300×250 slot. The element asks the local API
+      (<code>http://localhost:8000</code>) for slot <code>1</code> and falls back to the house image
+      when there is no serveable lease. Change <code>slot-id</code>/<code>api</code> below to test.
+    </p>
+
+    <div class="ad">
+      <open-ad
+        slot-id="1"
+        api="http://localhost:8000"
+        width="300"
+        height="250"
+        house-src="https://placehold.co/300x250/0052FF/ffffff?text=House+ad"
+        house-href="https://example.com/"
+      ></open-ad>
+    </div>
+
+    <h2>Events</h2>
+    <pre id="log">(waiting)</pre>
+
+    <h2>Snippet</h2>
+    <pre>&lt;script type="module" src="https://cdn.example/open-ad.js"&gt;&lt;/script&gt;
+&lt;open-ad slot-id="42" api="https://api.example" width="300" height="250"
+         house-src="/img/house.png" house-href="/"&gt;&lt;/open-ad&gt;</pre>
+
+    <script type="module">
+      const log = document.getElementById('log');
+      const lines = [];
+      for (const type of ['openad:render', 'openad:error']) {
+        document.addEventListener(type, (e) => {
+          lines.push(`${new Date().toISOString()}  ${type}  ${JSON.stringify(e.detail ?? {})}`);
+          log.textContent = lines.slice(-10).join('\n');
+        });
+      }
+    </script>
+  </body>
+</html>

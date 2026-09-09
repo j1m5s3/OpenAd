@@ -1,0 +1,33 @@
+---
+description: React/TypeScript/MUI/wagmi conventions for the OpenAd web app
+globs: web/**/*.ts,web/**/*.tsx
+alwaysApply: false
+---
+
+# Web (`web/`)
+
+- TypeScript `strict` + `noUncheckedIndexedAccess`. No `any`. Named exports only.
+- Feature folders: `src/features/<feature>/{components,hooks,api.ts}`. Shared UI in `src/components/`.
+- Reads go through the API (`src/lib/api.ts`) with TanStack Query; `queryKey` factories live in
+  the feature's `api.ts`. Never list chain state by calling contracts.
+- Writes go through wagmi (`useWriteContract`, `useSimulateContract`) with ABIs/addresses from
+  `src/lib/deployments.ts`. The only live read allowed in the browser is `Marketplace.quote`.
+- Money is `bigint` base units until `src/lib/format.ts`. Time is Unix seconds until formatting.
+- MUI theme only in `src/theme/`. Prefer theme tokens over ad-hoc `sx` values.
+- Use `docs/GLOSSARY.md` terms in UI copy: slot, period, lease, terms, creative, approval.
+
+```tsx
+// ✅ typed query with key factory
+export const slotKeys = { detail: (id: bigint) => ['slot', id.toString()] as const };
+export function useSlot(id: bigint) {
+  return useQuery({ queryKey: slotKeys.detail(id), queryFn: () => api.getSlot(id) });
+}
+
+// ❌ reading chain state for a list, or floats for money
+const slots = await publicClient.readContract({ functionName: 'totalSupply' }); // no
+const price = Number(quote.price) / 1e6; // no — format with formatUsdc(quote.price)
+```
+
+## Tests
+
+- Vitest. Test hooks and formatting helpers; component tests for buy/approve dialogs.

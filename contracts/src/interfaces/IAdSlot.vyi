@@ -1,0 +1,151 @@
+# pragma version ~=0.4.0
+"""
+@title IAdSlot
+@notice Canonical interface of the AdSlot contract: the permanent ERC-721 collection of ad
+        slots, each with an immutable SlotSpec, a publisher-defined Calendar, and per-period
+        Leases written only by the authorised Marketplace.
+@dev    Semantics: docs/PROTOCOL.md §3.1, §4.1, §5.1, §6.
+        Standard ERC-721 / ERC-721Metadata / ERC-721Enumerable functions are provided by the
+        snekmate `erc721` module and are not repeated here.
+"""
+
+# --------------------------------------------------------------------------- structs
+
+struct SlotSpec:
+    width: uint16            # px; > 0 when kind == WEB_DISPLAY
+    height: uint16           # px; > 0 when kind == WEB_DISPLAY
+    kind: uint8              # SlotKind: 0 WEB_DISPLAY, 1 NEWSLETTER, 2 PHYSICAL, 3 OTHER
+    domain: String[253]      # lowercase host, no scheme/port; non-empty
+
+struct Calendar:
+    version: uint32          # 0 = no calendar; incremented on every set_calendar
+    period_seconds: uint64   # >= MIN_PERIOD_SECONDS (3600)
+    first_period_start: uint64
+
+struct Lease:
+    user: address            # advertiser; empty(address) = unleased
+    creative_id: uint256     # > 0 when leased
+
+# --------------------------------------------------------------------------- events
+
+event SlotMinted:
+    slot_id: indexed(uint256)
+    owner: indexed(address)
+    width: uint16
+    height: uint16
+    kind: uint8
+    domain: String[253]
+
+event CalendarSet:
+    slot_id: indexed(uint256)
+    version: uint32
+    period_seconds: uint64
+    first_period_start: uint64
+
+event LeaseSet:
+    slot_id: indexed(uint256)
+    period_index: indexed(uint256)
+    user: indexed(address)
+    version: uint32
+    start: uint64
+    end: uint64
+    creative_id: uint256
+
+event MarketSet:
+    market: address
+
+event BaseURISet:
+    base_uri: String[80]
+
+# --------------------------------------------------------------------------- publisher
+
+@external
+def mint_slot(spec: SlotSpec) -> uint256:
+    """
+    @notice Mint a new slot to msg.sender. Permissionless.
+    @dev    Reverts "empty domain", "bad dimensions", "bad kind".
+    @return The new slot_id.
+    """
+    ...
+
+@external
+def set_calendar(slot_id: uint256, period_seconds: uint64, first_period_start: uint64):
+    """
+    @notice Replace the slot's calendar (bumps version). Slot owner only.
+    @dev    Reverts "not owner", "period too short", "leases outstanding".
+    """
+    ...
+
+# --------------------------------------------------------------------------- market
+
+@external
+def set_lease(slot_id: uint256, period_index: uint256, user: address, creative_id: uint256):
+    """
+    @notice Write a lease for one period. Callable only by `market`.
+    @dev    Reverts "not market", "no calendar", "period ended", "already leased", "bad lease".
+    """
+    ...
+
+# --------------------------------------------------------------------------- owner
+
+@external
+def set_market(market: address):
+    """@notice Set the sole lease writer. Contract owner only."""
+    ...
+
+@external
+def set_base_uri(base_uri: String[80]):
+    """@notice Set the metadata base URI (points at the API slot metadata route). Owner only."""
+    ...
+
+# --------------------------------------------------------------------------- views
+
+@external
+@view
+def market() -> address:
+    ...
+
+@external
+@view
+def spec_of(slot_id: uint256) -> SlotSpec:
+    ...
+
+@external
+@view
+def calendar_of(slot_id: uint256) -> Calendar:
+    ...
+
+@external
+@view
+def last_leased_end_of(slot_id: uint256) -> uint64:
+    ...
+
+@external
+@view
+def period_window(slot_id: uint256, period_index: uint256) -> (uint64, uint64):
+    """@return (start, end) of the period under the current calendar. Reverts "no calendar"."""
+    ...
+
+@external
+@view
+def current_period(slot_id: uint256) -> (bool, uint256):
+    """@return (exists, period_index) for block.timestamp under the current calendar."""
+    ...
+
+@external
+@view
+def lease_of(slot_id: uint256, period_index: uint256) -> Lease:
+    """@return The lease under the current calendar version (empty struct if none)."""
+    ...
+
+@external
+@view
+def userOf(tokenId: uint256) -> address:
+    """@notice ERC-4907 read view: current period's lessee or empty(address)."""
+    ...
+
+@external
+@view
+def userExpires(tokenId: uint256) -> uint256:
+    """@notice ERC-4907 read view: current period's end if leased, else 0."""
+    ...

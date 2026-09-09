@@ -1,0 +1,33 @@
+{
+  "name": "@openad/embed",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "OpenAd embed: the <open-ad> web component publishers drop on a page. Zero runtime dependencies. Talks only to the serve endpoint.",
+  "main": "dist/open-ad.js",
+  "module": "dist/open-ad.js",
+  "exports": {
+    ".": "./dist/open-ad.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && node scripts/check-size.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.10.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.10.0",
+    "globals": "^15.9.0",
+    "jsdom": "^25.0.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.5.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,0 +1,85 @@
+"""Runtime configuration. The ONLY place that reads environment variables.
+
+Every variable is prefixed ``OPENAD_`` and documented in ``/.env.example`` and
+``docs/ARCHITECTURE.md`` section 3.8.
+"""
+
+from __future__ import annotations
+
+from functools import lru_cache
+from pathlib import Path
+from typing import Literal
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="OPENAD_",
+        env_file=(REPO_ROOT / ".env", ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # --- general
+    env: Literal["dev", "staging", "prod", "test"] = "dev"
+    log_level: str = "INFO"
+
+    # --- chain / contracts
+    chain_id: int = 31337
+    rpc_url: str = "http://127.0.0.1:8545"
+    deployments_dir: Path = Path("contracts/deployments")
+
+    # --- database
+    database_url: str = "postgresql+asyncpg://openad:openad@127.0.0.1:5432/openad"
+
+    # --- api
+    api_host: str = "127.0.0.1"
+    api_port: int = 8000
+    public_url: str = "http://localhost:8000"
+    cors_origins: str = "http://localhost:5173"
+
+    # --- serving edge
+    serve_ttl_seconds: int = Field(default=30, ge=1)
+    serve_enforce_origin: bool = False
+    media_cache_dir: Path = Path("api/.cache/media")
+    max_media_bytes: int = 2 * 1024 * 1024
+    ipfs_gateway: str = "https://ipfs.io/ipfs/"
+    verify_interval_seconds: int = 6 * 3600
+    safe_browsing_key: str | None = None
+
+    # --- indexer
+    indexer_poll_seconds: float = 2.0
+    indexer_batch_blocks: int = Field(default=2000, ge=1)
+    indexer_confirmations: int = Field(default=1, ge=0)
+    indexer_reorg_depth: int = Field(default=32, ge=1)
+
+    # --- auth (SIWE; ROADMAP 3.1)
+    session_secret: str = "change-me-in-real-environments"  # noqa: S105 - documented placeholder
+    session_ttl_seconds: int = 86400
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def deployments_path(self) -> Path:
+        p = self.deployments_dir
+        return p if p.is_absolute() else REPO_ROOT / p
+
+    @property
+    def media_cache_path(self) -> Path:
+        p = self.media_cache_dir
+        return p if p.is_absolute() else REPO_ROOT / p
+
+    @property
+    def is_dev(self) -> bool:
+        return self.env in ("dev", "test")
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

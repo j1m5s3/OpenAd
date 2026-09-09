@@ -1,0 +1,28 @@
+---
+description: Constraints for the OpenAd <open-ad> embed web component
+globs: embed/**/*.ts
+alwaysApply: false
+---
+
+# Embed (`embed/`)
+
+- Zero runtime dependencies. No framework, no polyfills, ES2020 output. Shadow DOM.
+- The only network target is `GET {api}/v1/serve/{slot}` and the `mediaUrl` it returns
+  (same-origin to the API). Never call the chain, never load advertiser URLs directly.
+- No cookies, `localStorage`, fingerprinting, or third-party scripts. Send nothing but the slot id.
+- Render `<a target="_blank" rel="noopener noreferrer nofollow sponsored"><img></a>` only.
+  No advertiser HTML/JS ever executes.
+- Refresh after `ttl` seconds only while visible (`IntersectionObserver`); fall back to the
+  `house-src`/`house-href` attributes on any error.
+- `src/types.ts` must match `api/src/openad/schemas/serve.py` field for field.
+- Size budget ≤ 5 KB gzipped, enforced by `scripts/check-size.mjs` in `npm run build`.
+- Dispatch `openad:render` and `openad:error` custom events; log nothing to the console in production.
+
+```ts
+// ✅ attribute-driven, defensive fetch
+const res = await fetch(`${api}/v1/serve/${encodeURIComponent(slot)}`, { credentials: 'omit' });
+if (!res.ok) return this.renderHouse();
+
+// ❌ anything like this
+import { createPublicClient } from 'viem'; // no chain access in the embed
+```

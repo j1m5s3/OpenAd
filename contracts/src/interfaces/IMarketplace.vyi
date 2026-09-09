@@ -1,0 +1,167 @@
+# pragma version ~=0.4.0
+"""
+@title IMarketplace
+@notice Canonical interface of the Marketplace contract: per-slot sale Terms, Dutch pricing,
+        and the single-transaction `buy` that pays USDC (fee to treasury, remainder to the
+        publisher) and writes the lease on AdSlot.
+@dev    Semantics: docs/PROTOCOL.md §3.2, §4.2, §4.3, §5.2 (check order is normative), §6.
+"""
+
+# --------------------------------------------------------------------------- structs
+
+struct Terms:
+    start_price: uint256     # USDC base units; >= floor_price
+    floor_price: uint256     # USDC base units; may be 0
+    lead_seconds: uint64     # > 0; auction opens this long before period start
+    sale_end: uint64         # 0 = no limit; else periods must end <= sale_end
+    approval_mode: uint8     # ApprovalMode: 0 REQUIRED, 1 WAIVED
+    paused: bool
+
+struct Quote:
+    sellable: bool
+    reason: String[32]       # the revert string `buy` would produce, or ""
+    price: uint256
+    fee: uint256
+    open_at: uint64
+    start: uint64
+    end: uint64
+
+# --------------------------------------------------------------------------- events
+
+event TermsSet:
+    slot_id: indexed(uint256)
+    start_price: uint256
+    floor_price: uint256
+    lead_seconds: uint64
+    sale_end: uint64
+    approval_mode: uint8
+
+event PausedSet:
+    slot_id: indexed(uint256)
+    paused: bool
+
+event Purchased:
+    slot_id: indexed(uint256)
+    period_index: indexed(uint256)
+    buyer: indexed(address)
+    publisher: address
+    creative_id: uint256
+    price: uint256
+    fee: uint256
+    approval_mode: uint8
+    start: uint64
+    end: uint64
+
+event FeeSet:
+    fee_bps: uint16
+
+event TreasurySet:
+    treasury: address
+
+# --------------------------------------------------------------------------- publisher
+
+@external
+def set_terms(
+    slot_id: uint256,
+    start_price: uint256,
+    floor_price: uint256,
+    lead_seconds: uint64,
+    sale_end: uint64,
+    approval_mode: uint8,
+):
+    """
+    @notice Set sale terms for a slot. Slot owner only. `paused` is left unchanged.
+    @dev    Reverts "not owner", "bad prices", "bad lead", "bad mode".
+    """
+    ...
+
+@external
+def set_paused(slot_id: uint256, paused: bool):
+    """@notice Pause/unpause sales for a slot. Slot owner only. Reverts "not owner"."""
+    ...
+
+# --------------------------------------------------------------------------- advertiser
+
+@external
+def buy(slot_id: uint256, period_index: uint256, creative_id: uint256, max_price: uint256):
+    """
+    @notice Buy one period at the current Dutch price with a pre-approved USDC allowance.
+    @dev    Check order (PROTOCOL §5.2): "no terms", "paused", "beyond sale end",
+            "not open"/"closed", "price exceeds max", "not creative owner",
+            "dimension mismatch", "not approved"/"creative blocked", then AdSlot.set_lease,
+            then transfers. Nonreentrant.
+    """
+    ...
+
+@external
+def buy_with_permit(
+    slot_id: uint256,
+    period_index: uint256,
+    creative_id: uint256,
+    max_price: uint256,
+    deadline: uint256,
+    v: uint8,
+    r: bytes32,
+    s: bytes32,
+):
+    """
+    @notice As `buy`, preceded by a NON-REVERTING EIP-2612 permit for `max_price`
+            (ADR-0004). A failed permit is ignored; transferFrom enforces allowance.
+    """
+    ...
+
+# --------------------------------------------------------------------------- owner
+
+@external
+def set_fee_bps(fee_bps: uint16):
+    """@notice Set protocol fee. Owner only. Reverts "fee too high" if > 1000."""
+    ...
+
+@external
+def set_treasury(treasury: address):
+    """@notice Set fee recipient. Owner only. Reverts "bad treasury" if empty."""
+    ...
+
+# --------------------------------------------------------------------------- views
+
+@external
+@view
+def USDC() -> address:
+    ...
+
+@external
+@view
+def AD_SLOT() -> address:
+    ...
+
+@external
+@view
+def REGISTRY() -> address:
+    ...
+
+@external
+@view
+def fee_bps() -> uint16:
+    ...
+
+@external
+@view
+def treasury() -> address:
+    ...
+
+@external
+@view
+def terms_of(slot_id: uint256) -> Terms:
+    ...
+
+@external
+@view
+def price(slot_id: uint256, period_index: uint256) -> uint256:
+    """@notice Current Dutch price. Reverts "no terms", "not open", "closed"."""
+    ...
+
+@external
+@view
+def quote(slot_id: uint256, period_index: uint256) -> Quote:
+    """@notice Non-reverting helper for UIs; mirrors the checks of `buy` up to pricing/approval."""
+    ...
