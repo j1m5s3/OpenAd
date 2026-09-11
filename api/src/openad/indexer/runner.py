@@ -138,7 +138,17 @@ class IndexerRunner:
             await session.commit()
         if events:
             log.info("indexer.range", start=start, end=end, events=len(events))
+        await self._verify_pending()
         return len(events)
+
+    async def _verify_pending(self) -> None:
+        from openad.services import media as media_service
+
+        try:
+            async with self.sessions() as session:
+                await media_service.verify_pending(session, self.settings)
+        except Exception:
+            log.exception("indexer.verify_failed")
 
     def decode(self, raw: LogReceipt) -> DecodedEvent | None:
         entry = self._decoders.get(str(raw["address"]).lower())

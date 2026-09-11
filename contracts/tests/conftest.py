@@ -12,6 +12,7 @@ import pytest
 from eth_account import Account
 
 from script.deploy import deploy_usdc
+from src.mocks import MockUSDC
 from tests.helpers import usdc
 
 # Deterministic test personas. Keys are only ever used on the in-process EVM.
@@ -48,6 +49,35 @@ def chain_id() -> int:
 @pytest.fixture
 def usdc_token(advertiser: str):
     """Fresh MockUSDC per test; advertiser starts with 10,000 USDC."""
-    token = deploy_usdc()
+    try:
+        token = deploy_usdc()
+    except ValueError:
+        token = MockUSDC.deploy()
+        token.mint(boa.env.eoa, 1_000_000 * 10**6)
     token.mint(advertiser, usdc(10_000))
     return token
+
+
+@pytest.fixture
+def registry():
+    from src import CreativeRegistry
+
+    return CreativeRegistry.deploy()
+
+
+@pytest.fixture
+def ad_slot():
+    from src import AdSlot
+
+    return AdSlot.deploy("OpenAd Slot", "OASLT", "http://localhost:8000/v1/slots/")
+
+
+@pytest.fixture
+def market(usdc_token, ad_slot, registry, treasury):
+    from src import Marketplace
+
+    m = Marketplace.deploy(usdc_token.address, ad_slot.address, registry.address)
+    ad_slot.set_market(m.address)
+    m.set_treasury(treasury)
+    m.set_fee_bps(250)
+    return m

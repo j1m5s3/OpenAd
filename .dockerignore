@@ -1,0 +1,9 @@
+node_modules
+.git
+web
+embed
+e2e
+contracts/out
+**/.venv
+**/__pycache__
+.cursor

@@ -1,0 +1,7 @@
+id: gen3-indexer-lag
+persona: advertiser
+generation: 3
+steps:
+  - visit: /
+  - expect: Indexer lag
+  - expect: reorg-safe

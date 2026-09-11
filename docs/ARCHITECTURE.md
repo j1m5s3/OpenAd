@@ -15,11 +15,13 @@ OpenAd/
 │                  • api      – read API + auth + publisher/advertiser write helpers (off-chain data only)
 │                  • serve    – GET /v1/serve/{slot_id} and /media  (may later move to a CDN worker)
 │                  • indexer  – event → Postgres worker
-├── web/         Vite + React + TypeScript + MUI + wagmi.  Marketplace, publisher & advertiser dashboards.
+├── web/         Vite + React + TypeScript + Tailwind + RainbowKit + wagmi. Discover, Supply, Campaigns.
 ├── embed/       Vanilla TypeScript web component <open-ad>.  Zero dependencies.  Talks only to /v1/serve.
+├── e2e/         Playwright + YAML scenarios (ADR-0010). Mock EIP-1193 wallets.
+├── workers/     Source-only Cloudflare Worker for /v1/serve (not deployed).
 ├── docs/        This folder.  Source of truth.
 ├── .cursor/     Cursor rules (per-package coding rules) — mirrors CONVENTIONS.md.
-└── docker-compose.yml   anvil + postgres for local development.
+└── docker-compose.yml (+ docker-compose.stack.yml for local API/indexer containers; not GCP).
 ```
 
 Dependency direction (arrows = "depends on"):
@@ -279,29 +281,30 @@ Consumers: `api` (`OPENAD_DEPLOYMENTS_DIR`, picks `<OPENAD_CHAIN_ID>.json`), `we
 
 ## 5. `web` package
 
-- Vite SPA (no SSR). React 19, TypeScript strict, MUI for UI, `react-router` for routing,
-  TanStack Query for server state, wagmi + viem for wallets and contract writes.
+- Vite SPA (no SSR). React 19, TypeScript strict, Tailwind CSS for UI, `react-router` for
+  routing, TanStack Query for server state, wagmi + viem for wallets and contract writes,
+  RainbowKit (dark) for connect (ADR-0008). Optional Turnkey when `VITE_TURNKEY_*` is set
+  (ADR-0011). SIWE sessions against the API (ADR-0009).
 - Chains: Anvil (`foundry`, 31337), Base Sepolia, Base. Selected by `VITE_CHAIN_ID`.
-- Connectors: injected (MetaMask etc.) and Coinbase Wallet (smart wallet preferred on Base).
-  RainbowKit/AppKit may be added later (ADR).
+- Connectors: RainbowKit defaults (injected, Coinbase Wallet, WalletConnect).
 - Layout:
 
 ```text
 web/src/
-  main.tsx            providers: Theme, QueryClient, Wagmi, Router
-  app/                routes + layout shell
+  main.tsx            providers: RainbowKit, Wagmi, QueryClient, Router
+  app/                routes + layout shell (Discover / Supply / Campaigns)
   features/
-    marketplace/      public browse + buy dialog (quote via wagmi, buy via wagmi)
-    publisher/        mint slot, set calendar/terms, approvals, house ad, earnings
-    advertiser/       creatives, approvals requested, leases, delivery report
+    marketplace/      Discover browse + slot page + buy dialog (quote via wagmi, buy via wagmi)
+    publisher/        Supply: mint slot, calendar/terms, approvals, house ad, earnings
+    advertiser/       Campaigns: creatives, approvals requested, leases, delivery report
     auth/             SIWE sign-in against the API
   components/         shared presentational components
   lib/
-    api.ts            typed fetch client for /v1 (generated client planned; see ROADMAP)
+    api.ts            typed fetch client for /v1 (OpenAPI types; ROADMAP 3.5)
     wagmi.ts          chains + connectors + transports
     deployments.ts    addresses/ABIs from src/generated/deployments/<chainId>.json
     format.ts         USDC / time formatting helpers (base units in, strings out)
-  theme/              single MUI theme
+  styles/             Tailwind entry + design tokens
   generated/          git-ignored; produced by scripts/sync-deployments.mjs
 ```
 
@@ -337,10 +340,11 @@ web/src/
 | Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` (committed) | `8453.json` (committed) |
 
 Local loop (canonical on Windows: `.\scripts\setup.cmd`, `.\scripts\dev-up.cmd`, `.\scripts\dev-down.cmd`;
-`npm run stack:*` is the same if PowerShell can load `npm.ps1`):
+`npm run stack:*` is the same if PowerShell can load `npm.ps1`). CI is `.github/workflows/ci.yml`
+(contracts, api, web/embed, Playwright). Live GCP and Base mainnet are out of scope.
 
 ```text
-.\scripts\setup.cmd                      # idempotent; MockUSDC-only until ROADMAP 1.1-1.4
+.\scripts\setup.cmd                      # .env, docker, protocol deploy, alembic upgrade, npm install
 .\scripts\dev-up.cmd                     # starts docker if needed; titled windows: api, indexer, web (-Embed optional)
 .\scripts\dev-down.cmd                   # stops docker; next up restarts Anvil/Postgres (Anvil chain is ephemeral)
 ```
@@ -349,12 +353,14 @@ What the scripts run (manual equivalent):
 
 ```text
 docker compose up -d                     # anvil :8545, postgres :15432 (container 5432)
-cd contracts && uv run mox run deploy --network anvil     # writes deployments/31337.json (MockUSDC only today)
-cd api && uv run python -m openad.db.bootstrap            # after ROADMAP 2.2: uv run alembic upgrade head
+cd contracts && uv run mox run deploy --network anvil     # writes deployments/31337.json
+cd api && uv run alembic upgrade head
 cd api && uv run uvicorn openad.main:app --reload
 cd api && uv run python -m openad.indexer
 npm run dev:web                          # http://localhost:5173
 npm run dev:embed                        # demo page using a local slot
+# optional: API + indexer as containers (migrations on API start)
+docker compose -f docker-compose.yml -f docker-compose.stack.yml up --build
 ```
 
 ---

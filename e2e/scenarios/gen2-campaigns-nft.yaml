@@ -1,0 +1,7 @@
+id: gen2-campaigns-nft
+persona: advertiser
+generation: 2
+steps:
+  - visit: /campaigns
+  - expect: Register NFT creative
+  - expect: Leases

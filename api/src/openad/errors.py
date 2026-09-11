@@ -12,6 +12,11 @@ class DomainError(Exception):
         self.message = message
 
 
+class UnauthorizedError(DomainError):
+    status_code = 401
+    code = "unauthorized"
+
+
 class NotFoundError(DomainError):
     status_code = 404
     code = "not_found"

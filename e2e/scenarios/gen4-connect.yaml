@@ -1,0 +1,6 @@
+id: gen4-connect
+persona: advertiser
+generation: 4
+steps:
+  - visit: /
+  - expect: Connect Wallet

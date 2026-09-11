@@ -22,6 +22,7 @@ VERIFY_FAILED_DIMENSIONS = "failed:dimensions"
 VERIFY_FAILED_SIZE = "failed:size"
 VERIFY_FAILED_FETCH = "failed:fetch"
 VERIFY_FAILED_NOT_OWNER = "failed:not_owner"
+VERIFY_FAILED_TIMEOUT = "failed:timeout"
 VERIFY_FAILED_CLICK_URL = "failed:click_url"
 
 

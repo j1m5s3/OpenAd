@@ -1,6 +1,6 @@
 # OpenAd Protocol Specification (v1)
 
-Status: **Specified** (contracts not yet implemented — see `ROADMAP.md` Phase 1).
+Status: **Implemented** (Anvil via ROADMAP 1.4). Base Sepolia broadcast is optional — see `docs/deploy-sepolia.md`.
 Signatures are canonical in `contracts/src/interfaces/*.vyi`. Semantics are canonical here.
 If you change one, change the other in the same commit.
 
@@ -181,16 +181,24 @@ duration = start - open_at                   # == lead_seconds unless saturated
 `price(s, i)` at time `now`:
 
 - **reverts `"not open"`** if `now < open_at`
-- **reverts `"closed"`** if `now >= start` (v1: no late buy; see § 9)
-- otherwise, with integer arithmetic (floor division):
+- **reverts `"closed"`** if `now >= end`
+- if `open_at <= now < start` (Dutch phase), with integer arithmetic (floor division):
 
 ```text
 price = T.floor_price + (T.start_price - T.floor_price) * (start - now) / duration
 ```
 
-Properties: `floor_price <= price <= start_price`; non-increasing in `now`; equals
-`start_price` at `open_at` and approaches `floor_price` at `start`. A fixed-price "rate card"
-is `start_price == floor_price`.
+- if `start <= now < end` (remainder / late buy):
+
+```text
+price = T.floor_price * (end - now) / period_seconds
+```
+
+Dutch-phase properties: `floor_price <= price <= start_price`; non-increasing in `now`; equals
+`start_price` at `open_at` and equals `floor_price` at `start`. Remainder-phase properties:
+`0 <= price <= floor_price`; equals `floor_price` at `start` and approaches 0 at `end`. A
+fixed-price "rate card" is `start_price == floor_price` (Dutch phase only; remainder still
+pro-rates the floor).
 
 ### 4.3 Fee split
 
@@ -352,7 +360,7 @@ Property tests (`contracts/tests/`) must cover each of these.
 1. **No overlapping leases.** Within a calendar version, leases are keyed by period index and periods are disjoint. Across versions, `set_calendar` requires `last_leased_end <= now`, so no future lease can exist under an old version when a new one starts.
 2. **`last_leased_end`** is ≥ the `end` of every lease ever written for the slot.
 3. **Only `market` writes leases**; only `owner` changes `market`.
-4. **Price bounds.** For any open auction, `floor_price <= price <= start_price`, and price is non-increasing in time.
+4. **Price bounds.** Dutch phase (`open_at <= now < start`): `floor_price <= price <= start_price`, non-increasing. Remainder phase (`start <= now < end`): `0 <= price <= floor_price` with `price = floor_price * (end - now) / period_seconds`.
 5. **Fee bound.** `fee_bps <= 1000`; `fee + publisher_amount == price`.
 6. **Pass-through.** `USDC.balanceOf(Marketplace)` is unchanged by any `buy`.
 7. **Creative immutability.** All `Creative` fields except `revoked` are constant after registration.
@@ -366,12 +374,12 @@ Property tests (`contracts/tests/`) must cover each of these.
 
 | Item                                                                  | Status          | Notes                                                                                                                   |
 | --------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Late buy (buy the remainder of a started period at pro-rated floor)   | Deferred (v1.1) | `price` reverts `"closed"` at `start`. Design: `price = floor * (end - now) / period_seconds` for `start <= now < end`. |
+| Late buy (buy the remainder of a started period at pro-rated floor)   | Implemented     | § 4.2 remainder phase. No new event; `Purchased` already carries `price`. |
 | Calendar change while leases outstanding                              | Deferred (v2)   | Requires calendar epochs. v1 rule: pause, wait for leases to run out, then `set_calendar`.                              |
 | On-chain refunds / disputes                                           | Deferred        | Delivery is time-based (billboard model). Serve counts are reported off-chain.                                          |
 | Approval portability on slot transfer                                 | By design       | Approvals are keyed by publisher address; a new owner starts with none.                                                 |
 | Full ERC-4907 (`setUser`)                                             | By design       | Read views only.                                                                                                        |
-| Pricing autopilot (VRGDA-style adjustment)                            | Deferred (v2)   | Publisher-side; no protocol change needed initially.                                                                    |
+| Pricing autopilot (VRGDA-style adjustment)                            | Implemented     | Publisher-side suggestion API; no protocol change.                                                                      |
 | English / sealed-bid auctions                                         | Deferred        | Only if data shows many simultaneous bidders per period.                                                                |
 | Operators (ERC-721 `approve`/`setApprovalForAll`) acting as publisher | Deferred        | v1 requires `ownerOf == msg.sender`.                                                                                    |
 | Sublease / secondary market for leases                                | Deferred (v2)   | Would require lease transfer in `AdSlot`.                                                                               |

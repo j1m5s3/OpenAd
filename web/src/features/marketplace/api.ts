@@ -6,6 +6,7 @@ export const slotKeys = {
   all: ['slots'] as const,
   list: (params: { domain?: string; kind?: number } = {}) => ['slots', 'list', params] as const,
   detail: (slotId: string) => ['slots', 'detail', slotId] as const,
+  periods: (slotId: string) => ['slots', 'periods', slotId] as const,
 };
 
 export function useSlots(params: { domain?: string; kind?: number } = {}) {
@@ -13,5 +14,17 @@ export function useSlots(params: { domain?: string; kind?: number } = {}) {
 }
 
 export function useSlot(slotId: string) {
-  return useQuery({ queryKey: slotKeys.detail(slotId), queryFn: () => api.getSlot(slotId) });
+  return useQuery({
+    queryKey: slotKeys.detail(slotId),
+    queryFn: () => api.getSlot(slotId),
+    enabled: slotId.length > 0,
+  });
+}
+
+export function usePeriods(slotId: string) {
+  return useQuery({
+    queryKey: slotKeys.periods(slotId),
+    queryFn: () => api.listPeriods(slotId),
+    enabled: slotId.length > 0,
+  });
 }

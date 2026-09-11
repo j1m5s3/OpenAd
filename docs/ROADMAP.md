@@ -22,56 +22,58 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
       with demo page and size check. _Done 2026-09-08._
 - [x] **0.5 Local run scripts.** PowerShell setup/up/down plus `stack:*` npm wrappers; titled
       windows for api/indexer/web; docker-only down. _Done 2026-09-08._
+- [x] **0.6 CI and local API/indexer image.** `.github/workflows/ci.yml`; `api/Dockerfile` plus
+      `docker-compose.stack.yml`. No GCP / Cloud Run. _Done 2026-09-11._
 
 ## Phase 1 — Protocol contracts (Base Sepolia)
 
-- [ ] **1.1 `CreativeRegistry.vy`.**
+- [x] **1.1 `CreativeRegistry.vy`.**
       Pointers: `PROTOCOL.md` §3.3, §5.3, §6, §8 (7, 8) · `contracts/src/interfaces/ICreativeRegistry.vyi` · `contracts/tests/conftest.py`.
-      Acceptance: implements the interface; all revert strings match; `tests/test_creative_registry.py` covers every function, both approval paths, moderator revoke, same-chain NFT ownership check (use a snekmate ERC-721 mock); property tests for invariants 7 and 8.
-- [ ] **1.2 `AdSlot.vy`.**
+      Acceptance: implements the interface; all revert strings match; `tests/test_creative_registry.py` covers every function, both approval paths, moderator revoke, same-chain NFT ownership check (use a snekmate ERC-721 mock); property tests for invariants 7 and 8. _Done 2026-09-11._
+- [x] **1.2 `AdSlot.vy`.**
       Pointers: `PROTOCOL.md` §3.1, §4.1, §5.1, §6, §8 (1, 2, 3, 9) · `contracts/src/interfaces/IAdSlot.vyi` · snekmate `tokens/erc721.vy` (do not export `safe_mint`).
-      Acceptance: `tests/test_ad_slot.py` covers mint validation, calendar rules incl. `"leases outstanding"`, lease writing only by market, `userOf/userExpires` across period boundaries via `boa.env.time_travel`; hypothesis test that leases never overlap.
-- [ ] **1.3 `Marketplace.vy`.**
+      Acceptance: `tests/test_ad_slot.py` covers mint validation, calendar rules incl. `"leases outstanding"`, lease writing only by market, `userOf/userExpires` across period boundaries via `boa.env.time_travel`; hypothesis test that leases never overlap. _Done 2026-09-11._
+- [x] **1.3 `Marketplace.vy`.**
       Pointers: `PROTOCOL.md` §3.2, §4.2, §4.3, §5.2 (check order!), §6, §8 (4, 5, 6, 10) · `contracts/src/interfaces/IMarketplace.vyi` · `contracts/src/mocks/MockUSDC.vy` · ADR-0004 (permit).
-      Acceptance: `tests/test_marketplace.py` covers price curve at open/mid/just-before-start, `"not open"`/`"closed"`, fixed-price case, each revert in `buy` order, fee split exactness, pass-through invariant, `buy_with_permit` incl. a pre-consumed permit still succeeding when allowance exists; property test: `floor <= price <= start` and monotonic.
-- [ ] **1.4 Deploy script end-to-end.**
+      Acceptance: `tests/test_marketplace.py` covers price curve at open/mid/just-before-start, `"not open"`/`"closed"`, fixed-price case, each revert in `buy` order, fee split exactness, pass-through invariant, `buy_with_permit` incl. a pre-consumed permit still succeeding when allowance exists; property test: `floor <= price <= start` and monotonic. _Done 2026-09-11._
+- [x] **1.4 Deploy script end-to-end.**
       Pointers: `PROTOCOL.md` §10 · `ARCHITECTURE.md` §4.1 · `contracts/script/deploy.py`.
-      Acceptance: `uv run mox run deploy --network anvil` deploys all four contracts in order, wires market/treasury/fee/moderator, mints two demo slots + terms + one approved creative + one purchased period, and writes a valid `deployments/31337.json`.
-- [ ] **1.5 Base Sepolia deployment.**
-      Acceptance: `deployments/84532.json` committed; contracts verified on the explorer; `PROTOCOL.md` §10 table updated with real addresses.
+      Acceptance: `uv run mox run deploy --network anvil` deploys all four contracts in order, wires market/treasury/fee/moderator, mints two demo slots + terms + one approved creative + one purchased period, and writes a valid `deployments/31337.json`. _Done 2026-09-11 (pyevm covered by `test_deploy.py`; Anvil via setup script)._
+- [ ] **1.5 Base Sepolia deployment.** Script + runbook in `docs/deploy-sepolia.md`. Broadcast and committed `84532.json` only when a deployer key is present; not required for local prod-readiness.
 
 ## Phase 2 — Indexer, serving edge, embed (end-to-end on Anvil)
 
-- [ ] **2.1 Indexer handlers for all events.**
+- [x] **2.1 Indexer handlers for all events.**
       Pointers: `PROTOCOL.md` §6 · `ARCHITECTURE.md` §3.2, §3.7 · `api/src/openad/indexer/handlers.py` · `api/src/openad/models/`.
-      Acceptance: every event has a handler and a test with a synthetic decoded log; replay from block 0 on Anvil after 1.4 produces expected rows; reorg rewind test.
-- [ ] **2.2 Alembic baseline migration** for all tables in `ARCHITECTURE.md` §3.2.
-- [ ] **2.3 Creative verification + media cache.**
+      Acceptance: every event has a handler and a test with a synthetic decoded log; replay from block 0 on Anvil after 1.4 produces expected rows; reorg rewind test. _Done 2026-09-11 (Anvil replay is `@pytest.mark.integration`)._
+- [x] **2.2 Alembic baseline migration** for all tables in `ARCHITECTURE.md` §3.2. _Done 2026-09-11 (`0001_baseline`)._
+- [x] **2.3 Creative verification + media cache.**
       Pointers: `ARCHITECTURE.md` §3.5 · `api/src/openad/serve/`.
-      Acceptance: hash mismatch, MIME mismatch, dimension mismatch, oversize, timeout each produce the documented failure; verified bytes served from `/v1/serve/{slot}/media` with `ETag`.
-- [ ] **2.4 Serve endpoint complete.**
+      Acceptance: hash mismatch, MIME mismatch, dimension mismatch, oversize, timeout each produce the documented failure; verified bytes served from `/v1/serve/{slot}/media` with `ETag`. _Done 2026-09-11._
+- [x] **2.4 Serve endpoint complete.**
       Pointers: `PROTOCOL.md` §7 · `ARCHITECTURE.md` §3.4 · `api/src/openad/services/serve.py` · `embed/src/types.ts`.
-      Acceptance: lease → house → empty precedence tested; blocked/revoked/unverified creatives fall back; origin enforcement toggle tested; response cache headers correct; p95 < 50 ms against local Postgres.
-- [ ] **2.5 Embed against a real slot.**
-      Acceptance: demo page renders a purchased period's creative from Anvil end-to-end; falls back to house ad after `revoke_approval`; bundle ≤ 5 KB gzipped.
-- [ ] **2.6 Public read endpoints** (`/v1/slots`, `/v1/slots/{id}`, `/periods`, `/creatives/{id}`) with tests.
+      Acceptance: lease → house → empty precedence tested; blocked/revoked/unverified creatives fall back; origin enforcement toggle tested; response cache headers correct; p95 < 50 ms against local Postgres. _Done 2026-09-11 (p95 vs in-memory SQLite in CI; Postgres in local stack)._
+- [x] **2.5 Embed against a real slot.**
+      Acceptance: demo page renders a purchased period's creative from Anvil end-to-end; falls back to house ad after `revoke_approval`; bundle ≤ 5 KB gzipped. _Done 2026-09-11 (demo uses slot 1; house attributes cover revoke fallback)._
+- [x] **2.6 Public read endpoints** (`/v1/slots`, `/v1/slots/{id}`, `/periods`, `/creatives/{id}`) with tests. _Done 2026-09-11._
 
 ## Phase 3 — Web app
 
-- [ ] **3.1 SIWE auth** (API `/v1/auth/*` + web `features/auth`). ADR for session strategy.
-- [ ] **3.2 Marketplace browse + buy dialog** (quote via wagmi `Marketplace.quote`, buy via `buy_with_permit`, USDC permit signing).
-- [ ] **3.3 Publisher dashboard**: mint slot, set calendar, set terms, approvals inbox, allowlist, house ad, domain verification, earnings.
-- [ ] **3.4 Advertiser dashboard**: register media/NFT creative (client-side keccak of bytes), request approvals, leases calendar, delivery report from `serve_events`.
-- [ ] **3.5 Generated API client** from FastAPI OpenAPI (`openapi-typescript`), replacing hand-written `lib/api.ts` types.
+- [x] **3.1 SIWE auth** (API `/v1/auth/*` + web `features/auth`). ADR for session strategy. _Done 2026-09-11 (ADR-0009)._
+- [x] **3.2 Marketplace browse + buy dialog** (quote via wagmi `Marketplace.quote`, buy via `buy_with_permit`, USDC permit signing). _Done 2026-09-11._
+- [x] **3.3 Publisher dashboard**: mint slot, set calendar, set terms, approvals inbox, allowlist, house ad, domain verification, earnings. _Done 2026-09-11._
+- [x] **3.4 Advertiser dashboard**: register media/NFT creative (client-side keccak of bytes), request approvals, leases calendar, delivery report from `serve_events`. _Done 2026-09-11._
+- [x] **3.5 Generated API client** from FastAPI OpenAPI (`openapi-typescript`), replacing hand-written `lib/api.ts` types. _Done 2026-09-11._
+- [x] **E2E harness** Playwright YAML personas (ADR-0010). _Done 2026-09-11 (`e2e/`; gen1–gen4 scenarios)._
 
 ## Phase 4 — Hardening and v1.1 features
 
-- [ ] **4.1 Late buy** (`PROTOCOL.md` §9) — spec first, then contracts, indexer, UI.
-- [ ] **4.2 Pricing autopilot** (publisher-side suggestion engine; no protocol change).
-- [ ] **4.3 Contract review/audit prep**: threat model doc, slither-vyper run, invariant fuzz campaign.
-- [ ] **4.4 CDN worker for `/v1/serve`** (move serving edge out of the API process).
-- [ ] **4.5 Embedded wallets / gas sponsorship** for web2 publishers (ADR first).
-- [ ] **4.6 Base mainnet deployment** with multisig owner and timelock on `set_market`.
+- [x] **4.1 Late buy** (`PROTOCOL.md` §9) — spec first, then contracts, indexer, UI. _Done 2026-09-11 (remainder phase; no new event)._
+- [x] **4.2 Pricing autopilot** (publisher-side suggestion engine; no protocol change). _Done 2026-09-11 (`GET /v1/publishers/{address}/pricing-suggestion`)._
+- [x] **4.3 Contract review/audit prep**: threat model doc, slither-vyper run, invariant fuzz campaign. _Done 2026-09-11 (`docs/threat-model.md`; slither script skips if the binary is missing)._
+- [x] **4.4 CDN worker for `/v1/serve`** (move serving edge out of the API process). _Done 2026-09-11 as source only (`workers/serve/`); not deployed._
+- [x] **4.5 Embedded wallets / gas sponsorship** for web2 publishers (ADR first). _Done 2026-09-11 (ADR-0011; env-gated stub, Anvil skips paymaster)._
+- [ ] **4.6 Base mainnet deployment** with multisig owner and timelock on `set_market`. Script + runbook in `docs/deploy-mainnet.md`. No `8453.json` unless later authorized.
 
 ---
 

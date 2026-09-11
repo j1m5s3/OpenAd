@@ -89,7 +89,7 @@ def buy(slot_id: uint256, period_index: uint256, creative_id: uint256, max_price
     @dev    Check order (PROTOCOL §5.2): "no terms", "paused", "beyond sale end",
             "not open"/"closed", "price exceeds max", "not creative owner",
             "dimension mismatch", "not approved"/"creative blocked", then AdSlot.set_lease,
-            then transfers. Nonreentrant.
+            then transfers. Remainder buys (`start <= now < end`) use pro-rated floor. Nonreentrant.
     """
     ...
 
@@ -157,7 +157,7 @@ def terms_of(slot_id: uint256) -> Terms:
 @external
 @view
 def price(slot_id: uint256, period_index: uint256) -> uint256:
-    """@notice Current Dutch price. Reverts "no terms", "not open", "closed"."""
+    """@notice Current Dutch or remainder price. Reverts "no terms", "not open", "closed"."""
     ...
 
 @external

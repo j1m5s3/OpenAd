@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -11,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openad.config import Settings
 from openad.db.session import Database
 from openad.main import create_app
-from openad.models import Creative, CreativeVerification, HouseAd, Lease, Slot
+from openad.models import Creative, CreativeVerification, HouseAd, Lease, Slot, Terms
 from openad.models.creative import KIND_MEDIA
 from openad.models.offchain import VERIFY_VERIFIED
 
@@ -21,13 +22,15 @@ TX = "0x" + "cc" * 32
 
 
 @pytest.fixture
-def settings() -> Settings:
+def settings(tmp_path: Path) -> Settings:
     return Settings(
         env="test",
         database_url="sqlite+aiosqlite:///:memory:",
         public_url="http://api.test",
         serve_ttl_seconds=30,
         serve_enforce_origin=False,
+        media_cache_dir=tmp_path / "media",
+        rpc_url="http://127.0.0.1:1",
         _env_file=None,  # type: ignore[call-arg]  # pydantic-settings init-only kwarg
     )
 
@@ -138,4 +141,24 @@ def make_house(slot_id: int = 1) -> HouseAd:
         media_url="https://example.com/house.png",
         click_url="https://example.com/",
         updated_at=datetime.now(UTC),
+    )
+
+
+def make_terms(
+    slot_id: int = 1,
+    *,
+    start_price: int = 10_000_000,
+    floor_price: int = 1_000_000,
+    lead_seconds: int = 3600,
+    paused: bool = False,
+) -> Terms:
+    return Terms(
+        slot_id=slot_id,
+        start_price=start_price,
+        floor_price=floor_price,
+        lead_seconds=lead_seconds,
+        sale_end=0,
+        approval_mode=0,
+        paused=paused,
+        updated_block=1,
     )

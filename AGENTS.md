@@ -45,14 +45,17 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 | Serve JSON contract                  | `api/src/openad/schemas/serve.py` ⇔ `embed/src/types.ts`                         |
 | Web app                              | `web/src/` (feature folders; wagmi for writes; API for reads)                    |
 | Embed element                        | `embed/src/open-ad.ts`                                                           |
+| Playwright E2E                       | `e2e/` (YAML scenarios, mock EIP-1193)                                           |
 | Env vars                             | `.env.example` (all prefixed `OPENAD_`; web uses `VITE_`)                        |
-| Local infra                          | `docker-compose.yml` (Anvil + Postgres)                                          |
+| Local infra                          | `docker-compose.yml` (Anvil + Postgres); `docker-compose.stack.yml` (api/indexer)|
+| API image                            | `api/Dockerfile` (also used for the indexer process)                             |
+| CI                                   | `.github/workflows/ci.yml` (no GCP / no mainnet broadcast)                       |
 
 ## Commands
 
 ```text
 # local stack (Windows; scripts/*.cmd bypass PowerShell execution policy)
-.\scripts\setup.cmd                                 # .env, docker, MockUSDC deploy, DB bootstrap, npm install (no wallet prompt)
+.\scripts\setup.cmd                                 # .env, docker, protocol deploy, alembic upgrade, npm install (no wallet prompt)
 .\scripts\dev-up.cmd                                # starts docker if needed; titled windows: api, indexer, web (-Embed optional)
 .\scripts\dev-down.cmd                              # stops docker; next up restarts Anvil/Postgres (Anvil chain is ephemeral)
 # if npm.ps1 is blocked: use the .cmd files or npm.cmd run stack:*  (not `npm`)
@@ -70,13 +73,14 @@ uv run mox run deploy --network anvil               # writes deployments/31337.j
 cd api && uv sync                                   # once
 uv run ruff check && uv run ruff format --check && uv run mypy src
 uv run pytest
-uv run python -m openad.db.bootstrap                # dev tables until ROADMAP 2.2 (then: alembic upgrade head)
+uv run alembic upgrade head                         # schema (bootstrap.py remains a test/dev helper; refuses prod)
 uv run uvicorn openad.main:app --reload             # http://localhost:8000/v1/health
 uv run python -m openad.indexer
 
 # web + embed (npm workspaces at repo root)
 npm install                                         # once
 npm run typecheck && npm run lint && npm run test && npm run build
+npm run test:e2e                                    # Playwright YAML (needs Chromium once)
 npm run dev:web                                     # http://localhost:5173
 npm run dev:embed                                   # demo page
 ```

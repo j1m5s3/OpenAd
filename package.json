@@ -4,7 +4,8 @@
   "description": "OpenAd monorepo root: npm workspaces for the TypeScript packages (web, embed). Python packages (contracts, api) are managed with uv.",
   "workspaces": [
     "web",
-    "embed"
+    "embed",
+    "e2e"
   ],
   "scripts": {
     "stack:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup.ps1",
@@ -15,7 +16,8 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test -w web -w embed",
+    "test:e2e": "npm run test -w e2e",
     "format": "prettier --write \"{web,embed}/**/*.{ts,tsx,css,json,md}\" \"docs/**/*.md\" \"*.md\"",
     "format:check": "prettier --check \"{web,embed}/**/*.{ts,tsx,css,json,md}\" \"docs/**/*.md\" \"*.md\""
   },

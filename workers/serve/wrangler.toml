@@ -1,0 +1,7 @@
+name = "openad-serve"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Not deployed. Set ORIGIN to the API public URL if you ever publish this worker.
+[vars]
+ORIGIN = "http://localhost:8000"

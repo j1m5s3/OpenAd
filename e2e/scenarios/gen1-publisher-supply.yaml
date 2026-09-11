@@ -1,0 +1,9 @@
+id: gen1-publisher-supply
+persona: publisher
+generation: 1
+steps:
+  - visit: /supply
+  - expect: Supply
+  - expect: Mint slot
+  - expect: Approvals inbox
+  - expect: House ad

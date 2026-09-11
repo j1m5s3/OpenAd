@@ -31,6 +31,7 @@ from openad.models import (
 )
 from openad.models.creative import APPROVAL_REQUESTED, KIND_MEDIA, KIND_NFT_REF
 from openad.models.offchain import VERIFY_PENDING
+from openad.serve.cache import bump as bump_serve_cache
 
 log = get_logger(__name__)
 
@@ -156,6 +157,7 @@ async def lease_set(session: AsyncSession, ev: DecodedEvent) -> None:
         lease.creative_id = int(a["creative_id"])
         lease.start, lease.end = int(a["start"]), int(a["end"])
         lease.tx_hash, lease.block_number = ev.tx_hash, ev.block_number
+    bump_serve_cache(int(a["slot_id"]))
 
 
 @on_event("AdSlot", "MarketSet")
@@ -312,6 +314,7 @@ async def approval_set(session: AsyncSession, ev: DecodedEvent) -> None:
         session.add(approval)
     approval.status = int(a["status"])
     approval.updated_block = ev.block_number
+    bump_serve_cache()
 
 
 @on_event("CreativeRegistry", "AdvertiserAllowed")
@@ -324,6 +327,7 @@ async def advertiser_allowed(session: AsyncSession, ev: DecodedEvent) -> None:
         session.add(row)
     row.allowed = bool(a["allowed"])
     row.updated_block = ev.block_number
+    bump_serve_cache()
 
 
 @on_event("CreativeRegistry", "CreativeRevoked")
@@ -334,6 +338,7 @@ async def creative_revoked(session: AsyncSession, ev: DecodedEvent) -> None:
         return
     creative.revoked = True
     creative.updated_block = ev.block_number
+    bump_serve_cache()
 
 
 @on_event("CreativeRegistry", "ModeratorSet")

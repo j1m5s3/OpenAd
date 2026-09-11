@@ -1,0 +1,9 @@
+id: gen2-mobile-nav
+persona: publisher
+generation: 2
+viewport: mobile
+steps:
+  - visit: /
+  - expect: Discover
+  - expect: Supply
+  - expect: Campaigns

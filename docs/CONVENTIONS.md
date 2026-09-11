@@ -27,7 +27,7 @@ the matching `.mdc` file.
 
 ## 2. Repository layout rules
 
-- Package roots are fixed: `contracts/`, `api/`, `web/`, `embed/`, `docs/`. Do not add
+- Package roots are fixed: `contracts/`, `api/`, `web/`, `embed/`, `e2e/`, `workers/`, `docs/`. Do not add
   top-level packages without an ADR.
 - Generated artefacts are git-ignored (`contracts/out`, `contracts/deployments/31337.json`,
   `web/src/generated`, `dist`, `.venv`, `node_modules`).
@@ -87,11 +87,11 @@ the matching `.mdc` file.
   with `components/`, `hooks/`, `api.ts` inside; shared UI in `src/components/`. Server state via
   TanStack Query (`queryKey` factories in the feature's `api.ts`). Chain writes via wagmi hooks
   only, with ABIs from `src/lib/deployments.ts`. Money as `bigint`; format in `src/lib/format.ts`.
-  MUI theme lives only in `src/theme/`. Do not use `sx` for layout that a theme token could express.
+  Tailwind tokens live in `src/styles/`. Do not use ad-hoc hex colours that a token could express.
 - **embed**: zero runtime dependencies; no framework; ES2020; shadow DOM; must pass
   `scripts/check-size.mjs` (≤ 5 KB gzipped). Only network target is `/v1/serve`. The serve JSON
   type in `embed/src/types.ts` must match `api/src/openad/schemas/serve.py`.
-- Tests: Vitest. Embed tests run in jsdom.
+- Tests: Vitest. Embed tests run in jsdom. Browser journeys: Playwright in `e2e/` (ADR-0010).
 
 ## 6. Git and PRs
 

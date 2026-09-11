@@ -42,14 +42,14 @@ docs/        Specifications, conventions, roadmap, ADRs
 Prerequisites: [uv](https://docs.astral.sh/uv/), Node ≥ 20, Docker Desktop running.
 
 ```text
-.\scripts\setup.cmd      # .env, docker, MockUSDC deploy, DB bootstrap, npm install
+.\scripts\setup.cmd      # .env, docker, protocol deploy, alembic upgrade, npm install
 .\scripts\dev-up.cmd     # starts docker if needed; titled windows: api, indexer, web  (add -Embed for the embed demo)
 .\scripts\dev-down.cmd   # stops docker; next dev-up brings Anvil/Postgres back (Anvil chain is ephemeral)
 ```
 
 These `.cmd` shims exist because Windows PowerShell often blocks `npm.ps1` (`running scripts is disabled on this system`). Equivalents: `npm.cmd run stack:up`, or `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` and then `npm run stack:*`.
 
-Setup deploys MockUSDC only; protocol contracts land in Phase 1 (ROADMAP 1.1–1.4). Until then the indexer logs `indexer.nothing_to_index` and keeps polling. The manual equivalent of these scripts is in `docs/ARCHITECTURE.md` §7.
+Setup deploys the protocol on Anvil (CreativeRegistry, AdSlot, Marketplace, MockUSDC) and applies Alembic migrations. The manual equivalent of these scripts is in `docs/ARCHITECTURE.md` §7.
 
 After `stack:up`: API health at `http://localhost:8000/v1/health`, web at `http://localhost:5173`.
 

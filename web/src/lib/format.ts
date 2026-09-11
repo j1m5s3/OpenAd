@@ -40,3 +40,9 @@ export function formatDuration(seconds: number): string {
   if (seconds % 60 === 0) return `${seconds / 60}m`;
   return `${seconds}s`;
 }
+
+export function formatTimeLeft(targetUnix: number, nowUnix = Math.floor(Date.now() / 1000)): string {
+  const delta = targetUnix - nowUnix;
+  if (delta <= 0) return 'started';
+  return `in ${formatDuration(delta)}`;
+}

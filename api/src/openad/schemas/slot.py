@@ -30,3 +30,19 @@ class SlotOut(ApiModel):
 class SlotListOut(ApiModel):
     items: list[SlotOut]
     total: int
+
+
+class PeriodOut(ApiModel):
+    period_index: str
+    start: int
+    end: int
+    leased: bool
+    lessee: str | None = None
+    creative_id: str | None = None
+    sellable: bool
+    reason: str
+    indicative_price: str
+
+
+class PeriodListOut(ApiModel):
+    items: list[PeriodOut]
