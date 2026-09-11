@@ -11,15 +11,15 @@ serving edge, a wallet-connected web app, and a tiny embeddable component.
 
 ## Decision
 
-| Area | Choice | Notes |
-| --- | --- | --- |
-| Contracts | **Vyper 0.4 + Moccasin** (titanoboa tests), **snekmate** modules | Python-native toolchain; `uv run mox …`. Anvil via Docker for integration; Base fork tests. |
-| Off-chain services | **Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic, Postgres, web3.py**, structlog | One package `openad`, three processes (api, serve, indexer). `uv` for env/deps, `ruff` + `mypy --strict`. |
-| Web app | **Vite + React 19 + TypeScript + MUI**, react-router, TanStack Query, **wagmi + viem** | SPA, no SSR. Injected + Coinbase Wallet connectors; RainbowKit/AppKit optional later. |
-| Embed | **Vanilla TypeScript web component**, Vite library build | Zero runtime deps, ≤ 5 KB gzipped. |
-| Package management | `uv` (Python), **npm workspaces** (TypeScript) | npm chosen over pnpm because it is already present on the maintainer's machine; no functional difference for two packages. |
-| Local infra | `docker compose`: `ghcr.io/foundry-rs/foundry` (Anvil), `postgres:16` | No Foundry install required on the host. |
-| Type sharing Python ↔ TS | OpenAPI → `openapi-typescript` (ROADMAP 3.5); ABIs via deployments artifact + `abitype` | |
+| Area                     | Choice                                                                                  | Notes                                                                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Contracts                | **Vyper 0.4 + Moccasin** (titanoboa tests), **snekmate** modules                        | Python-native toolchain; `uv run mox …`. Anvil via Docker for integration; Base fork tests.                                |
+| Off-chain services       | **Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic, Postgres, web3.py**, structlog   | One package `openad`, three processes (api, serve, indexer). `uv` for env/deps, `ruff` + `mypy --strict`.                  |
+| Web app                  | **Vite + React 19 + TypeScript + MUI**, react-router, TanStack Query, **wagmi + viem**  | SPA, no SSR. Injected + Coinbase Wallet connectors; RainbowKit/AppKit optional later.                                      |
+| Embed                    | **Vanilla TypeScript web component**, Vite library build                                | Zero runtime deps, ≤ 5 KB gzipped.                                                                                         |
+| Package management       | `uv` (Python), **npm workspaces** (TypeScript)                                          | npm chosen over pnpm because it is already present on the maintainer's machine; no functional difference for two packages. |
+| Local infra              | `docker compose`: `ghcr.io/foundry-rs/foundry` (Anvil), `postgres:16`                   | No Foundry install required on the host.                                                                                   |
+| Type sharing Python ↔ TS | OpenAPI → `openapi-typescript` (ROADMAP 3.5); ABIs via deployments artifact + `abitype` |                                                                                                                            |
 
 ## Alternatives considered
 

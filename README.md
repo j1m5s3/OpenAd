@@ -18,14 +18,14 @@ Status: **Phase 0 (foundation) complete; Phase 1 (protocol contracts) next.** Se
 Start at [`docs/README.md`](docs/README.md). AI agents and new contributors: read
 [`AGENTS.md`](AGENTS.md) first.
 
-| Document | What it answers |
-| --- | --- |
-| [`docs/GLOSSARY.md`](docs/GLOSSARY.md) | What do the words mean? |
-| [`docs/PROTOCOL.md`](docs/PROTOCOL.md) | What do the contracts do, exactly? |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How do the packages fit together? |
-| [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) | How do we write and test code here? |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is next, and what does "done" mean? |
-| [`docs/adr/`](docs/adr/) | Why was it decided this way? |
+| Document                                       | What it answers                          |
+| ---------------------------------------------- | ---------------------------------------- |
+| [`docs/GLOSSARY.md`](docs/GLOSSARY.md)         | What do the words mean?                  |
+| [`docs/PROTOCOL.md`](docs/PROTOCOL.md)         | What do the contracts do, exactly?       |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How do the packages fit together?        |
+| [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)   | How do we write and test code here?      |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md)           | What is next, and what does "done" mean? |
+| [`docs/adr/`](docs/adr/)                       | Why was it decided this way?             |
 
 ## Repository layout
 
@@ -39,26 +39,19 @@ docs/        Specifications, conventions, roadmap, ADRs
 
 ## Quickstart (local)
 
-Prerequisites: [uv](https://docs.astral.sh/uv/), Node ≥ 20, Docker.
+Prerequisites: [uv](https://docs.astral.sh/uv/), Node ≥ 20, Docker Desktop running.
 
-```bash
-docker compose up -d                                  # Anvil :8545, Postgres :5432
-cp .env.example .env
-
-cd contracts && uv sync && uv run mox compile && uv run mox test
-uv run mox run deploy --network anvil                 # → deployments/31337.json
-cd ..
-
-cd api && uv sync && uv run pytest
-uv run python -m openad.db.bootstrap                  # dev tables (Alembic baseline is ROADMAP 2.2)
-uv run uvicorn openad.main:app --reload               # http://localhost:8000/v1/health
-uv run python -m openad.indexer                       # in another shell
-cd ..
-
-npm install && npm run build
-npm run dev:web                                       # http://localhost:5173
-npm run dev:embed                                     # embed demo page
+```text
+.\scripts\setup.cmd      # .env, docker, MockUSDC deploy, DB bootstrap, npm install
+.\scripts\dev-up.cmd     # starts docker if needed; titled windows: api, indexer, web  (add -Embed for the embed demo)
+.\scripts\dev-down.cmd   # stops docker; next dev-up brings Anvil/Postgres back (Anvil chain is ephemeral)
 ```
+
+These `.cmd` shims exist because Windows PowerShell often blocks `npm.ps1` (`running scripts is disabled on this system`). Equivalents: `npm.cmd run stack:up`, or `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` and then `npm run stack:*`.
+
+Setup deploys MockUSDC only; protocol contracts land in Phase 1 (ROADMAP 1.1–1.4). Until then the indexer logs `indexer.nothing_to_index` and keeps polling. The manual equivalent of these scripts is in `docs/ARCHITECTURE.md` §7.
+
+After `stack:up`: API health at `http://localhost:8000/v1/health`, web at `http://localhost:5173`.
 
 ## License
 

@@ -105,26 +105,26 @@ api/src/openad/
 
 Chain-derived (rebuildable):
 
-| Table | Key | Source events |
-| --- | --- | --- |
-| `slots` | `slot_id` | `SlotMinted`, `Transfer` (owner), `CalendarSet` (version, period_seconds, first_period_start) |
-| `terms` | `slot_id` | `TermsSet`, `PausedSet` |
-| `leases` | `(slot_id, calendar_version, period_index)` | `LeaseSet` + `Purchased` (price, fee, approval_mode, tx hash) |
-| `creatives` | `creative_id` | `CreativeRegistered`, `NftCreativeRegistered`, `CreativeRevoked` |
-| `approvals` | `(publisher, creative_id)` | `ApprovalRequested`, `ApprovalSet` |
-| `allowed_advertisers` | `(publisher, advertiser)` | `AdvertiserAllowed` |
-| `protocol_config` | singleton per chain | `MarketSet`, `FeeSet`, `TreasurySet`, `ModeratorSet` |
-| `indexer_cursor` | `(chain_id, contract)` | last processed block number + hash; one row with `contract = "protocol"` covers all contracts |
+| Table                 | Key                                         | Source events                                                                                 |
+| --------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `slots`               | `slot_id`                                   | `SlotMinted`, `Transfer` (owner), `CalendarSet` (version, period_seconds, first_period_start) |
+| `terms`               | `slot_id`                                   | `TermsSet`, `PausedSet`                                                                       |
+| `leases`              | `(slot_id, calendar_version, period_index)` | `LeaseSet` + `Purchased` (price, fee, approval_mode, tx hash)                                 |
+| `creatives`           | `creative_id`                               | `CreativeRegistered`, `NftCreativeRegistered`, `CreativeRevoked`                              |
+| `approvals`           | `(publisher, creative_id)`                  | `ApprovalRequested`, `ApprovalSet`                                                            |
+| `allowed_advertisers` | `(publisher, advertiser)`                   | `AdvertiserAllowed`                                                                           |
+| `protocol_config`     | singleton per chain                         | `MarketSet`, `FeeSet`, `TreasurySet`, `ModeratorSet`                                          |
+| `indexer_cursor`      | `(chain_id, contract)`                      | last processed block number + hash; one row with `contract = "protocol"` covers all contracts |
 
 Off-chain only:
 
-| Table | Purpose |
-| --- | --- |
-| `house_ads` | Publisher fallback creative per slot (`media_url`, `click_url`). Set via authenticated API. |
-| `domain_verifications` | `(slot_id, method, token, verified_at)`. See § 3.6. |
-| `creative_verifications` | `(creative_id, status, checked_at, cached_path, resolved_image_url, error)`. See § 3.5. |
-| `serve_events` | Append-only: `(slot_id, lease key or null, served_kind, origin_ok, at)`. Aggregated for delivery reports. No IPs, no user agents, no cookies. |
-| `auth_nonces`, `sessions` | SIWE login state. |
+| Table                     | Purpose                                                                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `house_ads`               | Publisher fallback creative per slot (`media_url`, `click_url`). Set via authenticated API.                                                   |
+| `domain_verifications`    | `(slot_id, method, token, verified_at)`. See § 3.6.                                                                                           |
+| `creative_verifications`  | `(creative_id, status, checked_at, cached_path, resolved_image_url, error)`. See § 3.5.                                                       |
+| `serve_events`            | Append-only: `(slot_id, lease key or null, served_kind, origin_ok, at)`. Aggregated for delivery reports. No IPs, no user agents, no cookies. |
+| `auth_nonces`, `sessions` | SIWE login state.                                                                                                                             |
 
 Migrations: Alembic, one revision per PR that touches models. Postgres in dev/prod, SQLite in
 unit tests.
@@ -328,20 +328,29 @@ web/src/
 
 ## 7. Environments
 
-| | Anvil (local) | Base Sepolia (staging) | Base (production) |
-| --- | --- | --- | --- |
-| Chain | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC | public RPC |
-| USDC | `MockUSDC` | Circle testnet USDC | native USDC |
-| DB | `docker compose up postgres` | managed Postgres | managed Postgres |
-| Media cache | local `./.cache/media` | object storage | object storage + CDN |
-| Deployments | `contracts/deployments/31337.json` (ignored) | `84532.json` (committed) | `8453.json` (committed) |
+|             | Anvil (local)                                         | Base Sepolia (staging)   | Base (production)       |
+| ----------- | ----------------------------------------------------- | ------------------------ | ----------------------- |
+| Chain       | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC               | public RPC              |
+| USDC        | `MockUSDC`                                            | Circle testnet USDC      | native USDC             |
+| DB          | `docker compose up postgres`                          | managed Postgres         | managed Postgres        |
+| Media cache | local `./.cache/media`                                | object storage           | object storage + CDN    |
+| Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` (committed) | `8453.json` (committed) |
 
-Local loop:
+Local loop (canonical on Windows: `.\scripts\setup.cmd`, `.\scripts\dev-up.cmd`, `.\scripts\dev-down.cmd`;
+`npm run stack:*` is the same if PowerShell can load `npm.ps1`):
 
 ```text
-docker compose up -d                     # anvil :8545, postgres :5432
-cd contracts && uv run mox run deploy --network anvil     # writes deployments/31337.json
-cd api && uv run alembic upgrade head    # until ROADMAP 2.2 lands: uv run python -m openad.db.bootstrap
+.\scripts\setup.cmd                      # idempotent; MockUSDC-only until ROADMAP 1.1-1.4
+.\scripts\dev-up.cmd                     # starts docker if needed; titled windows: api, indexer, web (-Embed optional)
+.\scripts\dev-down.cmd                   # stops docker; next up restarts Anvil/Postgres (Anvil chain is ephemeral)
+```
+
+What the scripts run (manual equivalent):
+
+```text
+docker compose up -d                     # anvil :8545, postgres :15432 (container 5432)
+cd contracts && uv run mox run deploy --network anvil     # writes deployments/31337.json (MockUSDC only today)
+cd api && uv run python -m openad.db.bootstrap            # after ROADMAP 2.2: uv run alembic upgrade head
 cd api && uv run uvicorn openad.main:app --reload
 cd api && uv run python -m openad.indexer
 npm run dev:web                          # http://localhost:5173

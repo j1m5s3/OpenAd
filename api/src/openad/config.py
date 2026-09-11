@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     deployments_dir: Path = Path("contracts/deployments")
 
     # --- database
-    database_url: str = "postgresql+asyncpg://openad:openad@127.0.0.1:5432/openad"
+    database_url: str = "postgresql+asyncpg://openad:openad@127.0.0.1:15432/openad"
 
     # --- api
     api_host: str = "127.0.0.1"

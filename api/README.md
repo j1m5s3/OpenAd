@@ -39,9 +39,9 @@ uv run pytest                            # tests
 uv run ruff check && uv run ruff format --check && uv run mypy src
 uv run uvicorn openad.main:app --reload  # http://localhost:8000/v1/health, docs at /v1/docs
 uv run python -m openad.indexer          # needs contracts/deployments/<chainId>.json
-uv run alembic revision --autogenerate -m "describe change"
-uv run alembic upgrade head
-uv run python -m openad.db.bootstrap     # dev only: create tables until the baseline migration exists (ROADMAP 2.2)
+uv run python -m openad.db.bootstrap     # current local step: create tables (until ROADMAP 2.2)
+uv run alembic revision --autogenerate -m "describe change"  # after ROADMAP 2.2
+uv run alembic upgrade head              # after ROADMAP 2.2
 ```
 
 Configuration comes from `../.env` (see `../.env.example`); tests never read it.

@@ -84,7 +84,15 @@ class IndexerRunner:
             cursor = await session.get(IndexerCursor, (self.deployment.chain_id, CURSOR_NAME))
         if cursor is None:
             return self.genesis_block
-        block = await self.w3.eth.get_block(cursor.block_number)
+        try:
+            block = await self.w3.eth.get_block(cursor.block_number)
+        except Exception:
+            log.warning(
+                "indexer.cursor_block_missing",
+                cursor=cursor.block_number,
+                hint="local Anvil has no volume; compose down resets the chain",
+            )
+            return self.genesis_block
         if _hex(block["hash"]) != cursor.block_hash.lower():
             rewind = max(
                 self.genesis_block, cursor.block_number - self.settings.indexer_reorg_depth

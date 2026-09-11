@@ -4,12 +4,9 @@ import { AdvertiserPage } from '../features/advertiser/AdvertiserPage';
 import { MarketplacePage } from '../features/marketplace/MarketplacePage';
 import { PublisherPage } from '../features/publisher/PublisherPage';
 import { Layout } from './Layout';
+import { routes } from './paths';
 
-export const routes = {
-  marketplace: '/',
-  publisher: '/publisher',
-  advertiser: '/advertiser',
-} as const;
+export { routes } from './paths';
 
 export const router = createBrowserRouter([
   {
