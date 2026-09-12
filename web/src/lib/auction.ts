@@ -11,3 +11,8 @@ export function auctionState(slot: SlotOut, now = Math.floor(Date.now() / 1000))
   if (now < start + period) return 'remainder';
   return 'ended';
 }
+
+export function auctionOpenAt(slot: SlotOut): number | null {
+  if (slot.firstPeriodStart == null || !slot.terms) return null;
+  return slot.firstPeriodStart - slot.terms.leadSeconds;
+}

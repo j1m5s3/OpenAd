@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openad.indexer.events import DecodedEvent
@@ -104,20 +105,42 @@ async def slot_minted(session: AsyncSession, ev: DecodedEvent) -> None:
             updated_block=ev.block_number,
         )
         session.add(slot)
-    else:  # replay after reorg: refresh immutable fields defensively
+    else:  # replay after reorg / Anvil reset: refresh spec; calendar, terms, leases replay after
         slot.owner = _addr(a["owner"])
+        slot.width = int(a["width"])
+        slot.height = int(a["height"])
+        slot.kind = int(a["kind"])
+        slot.domain = str(a["domain"]).lower()
+        slot.calendar_version = 0
+        slot.period_seconds = None
+        slot.first_period_start = None
+        slot.minted_block = ev.block_number
+        slot.minted_tx = ev.tx_hash
         slot.updated_block = ev.block_number
+        terms = await session.get(Terms, slot.slot_id)
+        if terms is not None:
+            await session.delete(terms)
+        stale_leases = (
+            await session.execute(select(Lease).where(Lease.slot_id == slot.slot_id))
+        ).scalars()
+        for row in stale_leases:
+            await session.delete(row)
+        bump_serve_cache()
 
 
 @on_event("AdSlot", "Transfer")
 async def slot_transferred(session: AsyncSession, ev: DecodedEvent) -> None:
     """ERC-721 Transfer: current owner == publisher. Mint transfers arrive with SlotMinted."""
     a = ev.args
-    slot = await session.get(Slot, int(a["tokenId"]))
+    token_id = a.get("tokenId", a.get("token_id"))
+    to_addr = a.get("to", a.get("receiver"))
+    if token_id is None or to_addr is None:
+        return
+    slot = await session.get(Slot, int(token_id))
     if slot is None:
         # Transfer may be decoded before SlotMinted in the same tx; SlotMinted will create it.
         return
-    slot.owner = _addr(a["to"])
+    slot.owner = _addr(to_addr)
     slot.updated_block = ev.block_number
 
 

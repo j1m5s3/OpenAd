@@ -14,7 +14,8 @@ alwaysApply: false
   `src/lib/deployments.ts`. The only live read allowed in the browser is `Marketplace.quote`.
 - Money is `bigint` base units until `src/lib/format.ts`. Time is Unix seconds until formatting.
 - Tailwind tokens in `src/styles/`. RainbowKit for connect (ADR-0008). SIWE via `features/auth`
-  (ADR-0009). Optional Turnkey only when `VITE_TURNKEY_*` is set (ADR-0011).
+  (ADR-0009). Optional Turnkey only when `VITE_TURNKEY_*` is set (ADR-0011). Local MCP critique
+  may use `?devwallet=` (ADR-0013); addresses only, never keys in `web/`.
 - Use `docs/GLOSSARY.md` terms in UI copy: slot, period, lease, terms, creative, approval.
   Nav labels: Discover, Supply, Campaigns.
 

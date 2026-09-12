@@ -17,6 +17,7 @@ the matching `.mdc` file.
    Deploy keys live in Moccasin encrypted wallets, never in env vars or code.
 5. **No custodial paths.** Nothing in `api` or `web` signs chain transactions for users or holds
    keys that can move funds or write leases. If a feature seems to need that, stop and write an ADR.
+   The opt-in `sim/` daemon may hold public Foundry Anvil keys for chain 31337 only (ADR-0012).
 6. **Serving never touches the chain.** `api/src/openad/serve/` must not import `openad.chain`.
 7. **Money is integers.** USDC base units as `uint256` / Python `int` / TS `bigint` until the
    formatting layer. Never floats.
@@ -27,7 +28,7 @@ the matching `.mdc` file.
 
 ## 2. Repository layout rules
 
-- Package roots are fixed: `contracts/`, `api/`, `web/`, `embed/`, `e2e/`, `workers/`, `docs/`. Do not add
+- Package roots are fixed: `contracts/`, `api/`, `web/`, `embed/`, `e2e/`, `sim/`, `workers/`, `docs/`. Do not add
   top-level packages without an ADR.
 - Generated artefacts are git-ignored (`contracts/out`, `contracts/deployments/31337.json`,
   `web/src/generated`, `dist`, `.venv`, `node_modules`).
@@ -78,7 +79,7 @@ the matching `.mdc` file.
 - Naming: modules and functions `snake_case`; classes `PascalCase`; constants `UPPER_SNAKE`.
   Table names plural `snake_case`; primary keys mirror on-chain identifiers.
 
-## 5. TypeScript (`web/`, `embed/`)
+## 5. TypeScript (`web/`, `embed/`, `sim/`)
 
 - `strict: true`, `noUncheckedIndexedAccess: true`. ESLint (flat config, typescript-eslint) and
   Prettier must pass. No `any`; use `unknown` and narrow.
@@ -92,6 +93,13 @@ the matching `.mdc` file.
   `scripts/check-size.mjs` (≤ 5 KB gzipped). Only network target is `/v1/serve`. The serve JSON
   type in `embed/src/types.ts` must match `api/src/openad/schemas/serve.py`.
 - Tests: Vitest. Embed tests run in jsdom. Browser journeys: Playwright in `e2e/` (ADR-0010).
+  Headed industry/UX critique is not CI: `.cursor/skills/sandbox-sme-critique/` and
+  `sandbox-ux-critique/` drive Playwright MCP, file `docs/qa/critique/` and
+  `docs/qa/findings/`, and update `docs/qa/scorecard.md`. Dispositions:
+  `implement-now` (in-protocol UI), `adr-then-implement` (both skills independently
+  tag `required-for-professional-use`), `record-only`, `blocked-by-invariant`, `keep`.
+  Regression-worthy `broken` rows promote to `e2e/scenarios/*.yaml`. Local MCP signing
+  uses the ADR-0013 injector (`?devwallet=`), never keys in `web/`.
 
 ## 6. Git and PRs
 

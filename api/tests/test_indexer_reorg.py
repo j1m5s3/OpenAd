@@ -93,6 +93,27 @@ async def test_matching_hash_continues(
     assert start == 81
 
 
+async def test_anvil_safe_head_ignores_safe_tag(settings: Settings, db: Database) -> None:
+    """Foundry Anvil serves `safe` ~32 behind latest; 31337 must not wait on that tag."""
+
+    class _SafeEth(_FakeEth):
+        def __init__(self) -> None:
+            super().__init__(cursor_hash=bytes.fromhex("aa" * 32), latest=100)
+            self.safe_calls = 0
+
+        async def get_block(self, number: int | str) -> dict[str, Any]:
+            if number == "safe":
+                self.safe_calls += 1
+                return {"number": 68, "hash": bytes.fromhex("dd" * 32)}
+            return await super().get_block(number)
+
+    eth = _SafeEth()
+    runner = IndexerRunner(settings, db.sessions, _empty_deployment(), _FakeW3(eth))  # type: ignore[arg-type]
+    head = await runner.safe_head()
+    assert head == 100 - settings.indexer_confirmations
+    assert eth.safe_calls == 0
+
+
 @pytest.mark.integration
 async def test_anvil_replay_from_zero(settings: Settings, db: Database) -> None:
     """Replay protocol logs from genesis when a local Anvil artifact is present."""

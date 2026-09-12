@@ -12,6 +12,7 @@ in the same change.
 ## Invariants (never violate without a new ADR in docs/adr/)
 
 - Non-custodial: `api/` and `web/` never sign user transactions or hold keys that move funds or write leases.
+  Sim (ADR-0012) and the DEV Anvil injector (ADR-0013) are 31337-only; injector stores addresses, not keys.
 - Slots are permanent NFTs; periods are leased; leases expire by time. Nothing "sells" a slot.
 - One transaction to buy (Dutch auction). No bids, escrow, settle step, or keepers.
 - `Marketplace` holds no USDC after any transaction (fee → treasury, rest → publisher).

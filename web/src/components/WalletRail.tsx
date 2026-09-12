@@ -23,9 +23,10 @@ export function WalletRail() {
 
   if (!isConnected || !address) {
     return (
-      <aside className="hidden w-64 shrink-0 lg:block">
+      <aside className="w-full shrink-0 lg:w-64">
         <div className="rounded-2xl border border-line bg-surface p-4 text-sm text-muted">
-          Connect a wallet to see USDC, slots, and leases.
+          Connect a wallet to see USDC, slots, and leases. Buys are one transaction; this app never
+          holds your keys.
         </div>
       </aside>
     );
@@ -35,7 +36,7 @@ export function WalletRail() {
     typeof bal.data === 'bigint' ? formatUsdc(bal.data) : bal.isLoading ? '…' : '—';
 
   return (
-    <aside className="hidden w-64 shrink-0 lg:block">
+    <aside className="w-full shrink-0 lg:w-64">
       <div className="space-y-3 rounded-2xl border border-line bg-surface p-4">
         <p className="text-xs uppercase tracking-wide text-muted">Wallet</p>
         <p className="font-medium">{shortAddress(address)}</p>

@@ -6,17 +6,25 @@ import { api } from '../../lib/api';
 import { buildSiweMessage } from '../../lib/permit';
 import { targetChainId } from '../../lib/wagmi';
 
+function injectedSelected(): string | null {
+  if (typeof window === 'undefined') return null;
+  const eth = (window as Window & { ethereum?: { selectedAddress?: string } }).ethereum;
+  return eth?.selectedAddress?.toLowerCase() ?? null;
+}
+
 export function useSiwe() {
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
   const [sessionAddress, setSessionAddress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inflight = useRef(false);
+  const generation = useRef(0);
 
   const signIn = useCallback(
     async (next: Address) => {
       if (inflight.current) return;
       inflight.current = true;
+      const mine = ++generation.current;
       setError(null);
       try {
         const { nonce } = await api.authNonce();
@@ -27,10 +35,13 @@ export function useSiwe() {
           chainId: targetChainId,
           nonce,
         });
-        const signature = await signMessageAsync({ message });
+        const signature = await signMessageAsync({ account: next, message });
+        if (mine !== generation.current) return;
         const rec = await api.authVerify(message, signature);
+        if (mine !== generation.current) return;
         setSessionAddress(rec.address);
       } catch (err) {
+        if (mine !== generation.current) return;
         setError(err instanceof Error ? err.message : 'SIWE failed');
       } finally {
         inflight.current = false;
@@ -44,7 +55,13 @@ export function useSiwe() {
       setSessionAddress(null);
       return;
     }
+    const injected = injectedSelected();
+    if (injected && injected !== address.toLowerCase()) return;
     if (sessionAddress === address.toLowerCase()) return;
+    if (sessionAddress && sessionAddress !== address.toLowerCase()) {
+      void api.authLogout();
+      setSessionAddress(null);
+    }
     void signIn(address);
   }, [address, isConnected, sessionAddress, signIn]);
 

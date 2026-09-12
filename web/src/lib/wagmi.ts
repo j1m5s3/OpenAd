@@ -1,4 +1,5 @@
-import { getDefaultConfig } from '@rainbow-me/rainbowkit';
+import { getDefaultConfig, getDefaultWallets } from '@rainbow-me/rainbowkit';
+import { injectedWallet } from '@rainbow-me/rainbowkit/wallets';
 import { http } from 'wagmi';
 import { base, baseSepolia, foundry } from 'wagmi/chains';
 
@@ -22,11 +23,16 @@ export const targetChainId: SupportedChainId = resolveTargetChainId();
 const walletConnectProjectId =
   import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? '00000000000000000000000000000000';
 
+const browserWallets = { groupName: 'Browser', wallets: [injectedWallet] };
+
 export const wagmiConfig = getDefaultConfig({
   appName: 'OpenAd',
   projectId: walletConnectProjectId,
   chains: supportedChains,
   ssr: false,
+  wallets: import.meta.env.DEV
+    ? [browserWallets]
+    : [browserWallets, ...getDefaultWallets().wallets],
   transports: {
     [foundry.id]: http('http://127.0.0.1:8545'),
     [baseSepolia.id]: http(),

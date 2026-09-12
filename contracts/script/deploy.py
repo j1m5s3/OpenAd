@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import urllib.request
+import warnings
 from typing import Any
 
 import boa
@@ -47,6 +48,60 @@ def _current_block_number(network: Any) -> int:
             return int(json.loads(resp.read())["result"], 16)
     except Exception:  # noqa: BLE001 - artifact must still be written
         return 0
+
+
+def _eth_get_code(address: str, rpc_url: str = "http://127.0.0.1:8545") -> bytes:
+    payload = json.dumps(
+        {"jsonrpc": "2.0", "id": 1, "method": "eth_getCode", "params": [address, "latest"]}
+    )
+    req = urllib.request.Request(
+        rpc_url, data=payload.encode(), headers={"content-type": "application/json"}
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310 - configured RPC url
+        result = json.loads(resp.read())["result"]
+    hex_body = result[2:] if isinstance(result, str) and result.startswith("0x") else str(result)
+    return bytes.fromhex(hex_body)
+
+
+def _tolerate_boa_create_skew() -> None:
+    """Anvil CREATE address can diverge from titanoboa's local fork (nonce vs _reset_fork).
+
+    NetworkEnv.deploy already broadcasts the tx; it then raises ``uh oh!`` if the
+    simulated address differs. Rebind to the node address so local deploys finish.
+    """
+    from boa.network import NetworkEnv
+    from boa.util.abi import Address
+
+    orig = NetworkEnv.deploy
+
+    def deploy(  # type: ignore[no-untyped-def]
+        self, sender=None, gas=None, value=0, bytecode=b"", contract=None, **kwargs
+    ):
+        try:
+            return orig(
+                self,
+                sender=sender,
+                gas=gas,
+                value=value,
+                bytecode=bytecode,
+                contract=contract,
+                **kwargs,
+            )
+        except RuntimeError as exc:
+            text = str(exc)
+            if "uh oh!" not in text or " != " not in text:
+                raise
+            create = text.split(" != ", 1)[1].strip()
+            warnings.warn(f"titanoboa CREATE skew; using node address {create}", stacklevel=2)
+            print(f"[deploy] boa CREATE skew; using node address {create}")
+
+            class _Computation:
+                is_error = False
+                output = _eth_get_code(create)
+
+            return Address(create), _Computation()
+
+    NetworkEnv.deploy = deploy  # type: ignore[method-assign]
 
 
 def deploy_usdc() -> VyperContract:
@@ -130,10 +185,13 @@ def deploy() -> dict[str, VyperContract]:
         network_name = "pyevm"
         chain_id = 31337
 
+    # Capture before deploys: after seed the head is the buy tx, and the indexer
+    # would skip SlotMinted / CalendarSet / TermsSet (those land a few blocks earlier).
+    if network_name == "anvil":
+        _tolerate_boa_create_skew()
+    start_block = _current_block_number(network) if network is not None else 0
     deployed: dict[str, VyperContract] = {"USDC": deploy_usdc()}
     deployed.update(deploy_protocol(deployed["USDC"]))
-
-    start_block = _current_block_number(network) if network is not None else 0
     artifact = build_artifact(
         chain_id=chain_id,
         network=network_name,

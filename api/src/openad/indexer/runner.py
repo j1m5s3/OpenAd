@@ -71,13 +71,26 @@ class IndexerRunner:
     # ------------------------------------------------------------------ head / cursor
 
     async def safe_head(self) -> int:
-        """Block number safe to index: `safe` tag if supported, else latest - confirmations."""
+        """Block number safe to index.
+
+        Anvil implements the ``safe`` tag ~32 blocks behind ``latest`` and does not
+        mine empty blocks, so local leases would never index. Chain 31337 uses
+        ``latest - OPENAD_INDEXER_CONFIRMATIONS`` (ARCHITECTURE §3.7).
+        """
+        latest_raw: Any = self.w3.eth.block_number
+        if callable(latest_raw) and not hasattr(latest_raw, "__await__"):
+            latest_raw = latest_raw()
+        if hasattr(latest_raw, "__await__"):
+            latest = int(await latest_raw)
+        else:
+            latest = int(latest_raw)
+        if self.deployment.chain_id == 31337:
+            return max(0, int(latest) - self.settings.indexer_confirmations)
         try:
             block = await self.w3.eth.get_block("safe")
             return int(block["number"])
         except Exception:
-            latest = await self.w3.eth.block_number
-            return max(0, latest - self.settings.indexer_confirmations)
+            return max(0, int(latest) - self.settings.indexer_confirmations)
 
     async def start_block(self) -> int:
         async with self.sessions() as session:

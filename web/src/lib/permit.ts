@@ -1,5 +1,7 @@
 import type { Address, Hex } from 'viem';
 
+import { formatUsdc } from './format';
+
 export const usdcPermitTypes = {
   Permit: [
     { name: 'owner', type: 'address' },
@@ -27,6 +29,14 @@ export function buyCtaLabel(sellable: boolean, remainder: boolean): string {
   if (remainder) return 'Buy remainder';
   if (sellable) return 'Buy with permit';
   return 'Not sellable';
+}
+
+export function quoteFeeCopy(price: bigint, fee: bigint): { net: bigint; line: string } {
+  const net = price > fee ? price - fee : 0n;
+  return {
+    net,
+    line: `${formatUsdc(fee)} protocol fee · ${formatUsdc(net)} to the publisher`,
+  };
 }
 
 export function buildSiweMessage(params: {

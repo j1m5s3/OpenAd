@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { SlotOut } from './api';
-import { auctionState } from './auction';
+import { auctionOpenAt, auctionState } from './auction';
 
 function slot(over: Partial<SlotOut> = {}): SlotOut {
   return {
@@ -51,5 +51,6 @@ describe('auctionState', () => {
     expect(auctionState(s, 1_000_000 - 10)).toBe('live');
     expect(auctionState(s, 1_000_000 + 10)).toBe('remainder');
     expect(auctionState(s, 1_000_000 + 4000)).toBe('ended');
+    expect(auctionOpenAt(s)).toBe(1_000_000 - 3600);
   });
 });

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router';
 
-import { formatUnixSeconds, formatUsdc } from '../../lib/format';
+import { formatDuration, formatUnixSeconds, formatUsdc } from '../../lib/format';
 import { BuyDialog } from './components/BuyDialog';
 import { usePeriods, useSlot } from './api';
 
@@ -29,12 +29,13 @@ export function SlotPage() {
         {s.terms && (
           <p className="mt-2">
             {formatUsdc(BigInt(s.terms.startPrice))} → {formatUsdc(BigInt(s.terms.floorPrice))} ·
-            lead {s.terms.leadSeconds}s
+            lead {formatDuration(s.terms.leadSeconds)}
+            {s.terms.approvalMode === 1 ? ' · approval waived' : ' · approval required'}
           </p>
         )}
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-line bg-surface">
+      <section className="overflow-x-auto overflow-hidden rounded-2xl border border-line bg-surface">
         <table className="w-full text-left text-sm">
           <thead className="text-muted">
             <tr>
@@ -48,13 +49,14 @@ export function SlotPage() {
           <tbody>
             {(periods.data?.items ?? []).map((p) => {
               const remainder = p.reason === 'remainder';
+              const canBuy = !p.leased && p.sellable;
               return (
                 <tr key={p.periodIndex} className="border-t border-line">
                   <td className="px-4 py-3">{p.periodIndex}</td>
                   <td className="px-4 py-3 text-muted">
                     {formatUnixSeconds(p.start)} → {formatUnixSeconds(p.end)}
                   </td>
-                  <td className="px-4 py-3">{p.leased ? 'leased' : p.reason || 'open'}</td>
+                  <td className="px-4 py-3">{p.leased ? 'Leased' : p.reason || 'Open'}</td>
                   <td className="px-4 py-3">
                     {p.indicativePrice === '0' ? '—' : formatUsdc(BigInt(p.indicativePrice))}
                   </td>
@@ -62,10 +64,10 @@ export function SlotPage() {
                     <button
                       type="button"
                       className="rounded-full bg-accent px-3 py-1 text-accent-ink disabled:opacity-40"
-                      disabled={p.leased}
+                      disabled={!canBuy}
                       onClick={() => setBuy({ periodIndex: p.periodIndex, remainder })}
                     >
-                      Buy
+                      {p.leased ? 'Leased' : canBuy ? 'Buy' : p.reason || 'Closed'}
                     </button>
                   </td>
                 </tr>

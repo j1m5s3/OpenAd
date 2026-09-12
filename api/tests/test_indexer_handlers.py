@@ -131,6 +131,81 @@ async def test_slot_lifecycle_mint_calendar_lease_purchase(session: AsyncSession
     assert len((await session.execute(Lease.__table__.select())).all()) == 1
 
 
+async def test_slot_minted_replaces_stale_spec(session: AsyncSession) -> None:
+    await handlers.dispatch(
+        session,
+        ev(
+            "AdSlot",
+            "SlotMinted",
+            slot_id=3,
+            owner=PUBLISHER,
+            width=728,
+            height=90,
+            kind=1,
+            domain="old.example",
+        ),
+    )
+    await handlers.dispatch(
+        session,
+        ev(
+            "AdSlot",
+            "CalendarSet",
+            slot_id=3,
+            version=1,
+            period_seconds=3600,
+            first_period_start=1_700_000_000,
+        ),
+    )
+    await handlers.dispatch(
+        session,
+        ev(
+            "Marketplace",
+            "TermsSet",
+            slot_id=3,
+            start_price=1,
+            floor_price=1,
+            lead_seconds=1,
+            sale_end=0,
+            approval_mode=0,
+        ),
+    )
+    await handlers.dispatch(
+        session,
+        ev(
+            "AdSlot",
+            "LeaseSet",
+            slot_id=3,
+            period_index=0,
+            user=ADVERTISER,
+            version=1,
+            start=1,
+            end=2,
+            creative_id=1,
+        ),
+    )
+    await handlers.dispatch(
+        session,
+        ev(
+            "AdSlot",
+            "SlotMinted",
+            block=50,
+            slot_id=3,
+            owner=PUBLISHER,
+            width=300,
+            height=250,
+            kind=0,
+            domain="Smoke.example",
+        ),
+    )
+    await session.commit()
+    slot = await session.get(Slot, 3)
+    assert slot is not None
+    assert slot.domain == "smoke.example"
+    assert slot.width == 300 and slot.calendar_version == 0
+    assert await session.get(Terms, 3) is None
+    assert await session.get(Lease, (3, 1, 0)) is None
+
+
 async def test_transfer_updates_publisher(session: AsyncSession) -> None:
     await handlers.dispatch(
         session,

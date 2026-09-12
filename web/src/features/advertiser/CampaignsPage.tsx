@@ -75,7 +75,8 @@ export function CampaignsPage() {
         <p className="text-sm text-accent">Advertiser</p>
         <h1 className="mt-1 text-3xl font-semibold">Campaigns</h1>
         <p className="mt-2 text-muted">
-          Register creatives (client keccak), request approval, and track delivery.
+          Register creatives (hashed in the browser, never uploaded here), request approval, and
+          track delivery. HTML/JS creatives are out of scope — raster only.
         </p>
       </div>
       {!isConnected && <p className="text-muted">Connect a wallet to register creatives.</p>}
@@ -127,11 +128,16 @@ export function CampaignsPage() {
         </label>
         <label className="block text-sm text-muted">
           MIME
-          <input
+          <select
             name="mime"
             defaultValue="image/png"
             className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
-          />
+          >
+            <option value="image/png">image/png</option>
+            <option value="image/jpeg">image/jpeg</option>
+            <option value="image/webp">image/webp</option>
+            <option value="image/gif">image/gif</option>
+          </select>
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block text-sm text-muted">
@@ -186,12 +192,15 @@ export function CampaignsPage() {
           <input name="nftTokenId" className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink" />
         </label>
         <label className="block text-sm text-muted">
-          Standard (1 ERC-721, 2 ERC-1155)
-          <input
+          Standard
+          <select
             name="nftStandard"
             defaultValue="1"
             className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
-          />
+          >
+            <option value="1">ERC-721</option>
+            <option value="2">ERC-1155</option>
+          </select>
         </label>
         <label className="block text-sm text-muted">
           Click URL
@@ -216,8 +225,25 @@ export function CampaignsPage() {
           <input name="publisher" className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink" />
         </label>
         <label className="block text-sm text-muted">
-          Creative id
-          <input name="creativeId" className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink" />
+          Creative
+          {(dash.data?.creativeIds.length ?? 0) > 0 ? (
+            <select
+              name="creativeId"
+              className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
+            >
+              {dash.data?.creativeIds.map((id) => (
+                <option key={id} value={id}>
+                  #{id}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              name="creativeId"
+              className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
+              aria-label="Creative id"
+            />
+          )}
         </label>
         <button
           type="submit"

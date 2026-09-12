@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from 'react-router';
 import { WagmiProvider } from 'wagmi';
 
+import { DevWalletAutoConnect } from '../dev/autoConnect';
 import { wagmiConfig } from '../lib/wagmi';
 import { router } from './routes';
 
@@ -22,6 +23,7 @@ export function App() {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={rkTheme}>
+          <DevWalletAutoConnect />
           <RouterProvider router={router} />
         </RainbowKitProvider>
       </QueryClientProvider>

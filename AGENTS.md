@@ -21,7 +21,8 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 ## Non-negotiable invariants
 
 - Non-custodial: no code in `api/` or `web/` signs user transactions or holds keys that can move
-  funds or write leases.
+  funds or write leases. The opt-in `sim/` daemon may use public Anvil keys on 31337 only (ADR-0012).
+  The DEV-only Anvil injector (ADR-0013) forwards RPC and stores addresses, not keys.
 - Slots are permanent; periods are leased; leases expire by time. Never "sell" a slot in protocol code.
 - One transaction to buy. No bids, escrow, settle steps, or keepers.
 - `Marketplace` never holds USDC after a transaction.
@@ -46,6 +47,9 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 | Web app                              | `web/src/` (feature folders; wagmi for writes; API for reads)                    |
 | Embed element                        | `embed/src/open-ad.ts`                                                           |
 | Playwright E2E                       | `e2e/` (YAML scenarios, mock EIP-1193)                                           |
+| Headed SME / UX critique             | `.cursor/skills/sandbox-sme-critique/`, `sandbox-ux-critique/`; `docs/qa/`        |
+| Playwright MCP                       | `.cursor/mcp.json` (`playwright` + `openad-sim`)                                 |
+| Local sim daemon                     | `sim/` (opt-in Anvil personas; ADR-0012)                                         |
 | Env vars                             | `.env.example` (all prefixed `OPENAD_`; web uses `VITE_`)                        |
 | Local infra                          | `docker-compose.yml` (Anvil + Postgres); `docker-compose.stack.yml` (api/indexer)|
 | API image                            | `api/Dockerfile` (also used for the indexer process)                             |
@@ -57,6 +61,7 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 # local stack (Windows; scripts/*.cmd bypass PowerShell execution policy)
 .\scripts\setup.cmd                                 # .env, docker, protocol deploy, alembic upgrade, npm install (no wallet prompt)
 .\scripts\dev-up.cmd                                # starts docker if needed; titled windows: api, indexer, web (-Embed optional)
+.\scripts\sim-up.cmd                                # optional live marketplace activity (does not start with the stack)
 .\scripts\dev-down.cmd                              # stops docker; next up restarts Anvil/Postgres (Anvil chain is ephemeral)
 # if npm.ps1 is blocked: use the .cmd files or npm.cmd run stack:*  (not `npm`)
 

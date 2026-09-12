@@ -18,9 +18,10 @@ OpenAd/
 ├── web/         Vite + React + TypeScript + Tailwind + RainbowKit + wagmi. Discover, Supply, Campaigns.
 ├── embed/       Vanilla TypeScript web component <open-ad>.  Zero dependencies.  Talks only to /v1/serve.
 ├── e2e/         Playwright + YAML scenarios (ADR-0010). Mock EIP-1193 wallets.
+├── sim/         Opt-in Anvil persona daemon (ADR-0012). Not started by dev-up.
 ├── workers/     Source-only Cloudflare Worker for /v1/serve (not deployed).
-├── docs/        This folder.  Source of truth.
-├── .cursor/     Cursor rules (per-package coding rules) — mirrors CONVENTIONS.md.
+├── docs/        This folder.  Source of truth (including docs/qa critique loop).
+├── .cursor/     Cursor rules, MCP servers, and headed SME/UX skills — mirrors CONVENTIONS.md.
 └── docker-compose.yml (+ docker-compose.stack.yml for local API/indexer containers; not GCP).
 ```
 
@@ -29,11 +30,12 @@ Dependency direction (arrows = "depends on"):
 ```text
 web ──► api (HTTP)          web ──► contracts (ABIs + addresses via deployments artifact, wallet writes)
 embed ──► api (/v1/serve only)
+sim ──► contracts (Anvil wallet writes, 31337 only)    sim ──► api (HTTP reads + SIWE house ads)
 api ──► contracts (ABIs + addresses via deployments artifact; RPC reads only in the indexer)
 contracts ──► nothing
 ```
 
-Nothing depends on `web` or `embed`. `contracts` depends on nothing in this repo.
+Nothing depends on `web`, `embed`, or `sim`. `contracts` depends on nothing in this repo.
 
 ---
 
@@ -228,7 +230,9 @@ weekly. The marketplace UI shows unverified slots with a warning.
   `(blockNumber, logIndex)` order, which guarantees cross-contract ordering inside a
   transaction (`AdSlot.LeaseSet` precedes `Marketplace.Purchased`) and during replays.
 - Processes only up to the `safe` block tag (falls back to `latest - OPENAD_INDEXER_CONFIRMATIONS`
-  when the node does not support `safe`, e.g. Anvil).
+  when the node does not support `safe`). **Chain 31337 always uses `latest - confirmations`**:
+  Anvil now implements `safe` about 32 blocks behind `latest` and does not mine empty blocks, so
+  waiting on `safe` would hide new leases from the API.
 - Batches `OPENAD_INDEXER_BATCH_BLOCKS` (default 2000) per query.
 - Stores a single `(block_number, block_hash)` cursor (`indexer_cursor.contract = "protocol"`);
   on hash mismatch rewinds `OPENAD_INDEXER_REORG_DEPTH` blocks and re-processes. Handlers are
@@ -306,10 +310,16 @@ web/src/
     format.ts         USDC / time formatting helpers (base units in, strings out)
   styles/             Tailwind entry + design tokens
   generated/          git-ignored; produced by scripts/sync-deployments.mjs
+  dev/                ADR-0013 Anvil EIP-1193 forwarder (DEV + localhost + 31337 only)
 ```
 
 - Reads: API only. Writes: wagmi `useWriteContract` with ABIs from the deployments artifact.
 - All money is handled as `bigint` base units until the formatting layer.
+- **Dev wallet injector (ADR-0013).** `?devwallet=pub-3` (sim `#3–#9` only in critique
+  sessions) installs `window.ethereum` as a JSON-RPC forwarder to Vite `/anvil` → Anvil.
+  Addresses only in `web/`; Anvil unlocked accounts sign. Production builds omit the module.
+- **QA loop.** Headed SME/UX critique lives in `docs/qa/` and `.cursor/skills/sandbox-*-critique/`.
+  Playwright MCP is configured in `.cursor/mcp.json` beside `openad-sim`. Scripted YAML stays in `e2e/`.
 
 ---
 
@@ -346,6 +356,7 @@ Local loop (canonical on Windows: `.\scripts\setup.cmd`, `.\scripts\dev-up.cmd`,
 ```text
 .\scripts\setup.cmd                      # .env, docker, protocol deploy, alembic upgrade, npm install
 .\scripts\dev-up.cmd                     # starts docker if needed; titled windows: api, indexer, web (-Embed optional)
+.\scripts\sim-up.cmd                     # optional: live Anvil personas (openad-sim). Not started by dev-up
 .\scripts\dev-down.cmd                   # stops docker; next up restarts Anvil/Postgres (Anvil chain is ephemeral)
 ```
 

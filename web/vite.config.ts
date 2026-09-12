@@ -9,7 +9,18 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   envDir: repoRoot,
-  server: { host: true, port: 5173, strictPort: true },
+  server: {
+    host: true,
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      '/anvil': {
+        target: 'http://127.0.0.1:8545',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/anvil/, '') || '/',
+      },
+    },
+  },
   build: { sourcemap: true, target: 'es2022' },
   test: {
     environment: 'jsdom',

@@ -6,6 +6,7 @@ import { NavLink, Outlet, useNavigate, useSearchParams } from 'react-router';
 import { IndexerLagBanner } from '../components/IndexerLagBanner';
 import { WalletRail } from '../components/WalletRail';
 import { useSiwe } from '../features/auth/useSiwe';
+import { withDevWalletParam } from '../lib/devWalletQuery';
 import { routes } from './paths';
 
 const nav = [
@@ -23,21 +24,24 @@ export function Layout() {
   function onSearch(e: FormEvent) {
     e.preventDefault();
     const next = q.trim();
-    navigate(next ? `/?q=${encodeURIComponent(next)}` : '/');
+    navigate(withDevWalletParam(next ? `/?q=${encodeURIComponent(next)}` : '/'));
   }
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
       <header className="sticky top-0 z-40 border-b border-line bg-canvas/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-          <NavLink to={routes.discover} className="text-lg font-semibold tracking-tight">
+          <NavLink
+            to={withDevWalletParam(routes.discover)}
+            className="text-lg font-semibold tracking-tight"
+          >
             OpenAd
           </NavLink>
           <nav className="hidden items-center gap-1 md:flex">
             {nav.map((item) => (
               <NavLink
                 key={item.to}
-                to={item.to}
+                to={withDevWalletParam(item.to)}
                 end={item.end}
                 className={({ isActive }) =>
                   `rounded-full px-3 py-1.5 text-sm ${
@@ -49,7 +53,7 @@ export function Layout() {
               </NavLink>
             ))}
           </nav>
-          <form onSubmit={onSearch} className="ml-auto hidden flex-1 md:block md:max-w-xs">
+          <form onSubmit={onSearch} className="ml-auto flex-1 md:block md:max-w-xs">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -66,7 +70,7 @@ export function Layout() {
           {nav.map((item) => (
             <NavLink
               key={item.to}
-              to={item.to}
+              to={withDevWalletParam(item.to)}
               end={item.end}
               className={({ isActive }) =>
                 `rounded-full px-3 py-1 text-sm ${isActive ? 'bg-surface' : 'text-muted'}`
@@ -79,11 +83,11 @@ export function Layout() {
       </header>
       <IndexerLagBanner />
       {error && (
-        <p className="border-b border-line bg-surface px-4 py-2 text-center text-sm text-muted">
+        <p className="border-b border-accent/40 bg-surface px-4 py-2 text-center text-sm text-ink">
           Sign-in: {error}
         </p>
       )}
-      <div className="mx-auto flex max-w-6xl gap-6 px-4 py-8">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 lg:flex-row">
         <main className="min-w-0 flex-1">
           <Outlet />
         </main>

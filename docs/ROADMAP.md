@@ -73,7 +73,12 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
 - [x] **4.3 Contract review/audit prep**: threat model doc, slither-vyper run, invariant fuzz campaign. _Done 2026-09-11 (`docs/threat-model.md`; slither script skips if the binary is missing)._
 - [x] **4.4 CDN worker for `/v1/serve`** (move serving edge out of the API process). _Done 2026-09-11 as source only (`workers/serve/`); not deployed._
 - [x] **4.5 Embedded wallets / gas sponsorship** for web2 publishers (ADR first). _Done 2026-09-11 (ADR-0011; env-gated stub, Anvil skips paymaster)._
+- [x] **4.7 Local sim mode (opt-in).** Pointers: ADR-0012 · `docker-compose.yml` · `contracts/script/deploy.py` · `scripts/dev-up.ps1` · `api/src/openad/routers/auth.py` · `api/src/openad/services/media.py`.
+      Acceptance: `.\scripts\sim-up.cmd` starts a titled `openad-sim` daemon that is **not** started by `dev-up`; Anvil publishers `#3–#5` and advertisers `#6–#9` mint/approve/buy so Discover looks live; MCP tools inspect/nudge; chain id ≠ 31337 refused. _Done 2026-09-12._
 - [ ] **4.6 Base mainnet deployment** with multisig owner and timelock on `set_market`. Script + runbook in `docs/deploy-mainnet.md`. No `8453.json` unless later authorized.
+- [x] **4.8 Dual-persona industry critique loop.** Pointers: ADR-0012 · ADR-0013 · `docs/qa/` · `.cursor/skills/sandbox-sme-critique/` · `.cursor/skills/sandbox-ux-critique/`.
+      Acceptance: headed Playwright MCP (or documented fallback) runs both skills against local web; scorecard phases are `pass` / `sandbox-acceptable` / `blocked-by-invariant` with zero open table-stakes `implement-now` / `adr-then-implement`; identity fence intact.
+      _Done 2026-09-12 (Edge `e2e/scripts/smoke-devwallet.mjs` + `critique-pass.mjs`; Playwright MCP was not connected this session; scorecard round 2 clear; no dual-tag protocol ADR)._
 
 ---
 

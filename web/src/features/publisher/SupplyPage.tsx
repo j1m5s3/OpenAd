@@ -2,9 +2,16 @@ import type { FormEvent, ReactNode } from 'react';
 import { useState } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
 
-import { api } from '../../lib/api';
-import { formatUsdc, parseUsdc } from '../../lib/format';
+import { api, API_URL } from '../../lib/api';
+import { formatDuration, formatUsdc, parseUsdc } from '../../lib/format';
 import { getContract, hasProtocol } from '../../lib/deployments';
+import {
+  APPROVAL_MODE_LABEL,
+  KIND_LABEL,
+  approvalStatusLabel,
+  datetimeLocalToUnix,
+  unixToDatetimeLocal,
+} from '../../lib/labels';
 import { targetChainId } from '../../lib/wagmi';
 import { approvalActionLabel } from './components/ApproveDialog';
 import { usePublisher, usePublisherApprovals } from './api';
@@ -47,7 +54,7 @@ export function SupplyPage() {
       args: [
         BigInt(String(fd.get('slotId'))),
         BigInt(String(fd.get('periodSeconds'))),
-        BigInt(String(fd.get('firstStart'))),
+        BigInt(datetimeLocalToUnix(String(fd.get('firstStart')))),
       ],
     });
     setMsg('Calendar submitted');
@@ -136,7 +143,10 @@ export function SupplyPage() {
       <div>
         <p className="text-sm text-accent">Publisher</p>
         <h1 className="mt-1 text-3xl font-semibold">Supply</h1>
-        <p className="mt-2 text-muted">Mint slots, set calendars and terms, approve creatives.</p>
+        <p className="mt-2 text-muted">
+          Mint slots, set calendars and terms, approve creatives. Proceeds arrive in the same buy
+          transaction — no Net-60 invoice.
+        </p>
       </div>
       {!isConnected && <p className="text-muted">Connect the wallet that owns your slots.</p>}
       {!deployed && (
@@ -160,18 +170,33 @@ export function SupplyPage() {
 
       <FormCard title="Mint slot" onSubmit={(e) => void mint(e)} pending={isPending}>
         <Field name="domain" label="Domain" placeholder="example.com" />
-        <Field name="width" label="Width" defaultValue="300" />
-        <Field name="height" label="Height" defaultValue="250" />
-        <Field name="kind" label="Kind (0 display)" defaultValue="0" />
+        <Field name="width" label="Width (px)" defaultValue="300" />
+        <Field name="height" label="Height (px)" defaultValue="250" />
+        <label className="block text-sm text-muted">
+          Kind
+          <select
+            name="kind"
+            defaultValue="0"
+            className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
+          >
+            {Object.entries(KIND_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
       </FormCard>
 
       <FormCard title="Calendar" onSubmit={(e) => void setCalendar(e)} pending={isPending}>
         <Field name="slotId" label="Slot id" defaultValue="1" />
-        <Field name="periodSeconds" label="Period seconds" defaultValue="86400" />
+        <Field name="periodSeconds" label="Period length (seconds)" defaultValue="86400" />
+        <p className="text-xs text-muted">86400 = 1 day. {formatDuration(86400)} is typical.</p>
         <Field
           name="firstStart"
-          label="First period start (unix)"
-          defaultValue={String(Math.floor(Date.now() / 1000) + 3600)}
+          label="First period start"
+          type="datetime-local"
+          defaultValue={unixToDatetimeLocal(Math.floor(Date.now() / 1000) + 3600)}
         />
       </FormCard>
 
@@ -179,8 +204,24 @@ export function SupplyPage() {
         <Field name="slotId" label="Slot id" defaultValue="1" />
         <Field name="startPrice" label="Start USDC" defaultValue="10" />
         <Field name="floorPrice" label="Floor USDC" defaultValue="1" />
-        <Field name="leadSeconds" label="Lead seconds" defaultValue="3600" />
-        <Field name="approvalMode" label="Approval mode (0 required)" defaultValue="0" />
+        <Field name="leadSeconds" label="Lead time (seconds)" defaultValue="3600" />
+        <p className="text-xs text-muted">
+          Auction opens this long before the period. 3600 = {formatDuration(3600)}.
+        </p>
+        <label className="block text-sm text-muted">
+          Approval mode
+          <select
+            name="approvalMode"
+            defaultValue="0"
+            className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
+          >
+            {Object.entries(APPROVAL_MODE_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
       </FormCard>
 
       <FormCard title="Pause sales" onSubmit={(e) => void setPaused(e)} pending={isPending}>
@@ -197,7 +238,7 @@ export function SupplyPage() {
           {(approvals.data ?? []).map((a) => (
             <li key={a.creativeId} className="flex items-center justify-between gap-3">
               <span>
-                Creative {a.creativeId} · status {a.status}
+                Creative {a.creativeId} · {approvalStatusLabel(a.status)}
               </span>
               <span className="flex gap-2">
                 <button
@@ -240,6 +281,15 @@ export function SupplyPage() {
       <FormCard title="Domain verification" onSubmit={(e) => void verifyDomain(e)} pending={false}>
         <Field name="slotId" label="Slot id" defaultValue="1" />
       </FormCard>
+
+      <section className="rounded-2xl border border-line bg-surface p-5">
+        <h2 className="font-medium">Embed snippet</h2>
+        <p className="mt-2 text-sm text-muted">
+          Place this on the publisher page. The embed talks only to the serve API — it never reads
+          the chain. Demo: http://localhost:5174/demo/
+        </p>
+        <pre className="mt-3 overflow-x-auto rounded-xl bg-canvas p-3 text-xs text-muted">{`<open-ad slot-id="${pub.data?.slotIds[0] ?? '1'}" api="${API_URL}" width="300" height="250"></open-ad>`}</pre>
+      </section>
     </div>
   );
 }
@@ -275,17 +325,20 @@ function Field({
   label,
   defaultValue,
   placeholder,
+  type = 'text',
 }: {
   name: string;
   label: string;
   defaultValue?: string;
   placeholder?: string;
+  type?: string;
 }) {
   return (
     <label className="block text-sm text-muted">
       {label}
       <input
         name={name}
+        type={type}
         defaultValue={defaultValue}
         placeholder={placeholder}
         className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"

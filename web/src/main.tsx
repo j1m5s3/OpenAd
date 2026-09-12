@@ -1,16 +1,23 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { App } from './app/App';
-
 import '@rainbow-me/rainbowkit/styles.css';
 import './styles/index.css';
 
-const container = document.getElementById('root');
-if (!container) throw new Error('#root not found');
+async function boot(): Promise<void> {
+  if (import.meta.env.DEV) {
+    const { installDevWallet } = await import('./dev/anvilWallet');
+    installDevWallet();
+  }
+  // Load wagmi/RainbowKit only after the injector exists so `injectedWallet` sees it.
+  const { App } = await import('./app/App');
+  const container = document.getElementById('root');
+  if (!container) throw new Error('#root not found');
+  createRoot(container).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+}
 
-createRoot(container).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+void boot();
