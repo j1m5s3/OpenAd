@@ -19,10 +19,14 @@ book.
 ## Decision
 
 1. **Guide source of truth is the repo.** Long-form pages live in `docs/guide/`
-   and publish to hosted GitBook via Git Sync (`.gitbook.yaml`). `PROTOCOL.md`
+   and publish to hosted GitBook via site-wide Git Sync: `gitbook-docs.yaml` at
+   the repository root maps the User guide space to `./docs/guide`; that
+   directory holds `.gitbook.yaml`, `README.md`, and `SUMMARY.md`. `PROTOCOL.md`
    remains the on-chain spec; the guide uses `GLOSSARY.md` terms and never dumps
-   revert strings, signatures, or storage layouts. Connecting the GitBook space
-   is an operator step; CI does not fetch GitBook.
+   revert strings, signatures, or storage layouts. Connecting the GitBook site
+   is an operator step; CI does not fetch GitBook. Leave the Git Sync **Project
+   directory** empty so GitBook reads `gitbook-docs.yaml` from the repo root.
+   Do not change the space `key` (`space-guide`) after the first successful sync.
 
 2. **In-app copy is a typed TypeScript registry** (`web/src/lib/copy.ts`):
    `FIELD_HINTS`, `WIZARD_COPY`, `GUIDE_PATHS`, `guideUrl()`. Tips work with no

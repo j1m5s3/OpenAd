@@ -1,0 +1,6 @@
+# Space config for the mapped directory in gitbook-docs.yaml (`./docs/guide`).
+root: ./
+
+structure:
+  readme: README.md
+  summary: SUMMARY.md

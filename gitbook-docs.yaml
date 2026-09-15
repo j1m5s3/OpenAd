@@ -1,0 +1,13 @@
+$schema: https://api.gitbook.com/gitbook-docs.yaml
+# Site-wide Git Sync. Lives at the Git Sync Project directory (repo root when that field is empty).
+site:
+  title: OpenAd
+  structure:
+    - type: space
+      key: space-guide
+      title: User guide
+      path: guide
+      default: true
+      content:
+        directory: ./docs/guide
+        language: en
