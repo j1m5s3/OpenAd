@@ -1,0 +1,16 @@
+id: gen5-cpc
+persona: advertiser
+generation: 5
+steps:
+  - visit: /
+  - expect: CPC slots run campaigns
+  - click: CPC
+  - visit: /campaigns
+  - expect: Open campaign
+  - click: Open campaign
+  - expect: Fund with permit
+  - expect: This is not a period buy
+  - visit: /supply
+  - click: Terms
+  - expect: Sale mode
+  - expect: Floor CPC

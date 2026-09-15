@@ -1,0 +1,255 @@
+# pragma version ~=0.4.0
+"""
+@title ICampaignVault
+@notice CPC campaign escrow and batch settle. Semantics: docs/PROTOCOL.md §11. ADR-0014.
+@dev    Marketplace still holds no USDC. This contract holds `remaining` until settle or finalize.
+"""
+
+# --------------------------------------------------------------------------- structs
+
+struct Campaign:
+    advertiser: address
+    slot_id: uint256
+    creative_id: uint256
+    max_cpc: uint256
+    remaining: uint256
+    valid_from: uint64
+    valid_until: uint64
+    paused: bool
+    close_after: uint64
+    closed: bool
+
+# --------------------------------------------------------------------------- events
+
+event CampaignOpened:
+    campaign_id: indexed(uint256)
+    advertiser: indexed(address)
+    slot_id: indexed(uint256)
+    creative_id: uint256
+    max_cpc: uint256
+    budget: uint256
+    valid_from: uint64
+    valid_until: uint64
+
+event CampaignToppedUp:
+    campaign_id: indexed(uint256)
+    amount: uint256
+    remaining: uint256
+
+event MaxCpcSet:
+    campaign_id: indexed(uint256)
+    max_cpc: uint256
+
+event CampaignPausedSet:
+    campaign_id: indexed(uint256)
+    paused: bool
+
+event CloseRequested:
+    campaign_id: indexed(uint256)
+    close_after: uint64
+
+event CampaignFinalized:
+    campaign_id: indexed(uint256)
+    refund: uint256
+
+event Settled:
+    campaign_id: indexed(uint256)
+    slot_id: uint256
+    publisher: address
+    payable_clicks: uint256
+    charged: uint256
+    fee: uint256
+    batch_id: bytes32
+
+event SettlerSet:
+    settler: address
+
+event VaultFeeSet:
+    fee_bps: uint16
+
+event VaultTreasurySet:
+    treasury: address
+
+event CloseDelaySet:
+    seconds: uint64
+
+event MaxBatchChargeSet:
+    max_batch_charge: uint256
+
+# --------------------------------------------------------------------------- advertiser
+
+@external
+def open_campaign(
+    slot_id: uint256,
+    creative_id: uint256,
+    max_cpc: uint256,
+    budget: uint256,
+    valid_from: uint64,
+    valid_until: uint64,
+) -> uint256:
+    """
+    @notice Escrow `budget` USDC and open a CPC campaign on `slot_id`.
+    @dev    Reverts "no terms", "lease mode", "paused", "below floor", "budget too small",
+            "bad window", then the same creative strings as Marketplace.buy steps 4-6.
+    """
+    ...
+
+@external
+def open_campaign_with_permit(
+    slot_id: uint256,
+    creative_id: uint256,
+    max_cpc: uint256,
+    budget: uint256,
+    valid_from: uint64,
+    valid_until: uint64,
+    deadline: uint256,
+    v: uint8,
+    r: bytes32,
+    s: bytes32,
+) -> uint256:
+    """@notice As `open_campaign`, preceded by a NON-REVERTING EIP-2612 permit for `budget`."""
+    ...
+
+@external
+def top_up(campaign_id: uint256, amount: uint256):
+    """@notice Add USDC to an open campaign. Reverts "not advertiser", "closed", "bad amount"."""
+    ...
+
+@external
+def top_up_with_permit(
+    campaign_id: uint256,
+    amount: uint256,
+    deadline: uint256,
+    v: uint8,
+    r: bytes32,
+    s: bytes32,
+):
+    """@notice As `top_up`, preceded by a NON-REVERTING EIP-2612 permit for `amount`."""
+    ...
+
+@external
+def set_max_cpc(campaign_id: uint256, max_cpc: uint256):
+    """@notice Update max CPC. Reverts "not advertiser", "closed", "below floor"."""
+    ...
+
+@external
+def set_paused(campaign_id: uint256, paused: bool):
+    """@notice Pause or unpause a campaign. Reverts "not advertiser", "closed"."""
+    ...
+
+@external
+def request_close(campaign_id: uint256):
+    """@notice Start CLOSE_DELAY. Reverts "not advertiser", "closed", "closing"."""
+    ...
+
+@external
+def finalize_close(campaign_id: uint256):
+    """@notice Refund remaining after close_after. Anyone. Reverts "not closing", "too early", "closed"."""
+    ...
+
+# --------------------------------------------------------------------------- settler / owner
+
+@external
+def settle_batch(
+    campaign_id: uint256,
+    payable_clicks: uint256,
+    charged_usdc: uint256,
+    batch_id: bytes32,
+):
+    """
+    @notice Pay fee to treasury and rest to current slot owner; decrement remaining.
+    @dev    Reverts "not settler", "closed", "batch used", "bad charge".
+    """
+    ...
+
+@external
+def set_settler(settler: address):
+    """@notice Owner. Reverts "bad settler" if empty."""
+    ...
+
+@external
+def set_fee_bps(fee_bps: uint16):
+    """@notice Owner. Reverts "fee too high" if > 1000."""
+    ...
+
+@external
+def set_treasury(treasury: address):
+    """@notice Owner. Reverts "bad treasury" if empty."""
+    ...
+
+@external
+def set_close_delay(seconds: uint64):
+    """@notice Owner. Reverts "bad delay" if 0 or > 604800."""
+    ...
+
+@external
+def set_max_batch_charge(max_batch_charge: uint256):
+    """@notice Owner. Reverts "bad charge" if 0."""
+    ...
+
+# --------------------------------------------------------------------------- views
+
+@external
+@view
+def USDC() -> address:
+    ...
+
+@external
+@view
+def AD_SLOT() -> address:
+    ...
+
+@external
+@view
+def REGISTRY() -> address:
+    ...
+
+@external
+@view
+def MARKETPLACE() -> address:
+    ...
+
+@external
+@view
+def settler() -> address:
+    ...
+
+@external
+@view
+def fee_bps() -> uint16:
+    ...
+
+@external
+@view
+def treasury() -> address:
+    ...
+
+@external
+@view
+def close_delay_seconds() -> uint64:
+    ...
+
+@external
+@view
+def max_batch_charge() -> uint256:
+    ...
+
+@external
+@view
+def campaign_count() -> uint256:
+    ...
+
+@external
+@view
+def campaign_of(campaign_id: uint256) -> Campaign:
+    ...
+
+@external
+@view
+def open_campaigns_of(slot_id: uint256) -> uint256:
+    ...
+
+@external
+@view
+def used_batch(batch_id: bytes32) -> bool:
+    ...

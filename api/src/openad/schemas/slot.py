@@ -11,6 +11,8 @@ class TermsOut(ApiModel):
     lead_seconds: int
     sale_end: int
     approval_mode: int
+    sale_mode: int = 0
+    floor_cpc: str = "0"
     paused: bool
 
 

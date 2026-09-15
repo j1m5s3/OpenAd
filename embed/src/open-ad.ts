@@ -99,7 +99,7 @@ export class OpenAdElement extends HTMLElement {
       });
       if (res.status !== 200 && res.status !== 404) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as ServeResponse;
-      if (data.creative && (data.status === 'lease' || data.status === 'house')) {
+      if (data.creative && (data.status === 'lease' || data.status === 'campaign' || data.status === 'house')) {
         this.renderCreative(data.creative);
         this.emit(data.status);
       } else {

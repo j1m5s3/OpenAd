@@ -114,6 +114,83 @@ async def test_anvil_safe_head_ignores_safe_tag(settings: Settings, db: Database
     assert eth.safe_calls == 0
 
 
+async def test_anvil_missing_cursor_wipes_derived(
+    settings: Settings, db: Database, session: AsyncSession
+) -> None:
+    session.add(
+        IndexerCursor(
+            chain_id=31337,
+            contract=CURSOR_NAME,
+            block_number=9999,
+            block_hash="0x" + "aa" * 32,
+        )
+    )
+    session.add(
+        Slot(
+            slot_id=99,
+            owner="0x" + "11" * 20,
+            width=300,
+            height=250,
+            kind=0,
+            domain="ghost.example",
+            minted_block=1,
+            minted_tx="0x" + "ab" * 32,
+            updated_block=1,
+        )
+    )
+    await session.commit()
+
+    class _MissingEth(_FakeEth):
+        async def get_block(self, number: int | str) -> dict[str, Any]:
+            raise RuntimeError("block missing")
+
+    runner = IndexerRunner(
+        settings, db.sessions, _empty_deployment(), _FakeW3(_MissingEth(cursor_hash=b"\x00"))
+    )  # type: ignore[arg-type]
+    start = await runner.start_block()
+    assert start == 0
+    async with db.sessions() as check:
+        assert await check.get(Slot, 99) is None
+        assert await check.get(IndexerCursor, (31337, CURSOR_NAME)) is None
+
+
+async def test_anvil_future_rows_wipes_derived(
+    settings: Settings, db: Database, session: AsyncSession
+) -> None:
+    session.add(
+        IndexerCursor(
+            chain_id=31337,
+            contract=CURSOR_NAME,
+            block_number=80,
+            block_hash="0x" + "aa" * 32,
+        )
+    )
+    session.add(
+        Slot(
+            slot_id=99,
+            owner="0x" + "11" * 20,
+            width=300,
+            height=250,
+            kind=0,
+            domain="ghost.example",
+            minted_block=5000,
+            minted_tx="0x" + "ab" * 32,
+            updated_block=5000,
+        )
+    )
+    await session.commit()
+    runner = IndexerRunner(
+        settings,
+        db.sessions,
+        _empty_deployment(),
+        _FakeW3(_FakeEth(cursor_hash=bytes.fromhex("aa" * 32))),
+    )  # type: ignore[arg-type]
+    start = await runner.start_block()
+    assert start == 0
+    async with db.sessions() as check:
+        assert await check.get(Slot, 99) is None
+
+
 @pytest.mark.integration
 async def test_anvil_replay_from_zero(settings: Settings, db: Database) -> None:
     """Replay protocol logs from genesis when a local Anvil artifact is present."""

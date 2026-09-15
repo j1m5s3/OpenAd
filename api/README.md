@@ -1,11 +1,12 @@
 # openad-api
 
-Off-chain services for OpenAd, one Python package (`openad`) run as three processes:
+Off-chain services for OpenAd, one Python package (`openad`) run as four processes:
 
 | Process | Command | Purpose |
 | --- | --- | --- |
-| api | `uv run uvicorn openad.main:app --reload` | Public read API (`/v1/slots…`), serving edge (`/v1/serve/…`), auth (ROADMAP 3.1) |
+| api | `uv run uvicorn openad.main:app --reload` | Public read API (`/v1/slots…`), serving edge (`/v1/serve/…`), click 302 (`/v1/c/…`), auth |
 | indexer | `uv run python -m openad.indexer` | Contract events → Postgres (`indexer/`) |
+| settler | `uv run python -m openad.settler` | Payable clicks → `CampaignVault.settle_batch` (holds `OPENAD_SETTLER_KEY`) |
 | (serve) | same process as api for now | May move to a CDN worker (ROADMAP 4.4) |
 
 Design: [`/docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) §3. Rules: [`/docs/CONVENTIONS.md`](../docs/CONVENTIONS.md) §4
@@ -25,9 +26,10 @@ src/openad/
   routers/         health, serve, slots, creatives, publishers, advertisers, auth
   services/        serve, slots, periods, creatives, media, auth, offchain
   serve/           origin.py + cache generation; verified bytes on disk via Settings.media_cache_path
-  chain/           deployments.py (artifact loader), client.py (AsyncWeb3) — indexer only
+  chain/           deployments.py (artifact loader), client.py (AsyncWeb3) — indexer + settler
   indexer/         events.py (EXPECTED_EVENTS), handlers.py (one per event), runner.py, __main__.py
-alembic/           migrations (baseline 0001_baseline)
+  settler/         batches.py, runner.py, settings.py (OPENAD_SETTLER_KEY), __main__.py
+alembic/           migrations (0001_baseline, 0002_cpc)
 tests/             pytest + pytest-asyncio; SQLite in-memory; httpx ASGI client
 ```
 

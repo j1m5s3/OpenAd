@@ -2,19 +2,20 @@
 """
 @title IMarketplace
 @notice Canonical interface of the Marketplace contract: per-slot sale Terms, Dutch pricing,
-        and the single-transaction `buy` that pays USDC (fee to treasury, remainder to the
-        publisher) and writes the lease on AdSlot.
-@dev    Semantics: docs/PROTOCOL.md §3.2, §4.2, §4.3, §5.2 (check order is normative), §6.
+        LEASE `buy`, and CPC sale-mode wiring to CampaignVault (ADR-0014).
+@dev    Semantics: docs/PROTOCOL.md §3.2, §4.2, §4.3, §5.2, §6, §11.
 """
 
 # --------------------------------------------------------------------------- structs
 
 struct Terms:
-    start_price: uint256     # USDC base units; >= floor_price
-    floor_price: uint256     # USDC base units; may be 0
-    lead_seconds: uint64     # > 0; auction opens this long before period start
-    sale_end: uint64         # 0 = no limit; else periods must end <= sale_end
+    start_price: uint256     # LEASE: USDC; >= floor_price. CPC: unused (0)
+    floor_price: uint256     # LEASE: USDC; may be 0. CPC: unused (0)
+    lead_seconds: uint64     # LEASE: > 0. CPC: 0 allowed
+    sale_end: uint64         # LEASE: 0 = no limit. CPC: unused
     approval_mode: uint8     # ApprovalMode: 0 REQUIRED, 1 WAIVED
+    sale_mode: uint8         # SaleMode: 0 LEASE, 1 CPC
+    floor_cpc: uint256       # CPC only; > 0 when sale_mode == CPC
     paused: bool
 
 struct Quote:
@@ -35,6 +36,11 @@ event TermsSet:
     lead_seconds: uint64
     sale_end: uint64
     approval_mode: uint8
+    sale_mode: uint8
+    floor_cpc: uint256
+
+event CampaignVaultSet:
+    vault: address
 
 event PausedSet:
     slot_id: indexed(uint256)
@@ -68,10 +74,13 @@ def set_terms(
     lead_seconds: uint64,
     sale_end: uint64,
     approval_mode: uint8,
+    sale_mode: uint8,
+    floor_cpc: uint256,
 ):
     """
     @notice Set sale terms for a slot. Slot owner only. `paused` is left unchanged.
-    @dev    Reverts "not owner", "bad prices", "bad lead", "bad mode".
+    @dev    Reverts "not owner", "bad mode", "bad prices", "bad lead", "bad floor cpc",
+            "leases outstanding", "campaigns open".
     """
     ...
 
@@ -86,10 +95,10 @@ def set_paused(slot_id: uint256, paused: bool):
 def buy(slot_id: uint256, period_index: uint256, creative_id: uint256, max_price: uint256):
     """
     @notice Buy one period at the current Dutch price with a pre-approved USDC allowance.
-    @dev    Check order (PROTOCOL §5.2): "no terms", "paused", "beyond sale end",
-            "not open"/"closed", "price exceeds max", "not creative owner",
-            "dimension mismatch", "not approved"/"creative blocked", then AdSlot.set_lease,
-            then transfers. Remainder buys (`start <= now < end`) use pro-rated floor. Nonreentrant.
+    @dev    Check order (PROTOCOL §5.2 / §11.1): "cpc mode" first if sale_mode is CPC, then
+            "no terms", "paused", "beyond sale end", "not open"/"closed", "price exceeds max",
+            "not creative owner", "dimension mismatch", "not approved"/"creative blocked",
+            then AdSlot.set_lease, then transfers. Nonreentrant.
     """
     ...
 
@@ -122,6 +131,11 @@ def set_treasury(treasury: address):
     """@notice Set fee recipient. Owner only. Reverts "bad treasury" if empty."""
     ...
 
+@external
+def set_campaign_vault(vault: address):
+    """@notice Wire CampaignVault for CPC mode-switch checks. Owner. Reverts "bad vault"."""
+    ...
+
 # --------------------------------------------------------------------------- views
 
 @external
@@ -151,13 +165,18 @@ def treasury() -> address:
 
 @external
 @view
+def campaign_vault() -> address:
+    ...
+
+@external
+@view
 def terms_of(slot_id: uint256) -> Terms:
     ...
 
 @external
 @view
 def price(slot_id: uint256, period_index: uint256) -> uint256:
-    """@notice Current Dutch or remainder price. Reverts "no terms", "not open", "closed"."""
+    """@notice Current Dutch or remainder price. Reverts "cpc mode", "no terms", "not open", "closed"."""
     ...
 
 @external

@@ -67,6 +67,26 @@ class ServeEvent(Base):
     slot_id: Mapped[int] = mapped_column(Uint256, index=True)
     lease_calendar_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     lease_period_index: Mapped[int | None] = mapped_column(Uint256, nullable=True)
-    served_kind: Mapped[str] = mapped_column(String(8))  # lease | house | empty
+    campaign_id: Mapped[int | None] = mapped_column(Uint256, nullable=True, index=True)
+    served_kind: Mapped[str] = mapped_column(String(8))  # lease | campaign | house | empty
     origin_ok: Mapped[bool] = mapped_column(Boolean, default=True)
+    gsp_cpc: Mapped[int | None] = mapped_column(Uint256, nullable=True)
     at: Mapped[int] = mapped_column(BigInteger, index=True)  # unix seconds
+
+
+class ClickEvent(Base):
+    """Off-chain payable-click log. Not rebuildable from chain. No visitor IPs."""
+
+    __tablename__ = "click_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    slot_id: Mapped[int] = mapped_column(Uint256, index=True)
+    campaign_id: Mapped[int] = mapped_column(Uint256, index=True)
+    creative_id: Mapped[int] = mapped_column(Uint256)
+    serve_event_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    payable: Mapped[bool] = mapped_column(Boolean, default=False)
+    ivt_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    gsp_cpc: Mapped[int] = mapped_column(Uint256, default=0)
+    settled_batch_id: Mapped[str | None] = mapped_column(String(66), nullable=True, index=True)
+    at: Mapped[int] = mapped_column(BigInteger, index=True)

@@ -200,7 +200,7 @@ Invoke-Step 'sync web deployments' {
 Write-Host ""
 Write-Host "Setup complete."
 Write-Host ""
-Write-Host "Protocol contracts are deployed on Anvil (CreativeRegistry, AdSlot, Marketplace, MockUSDC)."
+Write-Host "Protocol contracts are deployed on Anvil (CreativeRegistry, AdSlot, Marketplace, CampaignVault, MockUSDC)."
 Write-Host "  - Artifact: contracts/deployments/31337.json (git-ignored)."
 Write-Host "  - Demo: two slots, terms, one approved creative, one purchased period."
 Write-Host ""

@@ -17,7 +17,8 @@ alwaysApply: false
   (ADR-0009). Optional Turnkey only when `VITE_TURNKEY_*` is set (ADR-0011). Local MCP critique
   may use `?devwallet=` (ADR-0013); addresses only, never keys in `web/`.
 - Use `docs/GLOSSARY.md` terms in UI copy: slot, period, lease, terms, creative, approval.
-  Nav labels: Discover, Supply, Campaigns.
+  Nav labels: Discover, Supply, Campaigns; optional external Guide when `VITE_GUIDE_URL` is set
+  (ADR-0015). Field how-tos: `src/lib/copy.ts` + `FieldHint` / `Wizard`.
 
 ```tsx
 // ✅ typed query with key factory

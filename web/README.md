@@ -19,15 +19,16 @@ npm run sync:deployments -w web
 npm run sync:openapi -w web
 ```
 
-Environment: `VITE_API_URL`, `VITE_CHAIN_ID`, `VITE_WALLETCONNECT_PROJECT_ID` from the repo-root `.env`.
+Environment: `VITE_API_URL`, `VITE_CHAIN_ID`, `VITE_WALLETCONNECT_PROJECT_ID`, optional
+`VITE_GUIDE_URL` from the repo-root `.env`.
 
 ## Layout
 
 ```text
 src/
   main.tsx                 mount + RainbowKit CSS + Tailwind
-  app/                     App (providers), Layout (Discover / Supply / Campaigns)
-  components/              SlotCard, WalletRail, IndexerLagBanner
+  app/                     App (providers), Layout (Discover / Supply / Campaigns; optional Guide)
+  components/              SlotCard, WalletRail, IndexerLagBanner, Field, FieldHint, Wizard
   features/
     marketplace/           Discover + slot page + buy dialog
     publisher/             Supply

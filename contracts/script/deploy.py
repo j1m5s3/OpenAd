@@ -7,7 +7,11 @@ Usage
 
 Order and parameters are normative in docs/PROTOCOL.md section 10:
     CreativeRegistry -> AdSlot -> Marketplace(USDC, AdSlot, CreativeRegistry)
-    -> AdSlot.set_market -> Marketplace.set_treasury / set_fee_bps -> CreativeRegistry.set_moderator
+    -> CampaignVault(USDC, AdSlot, CreativeRegistry, Marketplace)
+    -> AdSlot.set_market -> Marketplace.set_campaign_vault
+    -> Marketplace.set_treasury / set_fee_bps
+    -> CampaignVault.set_treasury / set_fee_bps / set_settler
+    -> CreativeRegistry.set_moderator
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from __future__ import annotations
 import json
 import urllib.request
 import warnings
+from pathlib import Path
 from typing import Any
 
 import boa
@@ -22,7 +27,7 @@ from moccasin.boa_tools import VyperContract
 from moccasin.config import get_active_network
 
 from script.artifacts import ContractRecord, build_artifact, write_artifact
-from src import AdSlot, CreativeRegistry, Marketplace
+from src import AdSlot, CreativeRegistry, Marketplace, CampaignVault
 from src.mocks import MockUSDC
 
 DEFAULT_FEE_BPS = 250
@@ -50,6 +55,24 @@ def _current_block_number(network: Any) -> int:
         return 0
 
 
+def _purge_anvil_fork_cache() -> None:
+    """Drop titanoboa's on-disk fork cache for chain 31337.
+
+    CachingRPC keys Anvil as chainid_0x7a69 and treats the block tag ``latest`` as a
+    stable key. A previous session's Marketplace bytecode (before ``set_campaign_vault``)
+    then poisons ``eth_getCode`` and boa simulates ``Unknown contract …0xf5d4d4fa``.
+    """
+    cache_dir = Path.home() / ".cache" / "titanoboa" / "fork"
+    if not cache_dir.is_dir():
+        return
+    for path in cache_dir.glob("chainid_0x7a69*"):
+        try:
+            path.unlink()
+            print(f"[deploy] removed stale boa fork cache {path}")
+        except OSError as exc:
+            warnings.warn(f"could not remove {path}: {exc}", stacklevel=2)
+
+
 def _eth_get_code(address: str, rpc_url: str = "http://127.0.0.1:8545") -> bytes:
     payload = json.dumps(
         {"jsonrpc": "2.0", "id": 1, "method": "eth_getCode", "params": [address, "latest"]}
@@ -63,22 +86,47 @@ def _eth_get_code(address: str, rpc_url: str = "http://127.0.0.1:8545") -> bytes
     return bytes.fromhex(hex_body)
 
 
-def _tolerate_boa_create_skew() -> None:
-    """Anvil CREATE address can diverge from titanoboa's local fork (nonce vs _reset_fork).
+def _patch_anvil_boa() -> None:
+    """Make titanoboa usable against a fresh Anvil without a local keystore.
 
-    NetworkEnv.deploy already broadcasts the tx; it then raises ``uh oh!`` if the
-    simulated address differs. Rebind to the node address so local deploys finish.
+    * Unlocked ``eth_accounts`` (Foundry #0) sign via ``eth_sendTransaction``.
+    * CREATE address can diverge from the local fork; rebind to the node address.
+    * ``eth_getCode`` is read uncached so a stale ``latest`` fork DB cannot hide
+      newly deployed methods such as ``set_campaign_vault``.
     """
-    from boa.network import NetworkEnv
+    from boa.network import NetworkEnv, _EstimateGasFailed
     from boa.util.abi import Address
 
-    orig = NetworkEnv.deploy
+    env = boa.env
+    rpc = getattr(env, "_rpc", None)
+    if rpc is not None and hasattr(env, "add_accounts_from_rpc"):
+        env.add_accounts_from_rpc(rpc)
+        anvil0 = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+        accounts = getattr(env, "_accounts", {})
+        if anvil0 in accounts:
+            env.eoa = anvil0
+            print(f"[deploy] using Anvil unlocked account {anvil0}")
+
+    orig_get_code = env.evm.get_code
+
+    def get_code_uncached(address):  # type: ignore[no-untyped-def]
+        checksum = str(Address(address))
+        if rpc is not None:
+            raw = rpc.fetch_uncached("eth_getCode", [checksum, "latest"])
+            if isinstance(raw, str) and raw not in {"", "0x", "0X"}:
+                hex_body = raw[2:] if raw.startswith(("0x", "0X")) else raw
+                return bytes.fromhex(hex_body)
+        return orig_get_code(address)
+
+    env.evm.get_code = get_code_uncached  # type: ignore[method-assign]
+
+    orig_deploy = NetworkEnv.deploy
 
     def deploy(  # type: ignore[no-untyped-def]
         self, sender=None, gas=None, value=0, bytecode=b"", contract=None, **kwargs
     ):
         try:
-            return orig(
+            return orig_deploy(
                 self,
                 sender=sender,
                 gas=gas,
@@ -103,6 +151,54 @@ def _tolerate_boa_create_skew() -> None:
 
     NetworkEnv.deploy = deploy  # type: ignore[method-assign]
 
+    orig_execute = NetworkEnv.execute_code
+
+    def execute_code(  # type: ignore[no-untyped-def]
+        self,
+        to_address,
+        sender=None,
+        gas=None,
+        value=0,
+        data=b"",
+        simulate=False,
+        **kwargs,
+    ):
+        try:
+            return orig_execute(
+                self,
+                to_address,
+                sender=sender,
+                gas=gas,
+                value=value,
+                data=data,
+                simulate=simulate,
+                **kwargs,
+            )
+        except Exception as exc:
+            if simulate:
+                raise
+            text = str(exc)
+            is_gas = isinstance(exc, _EstimateGasFailed)
+            if not is_gas and "Unknown contract" not in text and type(exc) is not AssertionError:
+                raise
+            print(f"[deploy] local sim failed ({text}); sending via Anvil RPC")
+            sender = self._get_sender(sender)
+            self._send_txn(
+                from_=sender,
+                to=to_address,
+                gas=gas,
+                value=value,
+                data=data,
+            )
+
+            class _Computation:
+                is_error = False
+                output = b""
+
+            return _Computation()
+
+    NetworkEnv.execute_code = execute_code  # type: ignore[method-assign]
+
 
 def deploy_usdc() -> VyperContract:
     """Bind the network's named `usdc` contract, or deploy MockUSDC on local networks."""
@@ -121,7 +217,7 @@ def deploy_usdc() -> VyperContract:
 
 
 def _seed_demo(usdc: VyperContract, registry: VyperContract, ad_slot: VyperContract, market: VyperContract) -> None:
-    """Mint two demo slots, terms, one approved creative, and buy one period (local only)."""
+    """Mint two LEASE demo slots plus one CPC slot; buy one LEASE period (local only)."""
     now = int(boa.env.evm.patch.timestamp)
     period = 86_400
     lead = 14 * 86_400
@@ -134,8 +230,8 @@ def _seed_demo(usdc: VyperContract, registry: VyperContract, ad_slot: VyperContr
     slot_b = ad_slot.mint_slot(spec_b)
     ad_slot.set_calendar(slot_a, period, first)
     ad_slot.set_calendar(slot_b, period, first)
-    market.set_terms(slot_a, start_price, floor_price, lead, 0, 0)
-    market.set_terms(slot_b, start_price, floor_price, lead, 0, 0)
+    market.set_terms(slot_a, start_price, floor_price, lead, 0, 0, 0, 0)
+    market.set_terms(slot_b, start_price, floor_price, lead, 0, 0, 0, 0)
     cid = registry.register_media(
         "https://placehold.co/300x250.png",
         DEMO_HASH,
@@ -148,7 +244,13 @@ def _seed_demo(usdc: VyperContract, registry: VyperContract, ad_slot: VyperContr
     registry.set_approval(cid, True)
     usdc.approve(market.address, start_price)
     market.buy(slot_a, 0, cid, start_price)
-    print(f"[deploy] seeded slots {slot_a},{slot_b} creative {cid} purchased period 0 of slot {slot_a}")
+    spec_c = (300, 250, 0, "demo-cpc.example")
+    slot_c = ad_slot.mint_slot(spec_c)
+    market.set_terms(slot_c, 0, 0, 0, 0, 0, 1, 100_000)
+    print(
+        f"[deploy] seeded slots {slot_a},{slot_b},{slot_c} creative {cid} "
+        f"purchased period 0 of slot {slot_a}; slot {slot_c} CPC"
+    )
 
 
 def deploy_protocol(usdc: VyperContract) -> dict[str, VyperContract]:
@@ -166,13 +268,23 @@ def deploy_protocol(usdc: VyperContract) -> dict[str, VyperContract]:
     registry = CreativeRegistry.deploy()
     ad_slot = AdSlot.deploy(AD_SLOT_NAME, AD_SLOT_SYMBOL, base_uri)
     market = Marketplace.deploy(usdc.address, ad_slot.address, registry.address)
+    vault = CampaignVault.deploy(usdc.address, ad_slot.address, registry.address, market.address)
     ad_slot.set_market(market.address)
+    market.set_campaign_vault(vault.address)
     market.set_treasury(boa.env.eoa)
     market.set_fee_bps(DEFAULT_FEE_BPS)
+    vault.set_treasury(boa.env.eoa)
+    vault.set_fee_bps(DEFAULT_FEE_BPS)
+    vault.set_settler(boa.env.eoa)
     registry.set_moderator(boa.env.eoa)
     if network_name in {"anvil", "pyevm"}:
         _seed_demo(usdc, registry, ad_slot, market)
-    return {"CreativeRegistry": registry, "AdSlot": ad_slot, "Marketplace": market}
+    return {
+        "CreativeRegistry": registry,
+        "AdSlot": ad_slot,
+        "Marketplace": market,
+        "CampaignVault": vault,
+    }
 
 
 def deploy() -> dict[str, VyperContract]:
@@ -188,7 +300,8 @@ def deploy() -> dict[str, VyperContract]:
     # Capture before deploys: after seed the head is the buy tx, and the indexer
     # would skip SlotMinted / CalendarSet / TermsSet (those land a few blocks earlier).
     if network_name == "anvil":
-        _tolerate_boa_create_skew()
+        _purge_anvil_fork_cache()
+        _patch_anvil_boa()
     start_block = _current_block_number(network) if network is not None else 0
     deployed: dict[str, VyperContract] = {"USDC": deploy_usdc()}
     deployed.update(deploy_protocol(deployed["USDC"]))

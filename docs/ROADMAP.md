@@ -79,10 +79,56 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
 - [x] **4.8 Dual-persona industry critique loop.** Pointers: ADR-0012 · ADR-0013 · `docs/qa/` · `.cursor/skills/sandbox-sme-critique/` · `.cursor/skills/sandbox-ux-critique/`.
       Acceptance: headed Playwright MCP (or documented fallback) runs both skills against local web; scorecard phases are `pass` / `sandbox-acceptable` / `blocked-by-invariant` with zero open table-stakes `implement-now` / `adr-then-implement`; identity fence intact.
       _Done 2026-09-12 (Edge `e2e/scripts/smoke-devwallet.mjs` + `critique-pass.mjs`; Playwright MCP was not connected this session; scorecard round 2 clear; no dual-tag protocol ADR)._
+- [x] **4.9 User guide + in-app guidance.** Pointers: ADR-0015 · `docs/guide/` · `web/src/lib/copy.ts` · `web/src/components/{FieldHint,Wizard,Field}.tsx` · Supply / Campaigns / BuyDialog / OpenCampaignDialog. Does **not** depend on 1.5 or 4.6.
+      Acceptance: GitBook-ready `docs/guide/` (glossary terms; CPC never called auction); `VITE_GUIDE_URL` optional; FieldHint + Wizard with no new deps; mint→calendar→terms, register→approval, and buy/open-campaign are staged with “what happens next”; each stage still one on-chain call; e2e/smoke green without a live GitBook.
+      _Done 2026-09-14 (`docs/guide/` + Git Sync yaml; FieldHint/Wizard; primary create/buy flows stepped; `VITE_GUIDE_URL` hidden when unset)._
+
+---
+
+## Phase 5 — CPC sale mode (ADR-0014)
+
+Does **not** depend on 1.5 or 4.6. Local Anvil is enough. Spec: ADR-0014 + `PROTOCOL.md` §11.
+Do not start 5.2 until picking up this phase. Use glossary **sale mode** / **campaign** / **CPC**
+(not “auction” for occupancy).
+
+- [x] **5.1 ADR-0014 + spec.** Pointers: ADR-0003, 0004, 0006 · `PROTOCOL.md` §1, §7, §9 ·
+      `GLOSSARY.md`.
+      Acceptance: Accepted ADR; `PROTOCOL.md` §11 Specified; glossary terms; ROADMAP Phase 5;
+      LEASE invariants carved, not deleted. _Done 2026-09-14._
+- [x] **5.2 Interfaces.** Pointers: `PROTOCOL.md` §11 · `IMarketplace.vyi` · new
+      `ICampaignVault.vyi`.
+      Acceptance: `.vyi` signatures + events match §11; `Terms` includes `sale_mode` and
+      `floor_cpc`. Land in the **same change** as 5.3 so `Marketplace` still `implements:` IMarketplace.
+      _Done 2026-09-14._
+- [x] **5.3 `CampaignVault.vy` + Marketplace deltas + tests.**
+      Pointers: `PROTOCOL.md` §11 · ADR-0014 §3 · `tests/conftest.py`.
+      Acceptance: open/top_up/pause/close/settle/finalize; mode-switch reverts; `buy` reverts
+      `"cpc mode"`; vault balance invariant; `buy` pass-through still holds; hypothesis 11–15.
+      _Done 2026-09-14._
+- [x] **5.4 Indexer + Alembic.** Pointers: `PROTOCOL.md` §6 CampaignVault events ·
+      `ARCHITECTURE.md` §3.2.
+      Acceptance: one handler per new event; `campaigns` rebuildable; replay test.
+      _Done 2026-09-14._
+- [x] **5.5 Serve GSP + `GET /v1/c/{token}` + settler process.**
+      Pointers: `PROTOCOL.md` §11.3–11.4 · ADR-0014 §4–5 · `ARCHITECTURE.md` §3.4.
+      Acceptance: CPC serve status `campaign`; tokenized clickUrl; house when none eligible;
+      IVT discards; settler batches; HTTP api has no settler key; p95 serve still local-fast.
+      _Done 2026-09-14._
+- [x] **5.6 Web: Discover / Supply / Campaigns CPC path.**
+      Pointers: ADR-0014 UI copy · `web/src/features/{marketplace,publisher,advertiser}`.
+      Acceptance: mode toggle + floor CPC; fund/top-up/close; Buy hidden on CPC slots; fee
+      line on settle history; no raw `sale_mode` integers in copy.
+      _Done 2026-09-14._
+- [x] **5.7 Sim + e2e CPC.** Pointers: ADR-0012 · ADR-0010.
+      Acceptance: sim can open competing campaigns; YAML: fund → serve winner → click →
+      settle → publisher USDC; LEASE path still green.
+      _Done 2026-09-14 (sim `open_campaign`/`top_up_campaign`; `gen5-cpc.yaml` UI path;
+      LEASE YAML unchanged)._
 
 ---
 
 ## Out of scope (do not build without a new ADR)
 
-English or sealed-bid auctions · impression/click attribution on-chain · advertiser HTML/JS
-creatives · custodial onboarding · multi-currency settlement · sublease market.
+English or sealed-bid occupancy auctions · per-click chain transactions · advertiser HTML/JS
+creatives · custodial onboarding · multi-currency settlement · sublease market · publisher-set
+actual CPC · ranking by locked click budget.

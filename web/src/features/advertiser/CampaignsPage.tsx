@@ -3,9 +3,23 @@ import { useState } from 'react';
 import { keccak256 } from 'viem';
 import { useAccount, useWriteContract } from 'wagmi';
 
+import type { AdvertiserOut } from '../../lib/api';
 import { getContract, hasProtocol } from '../../lib/deployments';
+import { formatUsdc } from '../../lib/format';
+import { quoteFeeCopy } from '../../lib/permit';
 import { targetChainId } from '../../lib/wagmi';
 import { useAdvertiser } from './api';
+import { CreativeWizard } from './components/CreativeWizard';
+import { OpenCampaignDialog, TopUpDialog } from './components/OpenCampaignDialog';
+
+type CampaignRow = AdvertiserOut['campaigns'][number];
+
+function campaignStatusLabel(c: CampaignRow): string {
+  if (c.closed) return 'Closed';
+  if (c.closeAfter > 0) return 'Closing';
+  if (c.paused) return 'Paused';
+  return 'Open';
+}
 
 export function CampaignsPage() {
   const { address, isConnected } = useAccount();
@@ -14,6 +28,8 @@ export function CampaignsPage() {
   const { writeContractAsync, isPending } = useWriteContract();
   const [hash, setHash] = useState<string>('');
   const [msg, setMsg] = useState<string | null>(null);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [topUpId, setTopUpId] = useState<string | null>(null);
 
   async function onFile(file: File) {
     const buf = new Uint8Array(await file.arrayBuffer());
@@ -69,14 +85,26 @@ export function CampaignsPage() {
     setMsg('Approval requested');
   }
 
+  async function vaultWrite(functionName: 'set_paused' | 'request_close' | 'finalize_close', args: readonly unknown[]) {
+    const vault = getContract(targetChainId, 'CampaignVault');
+    await writeContractAsync({
+      ...vault,
+      functionName,
+      args,
+    });
+    setMsg(`${functionName.replaceAll('_', ' ')} submitted`);
+  }
+
+  const campaigns = dash.data?.campaigns ?? [];
+
   return (
     <div className="space-y-8">
       <div>
         <p className="text-sm text-accent">Advertiser</p>
         <h1 className="mt-1 text-3xl font-semibold">Campaigns</h1>
         <p className="mt-2 text-muted">
-          Register creatives (hashed in the browser, never uploaded here), request approval, and
-          track delivery. HTML/JS creatives are out of scope — raster only.
+          Register creatives (hashed in the browser, never uploaded here), request approval, fund
+          CPC campaigns, and track delivery. HTML/JS creatives are out of scope — raster only.
         </p>
       </div>
       {!isConnected && <p className="text-muted">Connect a wallet to register creatives.</p>}
@@ -86,6 +114,88 @@ export function CampaignsPage() {
         </p>
       )}
       {msg && <p className="text-sm text-accent">{msg}</p>}
+
+      <section className="rounded-2xl border border-line bg-surface p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-medium">CPC campaigns</h2>
+          <button
+            type="button"
+            onClick={() => setOpenDialog(true)}
+            className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-accent-ink"
+          >
+            Open campaign
+          </button>
+        </div>
+        <p className="mt-2 text-sm text-muted">
+          Fund escrow in CampaignVault. Serve picks a winner at the publisher floor CPC. This is
+          not a period buy.
+        </p>
+        <ul className="mt-4 space-y-4">
+          {campaigns.map((c) => (
+            <li key={c.campaignId} className="rounded-xl border border-line p-4 text-sm">
+              <p>
+                Campaign {c.campaignId} · slot {c.slotId} · creative {c.creativeId} ·{' '}
+                {campaignStatusLabel(c)}
+              </p>
+              <p className="mt-1 text-muted">
+                Max {formatUsdc(BigInt(c.maxCpc))} · remaining {formatUsdc(BigInt(c.remaining))} of{' '}
+                {formatUsdc(BigInt(c.budget))} · {c.serves} serves
+              </p>
+              {!c.closed && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full border border-line px-3 py-1"
+                    onClick={() => setTopUpId(c.campaignId)}
+                  >
+                    Top up
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full border border-line px-3 py-1"
+                    disabled={isPending}
+                    onClick={() => void vaultWrite('set_paused', [BigInt(c.campaignId), !c.paused])}
+                  >
+                    {c.paused ? 'Unpause' : 'Pause'}
+                  </button>
+                  {c.closeAfter === 0 ? (
+                    <button
+                      type="button"
+                      className="rounded-full border border-line px-3 py-1"
+                      disabled={isPending}
+                      onClick={() => void vaultWrite('request_close', [BigInt(c.campaignId)])}
+                    >
+                      Request close
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="rounded-full border border-line px-3 py-1"
+                      disabled={isPending}
+                      onClick={() => void vaultWrite('finalize_close', [BigInt(c.campaignId)])}
+                    >
+                      Finalize close
+                    </button>
+                  )}
+                </div>
+              )}
+              {c.settlements.length > 0 && (
+                <ul className="mt-3 space-y-1 text-xs text-muted">
+                  {c.settlements.map((s) => (
+                    <li key={s.batchId}>
+                      Settle {s.payableClicks} clicks · {formatUsdc(BigInt(s.charged))} charged ·{' '}
+                      {quoteFeeCopy(BigInt(s.charged), BigInt(s.fee)).line}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+          {campaigns.length === 0 && (
+            <li className="text-muted">No campaigns yet. Open one on a CPC slot.</li>
+          )}
+        </ul>
+      </section>
 
       <section className="rounded-2xl border border-line bg-surface p-5">
         <h2 className="font-medium">Leases & delivery</h2>
@@ -104,155 +214,18 @@ export function CampaignsPage() {
         )}
       </section>
 
-      <form
-        onSubmit={(e) => void registerMedia(e)}
-        className="space-y-3 rounded-2xl border border-line bg-surface p-5"
-      >
-        <h2 className="font-medium">Register media</h2>
-        <label className="block text-sm text-muted">
-          File (hashed locally, never uploaded)
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            className="mt-1 block w-full text-ink"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void onFile(file);
-            }}
-          />
-        </label>
-        <p className="break-all text-xs text-muted">keccak: {hash || '—'}</p>
-        <label className="block text-sm text-muted">
-          Public URI
-          <input name="uri" className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink" />
-        </label>
-        <label className="block text-sm text-muted">
-          MIME
-          <select
-            name="mime"
-            defaultValue="image/png"
-            className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
-          >
-            <option value="image/png">image/png</option>
-            <option value="image/jpeg">image/jpeg</option>
-            <option value="image/webp">image/webp</option>
-            <option value="image/gif">image/gif</option>
-          </select>
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block text-sm text-muted">
-            Width
-            <input
-              name="width"
-              defaultValue="300"
-              className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
-            />
-          </label>
-          <label className="block text-sm text-muted">
-            Height
-            <input
-              name="height"
-              defaultValue="250"
-              className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
-            />
-          </label>
-        </div>
-        <label className="block text-sm text-muted">
-          Click URL
-          <input name="clickUrl" className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink" />
-        </label>
-        <button
-          type="submit"
-          disabled={isPending || !hash}
-          className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-accent-ink disabled:opacity-40"
-        >
-          Register
-        </button>
-      </form>
+      <CreativeWizard
+        pending={isPending}
+        hash={hash}
+        creativeIds={dash.data?.creativeIds ?? []}
+        onFile={onFile}
+        onRegisterMedia={registerMedia}
+        onRegisterNft={registerNft}
+        onRequestApproval={requestApproval}
+      />
 
-      <form
-        onSubmit={(e) => void registerNft(e)}
-        className="space-y-3 rounded-2xl border border-line bg-surface p-5"
-      >
-        <h2 className="font-medium">Register NFT creative</h2>
-        <label className="block text-sm text-muted">
-          NFT chain id
-          <input
-            name="nftChainId"
-            defaultValue={String(targetChainId)}
-            className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
-          />
-        </label>
-        <label className="block text-sm text-muted">
-          Contract
-          <input name="nftContract" className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink" />
-        </label>
-        <label className="block text-sm text-muted">
-          Token id
-          <input name="nftTokenId" className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink" />
-        </label>
-        <label className="block text-sm text-muted">
-          Standard
-          <select
-            name="nftStandard"
-            defaultValue="1"
-            className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
-          >
-            <option value="1">ERC-721</option>
-            <option value="2">ERC-1155</option>
-          </select>
-        </label>
-        <label className="block text-sm text-muted">
-          Click URL
-          <input name="clickUrl" className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink" />
-        </label>
-        <button
-          type="submit"
-          disabled={isPending}
-          className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-accent-ink disabled:opacity-40"
-        >
-          Register NFT
-        </button>
-      </form>
-
-      <form
-        onSubmit={(e) => void requestApproval(e)}
-        className="space-y-3 rounded-2xl border border-line bg-surface p-5"
-      >
-        <h2 className="font-medium">Request approval</h2>
-        <label className="block text-sm text-muted">
-          Publisher
-          <input name="publisher" className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink" />
-        </label>
-        <label className="block text-sm text-muted">
-          Creative
-          {(dash.data?.creativeIds.length ?? 0) > 0 ? (
-            <select
-              name="creativeId"
-              className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
-            >
-              {dash.data?.creativeIds.map((id) => (
-                <option key={id} value={id}>
-                  #{id}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              name="creativeId"
-              className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
-              aria-label="Creative id"
-            />
-          )}
-        </label>
-        <button
-          type="submit"
-          disabled={isPending}
-          className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-accent-ink disabled:opacity-40"
-        >
-          Request
-        </button>
-      </form>
+      {openDialog && <OpenCampaignDialog onClose={() => setOpenDialog(false)} />}
+      {topUpId && <TopUpDialog campaignId={topUpId} onClose={() => setTopUpId(null)} />}
     </div>
   );
 }

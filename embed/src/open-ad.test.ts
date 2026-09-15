@@ -16,6 +16,7 @@ const LEASE: ServeResponse = {
     alt: 'Sponsored',
   },
   lease: { advertiser: '0x' + 'bb'.repeat(20), expiresAt: '2026-09-15T00:00:00Z' },
+  campaign: null,
   ttl: 30,
 };
 
@@ -67,7 +68,26 @@ describe('<open-ad>', () => {
     expect(events).toEqual(['lease']);
   });
 
-  it('falls back to house attributes on network error and emits openad:error', async () => {
+  it('renders a campaign creative the same as a lease', async () => {
+    const campaign: ServeResponse = {
+      ...LEASE,
+      status: 'campaign',
+      lease: null,
+      campaign: { advertiser: LEASE.lease!.advertiser, campaignId: '3' },
+      creative: {
+        ...LEASE.creative!,
+        clickUrl: 'http://api.test/v1/c/tok',
+      },
+    };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(campaign));
+    const el = mount({ 'slot-id': '1', api: 'http://api.test' });
+    await flush();
+    await flush();
+    expect(el.shadowRoot!.querySelector('a')!.getAttribute('href')).toBe('http://api.test/v1/c/tok');
+    expect(el.shadowRoot!.querySelector('img')!.getAttribute('src')).toBe(campaign.creative!.mediaUrl);
+  });
+
+  it('falls back to house attributes when fetch fails', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
     const onError = vi.fn();
     document.body.addEventListener('openad:error', onError);
@@ -91,7 +111,7 @@ describe('<open-ad>', () => {
 
   it('hides the link when the slot is empty and no house ad is configured', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      jsonResponse({ slotId: '3', status: 'empty', creative: null, lease: null, ttl: 30 }),
+      jsonResponse({ slotId: '3', status: 'empty', creative: null, lease: null, campaign: null, ttl: 30 }),
     );
     const el = mount({ 'slot-id': '3', api: 'http://api.test' });
     await flush();

@@ -1,7 +1,9 @@
 import type { SlotOut } from '../lib/api';
+import { SALE_CPC } from './labels';
 
 export function auctionState(slot: SlotOut, now = Math.floor(Date.now() / 1000)): string {
   if (!slot.terms || slot.terms.paused) return 'paused';
+  if (slot.terms.saleMode === SALE_CPC) return 'cpc';
   const start = slot.firstPeriodStart;
   const lead = slot.terms.leadSeconds;
   const period = slot.periodSeconds;

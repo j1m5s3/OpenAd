@@ -22,7 +22,7 @@ def _setup_open_auction(ad_slot, market, registry, publisher, advertiser, *, lea
     with boa.env.prank(publisher):
         sid = ad_slot.mint_slot(WEB)
         ad_slot.set_calendar(sid, period, first)
-        market.set_terms(sid, start_price, floor, lead, sale_end, mode)
+        market.set_terms(sid, start_price, floor, lead, sale_end, mode, 0, 0)
     with boa.env.prank(advertiser):
         cid = registry.register_media("https://cdn.example/a.png", MEDIA_HASH, "image/png", 300, 250, "https://adv.example")
         registry.request_approval(publisher, cid)
@@ -82,7 +82,7 @@ def test_not_open(ad_slot, market, registry, publisher, advertiser):
     with boa.env.prank(publisher):
         sid = ad_slot.mint_slot(WEB)
         ad_slot.set_calendar(sid, 3600, now + 10_000)
-        market.set_terms(sid, usdc(10), 0, 100, 0, 0)
+        market.set_terms(sid, usdc(10), 0, 100, 0, 0, 0, 0)
     with boa.reverts("not open"):
         market.price(sid, 0)
     q = market.quote(sid, 0)
@@ -99,14 +99,14 @@ def test_buy_revert_order(ad_slot, market, registry, publisher, advertiser, usdc
             market.buy(sid, 0, 1, usdc(1000))
     # 2. paused
     with boa.env.prank(publisher):
-        market.set_terms(sid, usdc(100), usdc(10), 3600, 0, 0)
+        market.set_terms(sid, usdc(100), usdc(10), 3600, 0, 0, 0, 0)
         market.set_paused(sid, True)
     with boa.env.prank(advertiser):
         with boa.reverts("paused"):
             market.buy(sid, 0, 1, usdc(1000))
     with boa.env.prank(publisher):
         market.set_paused(sid, False)
-        market.set_terms(sid, usdc(100), usdc(10), 3600, boa.env.evm.patch.timestamp + 10, 0)
+        market.set_terms(sid, usdc(100), usdc(10), 3600, boa.env.evm.patch.timestamp + 10, 0, 0, 0)
     with boa.env.prank(advertiser):
         with boa.reverts("beyond sale end"):
             market.buy(sid, 0, 1, usdc(1000))
@@ -197,6 +197,19 @@ def test_buy_with_permit_preconsumed_still_works_with_allowance(
     assert ad_slot.lease_of(sid, 0).user == advertiser
 
 
+def test_cpc_mode_buy_quote_and_price(ad_slot, market, registry, publisher, advertiser):
+    with boa.env.prank(publisher):
+        sid = ad_slot.mint_slot(WEB)
+        market.set_terms(sid, 0, 0, 0, 0, 0, 1, 100_000)
+    q = market.quote(sid, 0)
+    assert q.sellable is False and q.reason == "cpc mode"
+    with boa.reverts("cpc mode"):
+        market.price(sid, 0)
+    with boa.env.prank(advertiser):
+        with boa.reverts("cpc mode"):
+            market.buy(sid, 0, 1, usdc(1000))
+
+
 def test_quote_sellable(ad_slot, market, registry, publisher, advertiser):
     sid, cid, _ = _setup_open_auction(ad_slot, market, registry, publisher, advertiser)
     q = market.quote(sid, 0)
@@ -235,7 +248,7 @@ def test_price_bounds_and_monotonic(t):
         lead = 1000
         first = boa.env.evm.patch.timestamp + lead
         slot.set_calendar(sid, 3600, first)
-        m.set_terms(sid, usdc(100), usdc(10), lead, 0, 0)
+        m.set_terms(sid, usdc(100), usdc(10), lead, 0, 0, 0, 0)
     boa.env.time_travel(seconds=min(t, 999))
     p = m.price(sid, 0)
     assert usdc(10) <= p <= usdc(100)

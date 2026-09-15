@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openad.errors import ForbiddenError, NotFoundError
 from openad.models import (
     Approval,
+    Campaign,
+    CampaignSettlement,
     Creative,
     CreativeVerification,
     Lease,
@@ -16,7 +18,15 @@ from openad.models import (
     Terms,
 )
 from openad.schemas.creative import CreativeOut
-from openad.schemas.dashboard import AdvertiserOut, ApprovalOut, PublisherOut, ServeCountOut
+from openad.schemas.dashboard import (
+    AdvertiserOut,
+    ApprovalOut,
+    CampaignOut,
+    CampaignSettleOut,
+    PublisherOut,
+    ServeCountOut,
+)
+from openad.services.indexed import protocol_indexed_block
 
 
 async def get_creative(session: AsyncSession, creative_id: int) -> CreativeOut:
@@ -51,7 +61,11 @@ async def require_advertiser(session: AsyncSession, creative_id: int, address: s
 
 async def publisher_dashboard(session: AsyncSession, address: str) -> PublisherOut:
     addr = address.lower()
-    slots = (await session.execute(select(Slot).where(Slot.owner == addr))).scalars().all()
+    head = await protocol_indexed_block(session)
+    slot_stmt = select(Slot).where(Slot.owner == addr)
+    if head is not None:
+        slot_stmt = slot_stmt.where(Slot.updated_block <= head)
+    slots = (await session.execute(slot_stmt)).scalars().all()
     approvals = (
         (await session.execute(select(Approval).where(Approval.publisher == addr))).scalars().all()
     )
@@ -63,6 +77,16 @@ async def publisher_dashboard(session: AsyncSession, address: str) -> PublisherO
             .all()
         )
         earnings += sum(int(row.price or 0) - int(row.fee or 0) for row in leases)
+        settles = (
+            (
+                await session.execute(
+                    select(CampaignSettlement).where(CampaignSettlement.slot_id == slot.slot_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        earnings += sum(int(row.charged) - int(row.fee) for row in settles)
     return PublisherOut(
         address=addr,
         slot_ids=[str(s.slot_id) for s in slots],
@@ -92,10 +116,15 @@ async def list_approvals(session: AsyncSession, address: str) -> list[ApprovalOu
 
 async def advertiser_dashboard(session: AsyncSession, address: str) -> AdvertiserOut:
     addr = address.lower()
-    creatives = (
-        (await session.execute(select(Creative).where(Creative.advertiser == addr))).scalars().all()
-    )
-    leases = (await session.execute(select(Lease).where(Lease.user == addr))).scalars().all()
+    head = await protocol_indexed_block(session)
+    creative_stmt = select(Creative).where(Creative.advertiser == addr)
+    if head is not None:
+        creative_stmt = creative_stmt.where(Creative.updated_block <= head)
+    creatives = (await session.execute(creative_stmt)).scalars().all()
+    lease_stmt = select(Lease).where(Lease.user == addr)
+    if head is not None:
+        lease_stmt = lease_stmt.where(Lease.block_number <= head)
+    leases = (await session.execute(lease_stmt)).scalars().all()
     counts: list[ServeCountOut] = []
     for lease in leases:
         n = (
@@ -116,11 +145,63 @@ async def advertiser_dashboard(session: AsyncSession, address: str) -> Advertise
                 serves=int(n),
             )
         )
+    camp_stmt = select(Campaign).where(Campaign.advertiser == addr)
+    if head is not None:
+        camp_stmt = camp_stmt.where(Campaign.updated_block <= head)
+    camps = (await session.execute(camp_stmt)).scalars().all()
+    campaign_out: list[CampaignOut] = []
+    for camp in camps:
+        n = (
+            await session.execute(
+                select(func.count())
+                .select_from(ServeEvent)
+                .where(
+                    ServeEvent.campaign_id == camp.campaign_id,
+                    ServeEvent.served_kind == "campaign",
+                )
+            )
+        ).scalar_one()
+        settles = (
+            (
+                await session.execute(
+                    select(CampaignSettlement).where(
+                        CampaignSettlement.campaign_id == camp.campaign_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        campaign_out.append(
+            CampaignOut(
+                campaign_id=str(camp.campaign_id),
+                slot_id=str(camp.slot_id),
+                creative_id=str(camp.creative_id),
+                max_cpc=str(camp.max_cpc),
+                remaining=str(camp.remaining),
+                budget=str(camp.budget),
+                paused=camp.paused,
+                closed=camp.closed,
+                close_after=camp.close_after,
+                serves=int(n),
+                settlements=[
+                    CampaignSettleOut(
+                        batch_id=row.batch_id,
+                        charged=str(row.charged),
+                        fee=str(row.fee),
+                        payable_clicks=row.payable_clicks,
+                        slot_id=str(row.slot_id),
+                    )
+                    for row in settles
+                ],
+            )
+        )
     return AdvertiserOut(
         address=addr,
         creative_ids=[str(c.creative_id) for c in creatives],
         lease_count=len(leases),
         delivery=counts,
+        campaigns=campaign_out,
     )
 
 

@@ -19,6 +19,7 @@ from tests.helpers import usdc
 PUBLISHER_KEY = "0x" + "11" * 32
 ADVERTISER_KEY = "0x" + "22" * 32
 TREASURY_KEY = "0x" + "33" * 32
+SETTLER_KEY = "0x" + "44" * 32
 
 
 @pytest.fixture(scope="session")
@@ -39,6 +40,11 @@ def advertiser() -> str:
 @pytest.fixture(scope="session")
 def treasury() -> str:
     return Account.from_key(TREASURY_KEY).address
+
+
+@pytest.fixture(scope="session")
+def settler() -> str:
+    return Account.from_key(SETTLER_KEY).address
 
 
 @pytest.fixture(scope="session")
@@ -81,3 +87,17 @@ def market(usdc_token, ad_slot, registry, treasury):
     m.set_treasury(treasury)
     m.set_fee_bps(250)
     return m
+
+
+@pytest.fixture
+def vault(usdc_token, ad_slot, registry, market, treasury, settler):
+    from src import CampaignVault
+
+    v = CampaignVault.deploy(
+        usdc_token.address, ad_slot.address, registry.address, market.address
+    )
+    market.set_campaign_vault(v.address)
+    v.set_treasury(treasury)
+    v.set_fee_bps(250)
+    v.set_settler(settler)
+    return v

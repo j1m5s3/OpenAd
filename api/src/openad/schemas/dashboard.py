@@ -28,6 +28,29 @@ class AdvertiserOut(ApiModel):
     creative_ids: list[str]
     lease_count: int
     delivery: list[ServeCountOut]
+    campaigns: list[CampaignOut]
+
+
+class CampaignSettleOut(ApiModel):
+    batch_id: str
+    charged: str
+    fee: str
+    payable_clicks: int
+    slot_id: str
+
+
+class CampaignOut(ApiModel):
+    campaign_id: str
+    slot_id: str
+    creative_id: str
+    max_cpc: str
+    remaining: str
+    budget: str
+    paused: bool
+    closed: bool
+    close_after: int
+    serves: int
+    settlements: list[CampaignSettleOut]
 
 
 class HouseAdIn(ApiModel):

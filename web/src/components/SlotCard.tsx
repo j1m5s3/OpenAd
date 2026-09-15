@@ -5,7 +5,7 @@ import type { SlotOut } from '../lib/api';
 import { auctionOpenAt, auctionState } from '../lib/auction';
 import { withDevWalletParam } from '../lib/devWalletQuery';
 import { formatDuration, formatTimeLeft, formatUsdc, shortAddress } from '../lib/format';
-import { kindLabel } from '../lib/labels';
+import { kindLabel, SALE_CPC, saleModeLabel } from '../lib/labels';
 
 export function SlotCard({ slot }: { slot: SlotOut }) {
   const state = auctionState(slot);
@@ -28,19 +28,23 @@ export function SlotCard({ slot }: { slot: SlotOut }) {
         <div className="flex items-center justify-between gap-2">
           <p className="truncate font-medium">{slot.domain}</p>
           <span className="rounded-full border border-line px-2 py-0.5 text-xs capitalize text-muted">
-            {state}
+            {state === 'cpc' ? 'CPC' : state}
           </span>
         </div>
         <p className="text-sm text-muted">
           {kindLabel(slot.kind)} · {shortAddress(slot.owner)}
         </p>
         <p className="text-sm">
-          {slot.terms
-            ? `From ${formatUsdc(BigInt(slot.terms.floorPrice))} · opens at ${formatUsdc(BigInt(slot.terms.startPrice), { symbol: false })}`
-            : 'No terms yet'}
+          {slot.terms?.saleMode === SALE_CPC
+            ? `${saleModeLabel(SALE_CPC)} · floor ${formatUsdc(BigInt(slot.terms.floorCpc ?? '0'))}`
+            : slot.terms
+              ? `From ${formatUsdc(BigInt(slot.terms.floorPrice))} · opens at ${formatUsdc(BigInt(slot.terms.startPrice), { symbol: false })}`
+              : 'No terms yet'}
         </p>
         <p className="text-xs text-muted">
-          Period {slot.periodSeconds ? formatDuration(slot.periodSeconds) : '—'}
+          {slot.terms?.saleMode === SALE_CPC
+            ? 'Campaigns compete at serve'
+            : `Period ${slot.periodSeconds ? formatDuration(slot.periodSeconds) : '—'}`}
           {state === 'upcoming' && openAt != null ? ` · live ${formatTimeLeft(openAt)}` : null}
           {state === 'live' && slot.firstPeriodStart != null
             ? ` · period starts ${formatTimeLeft(slot.firstPeriodStart)}`

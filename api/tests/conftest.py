@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openad.config import Settings
 from openad.db.session import Database
 from openad.main import create_app
-from openad.models import Creative, CreativeVerification, HouseAd, Lease, Slot, Terms
+from openad.models import Campaign, Creative, CreativeVerification, HouseAd, Lease, Slot, Terms
 from openad.models.creative import KIND_MEDIA
 from openad.models.offchain import VERIFY_VERIFIED
 
@@ -151,6 +151,8 @@ def make_terms(
     floor_price: int = 1_000_000,
     lead_seconds: int = 3600,
     paused: bool = False,
+    sale_mode: int = 0,
+    floor_cpc: int = 0,
 ) -> Terms:
     return Terms(
         slot_id=slot_id,
@@ -159,6 +161,39 @@ def make_terms(
         lead_seconds=lead_seconds,
         sale_end=0,
         approval_mode=0,
+        sale_mode=sale_mode,
+        floor_cpc=floor_cpc,
         paused=paused,
         updated_block=1,
+    )
+
+
+def make_campaign(
+    slot_id: int = 1,
+    campaign_id: int = 1,
+    *,
+    advertiser: str = ADVERTISER,
+    creative_id: int = 7,
+    max_cpc: int = 1_000_000,
+    remaining: int = 10_000_000,
+    paused: bool = False,
+    close_after: int = 0,
+    closed: bool = False,
+) -> Campaign:
+    return Campaign(
+        campaign_id=campaign_id,
+        advertiser=advertiser,
+        slot_id=slot_id,
+        creative_id=creative_id,
+        max_cpc=max_cpc,
+        remaining=remaining,
+        budget=remaining,
+        valid_from=0,
+        valid_until=0,
+        paused=paused,
+        close_after=close_after,
+        closed=closed,
+        opened_tx=TX,
+        opened_block=2,
+        updated_block=2,
     )

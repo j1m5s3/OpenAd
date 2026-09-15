@@ -20,6 +20,8 @@ function slot(over: Partial<SlotOut> = {}): SlotOut {
       leadSeconds: 3600,
       saleEnd: 0,
       approvalMode: 0,
+      saleMode: 0,
+      floorCpc: '0',
       paused: false,
     },
     ...over,
@@ -37,6 +39,8 @@ describe('auctionState', () => {
             leadSeconds: 1,
             saleEnd: 0,
             approvalMode: 0,
+            saleMode: 0,
+            floorCpc: '0',
             paused: true,
           },
         }),
@@ -52,5 +56,25 @@ describe('auctionState', () => {
     expect(auctionState(s, 1_000_000 + 10)).toBe('remainder');
     expect(auctionState(s, 1_000_000 + 4000)).toBe('ended');
     expect(auctionOpenAt(s)).toBe(1_000_000 - 3600);
+  });
+
+  it('classifies CPC slots without Dutch auction states', () => {
+    expect(
+      auctionState(
+        slot({
+          terms: {
+            startPrice: '0',
+            floorPrice: '0',
+            leadSeconds: 0,
+            saleEnd: 0,
+            approvalMode: 0,
+            saleMode: 1,
+            floorCpc: '100000',
+            paused: false,
+          },
+        }),
+        1_000_000,
+      ),
+    ).toBe('cpc');
   });
 });

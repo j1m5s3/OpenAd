@@ -51,6 +51,7 @@ interface AdSlotContract:
     def spec_of(slot_id: uint256) -> SlotSpec: view
     def lease_of(slot_id: uint256, period_index: uint256) -> Lease: view
     def calendar_of(slot_id: uint256) -> Calendar: view
+    def last_leased_end_of(slot_id: uint256) -> uint64: view
     def set_lease(slot_id: uint256, period_index: uint256, user: address, creative_id: uint256): nonpayable
 
 interface RegistryContract:
@@ -59,6 +60,9 @@ interface RegistryContract:
     def is_active(creative_id: uint256) -> bool: view
     def is_blocked_for(publisher: address, creative_id: uint256) -> bool: view
 
+interface VaultContract:
+    def open_campaigns_of(slot_id: uint256) -> uint256: view
+
 event TermsSet:
     slot_id: indexed(uint256)
     start_price: uint256
@@ -66,6 +70,11 @@ event TermsSet:
     lead_seconds: uint64
     sale_end: uint64
     approval_mode: uint8
+    sale_mode: uint8
+    floor_cpc: uint256
+
+event CampaignVaultSet:
+    vault: address
 
 event PausedSet:
     slot_id: indexed(uint256)
@@ -92,6 +101,8 @@ event TreasurySet:
 KIND_MEDIA: constant(uint8) = 0
 APPROVAL_REQUIRED: constant(uint8) = 0
 APPROVAL_WAIVED: constant(uint8) = 1
+SALE_LEASE: constant(uint8) = 0
+SALE_CPC: constant(uint8) = 1
 MAX_FEE_BPS: constant(uint16) = 1000
 BPS_DENOMINATOR: constant(uint256) = 10_000
 
@@ -100,6 +111,7 @@ AD_SLOT: public(immutable(address))
 REGISTRY: public(immutable(address))
 fee_bps: public(uint16)
 treasury: public(address)
+campaign_vault: public(address)
 terms: HashMap[uint256, IMarketplace.Terms]
 
 
@@ -157,23 +169,40 @@ def set_terms(
     lead_seconds: uint64,
     sale_end: uint64,
     approval_mode: uint8,
+    sale_mode: uint8,
+    floor_cpc: uint256,
 ):
     """
     @notice Set sale terms for a slot. Slot owner only. `paused` is left unchanged.
-    @dev    Reverts "not owner", "bad prices", "bad lead", "bad mode".
+    @dev    Reverts "not owner", "bad mode", "bad prices", "bad lead", "bad floor cpc",
+            "leases outstanding", "campaigns open".
     """
     publisher: address = staticcall AdSlotContract(AD_SLOT).ownerOf(slot_id)
     assert publisher == msg.sender, "not owner"
-    assert start_price >= floor_price, "bad prices"
-    assert lead_seconds > 0, "bad lead"
-    assert approval_mode <= APPROVAL_WAIVED, "bad mode"
-    paused: bool = self.terms[slot_id].paused
+    assert approval_mode <= APPROVAL_WAIVED and sale_mode <= SALE_CPC, "bad mode"
+    if sale_mode == SALE_LEASE:
+        assert start_price >= floor_price, "bad prices"
+        assert lead_seconds > 0, "bad lead"
+    else:
+        assert floor_cpc > 0, "bad floor cpc"
+    prev: IMarketplace.Terms = self.terms[slot_id]
+    if prev.sale_mode != SALE_CPC and sale_mode == SALE_CPC:
+        last_end: uint64 = staticcall AdSlotContract(AD_SLOT).last_leased_end_of(slot_id)
+        assert convert(last_end, uint256) <= block.timestamp, "leases outstanding"
+    if prev.sale_mode == SALE_CPC and sale_mode != SALE_CPC:
+        vault: address = self.campaign_vault
+        if vault != empty(address):
+            open_n: uint256 = staticcall VaultContract(vault).open_campaigns_of(slot_id)
+            assert open_n == 0, "campaigns open"
+    paused: bool = prev.paused
     self.terms[slot_id] = IMarketplace.Terms(
         start_price=start_price,
         floor_price=floor_price,
         lead_seconds=lead_seconds,
         sale_end=sale_end,
         approval_mode=approval_mode,
+        sale_mode=sale_mode,
+        floor_cpc=floor_cpc,
         paused=paused,
     )
     log TermsSet(
@@ -183,6 +212,8 @@ def set_terms(
         lead_seconds=lead_seconds,
         sale_end=sale_end,
         approval_mode=approval_mode,
+        sale_mode=sale_mode,
+        floor_cpc=floor_cpc,
     )
 
 
@@ -238,6 +269,7 @@ def buy_with_permit(
 @internal
 def _buy(slot_id: uint256, period_index: uint256, creative_id: uint256, max_price: uint256):
     t: IMarketplace.Terms = self.terms[slot_id]
+    assert t.sale_mode != SALE_CPC, "cpc mode"
     assert t.lead_seconds > 0, "no terms"
     assert not t.paused, "paused"
     start: uint64 = 0
@@ -299,6 +331,15 @@ def set_treasury(treasury: address):
 
 
 @external
+def set_campaign_vault(vault: address):
+    """@notice Wire CampaignVault for CPC mode-switch checks. Owner. Reverts "bad vault"."""
+    ownable._check_owner()
+    assert vault != empty(address), "bad vault"
+    self.campaign_vault = vault
+    log CampaignVaultSet(vault=vault)
+
+
+@external
 @view
 def terms_of(slot_id: uint256) -> IMarketplace.Terms:
     return self.terms[slot_id]
@@ -307,8 +348,9 @@ def terms_of(slot_id: uint256) -> IMarketplace.Terms:
 @external
 @view
 def price(slot_id: uint256, period_index: uint256) -> uint256:
-    """@notice Current Dutch or remainder price. Reverts "no terms", "not open", "closed"."""
+    """@notice Current Dutch or remainder price. Reverts "cpc mode", "no terms", "not open", "closed"."""
     t: IMarketplace.Terms = self.terms[slot_id]
+    assert t.sale_mode != SALE_CPC, "cpc mode"
     assert t.lead_seconds > 0, "no terms"
     start: uint64 = 0
     end: uint64 = 0
@@ -330,6 +372,9 @@ def quote(slot_id: uint256, period_index: uint256) -> IMarketplace.Quote:
         end=0,
     )
     t: IMarketplace.Terms = self.terms[slot_id]
+    if t.sale_mode == SALE_CPC:
+        empty_q.reason = "cpc mode"
+        return empty_q
     if t.lead_seconds == 0:
         empty_q.reason = "no terms"
         return empty_q

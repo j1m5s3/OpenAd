@@ -18,6 +18,8 @@ the matching `.mdc` file.
 5. **No custodial paths.** Nothing in `api` or `web` signs chain transactions for users or holds
    keys that can move funds or write leases. If a feature seems to need that, stop and write an ADR.
    The opt-in `sim/` daemon may hold public Foundry Anvil keys for chain 31337 only (ADR-0012).
+   The CPC settler process (ADR-0014) may hold `OPENAD_SETTLER_KEY` and may only
+   `settle_batch`; it is not the HTTP API.
 6. **Serving never touches the chain.** `api/src/openad/serve/` must not import `openad.chain`.
 7. **Money is integers.** USDC base units as `uint256` / Python `int` / TS `bigint` until the
    formatting layer. Never floats.
@@ -89,6 +91,9 @@ the matching `.mdc` file.
   TanStack Query (`queryKey` factories in the feature's `api.ts`). Chain writes via wagmi hooks
   only, with ABIs from `src/lib/deployments.ts`. Money as `bigint`; format in `src/lib/format.ts`.
   Tailwind tokens live in `src/styles/`. Do not use ad-hoc hex colours that a token could express.
+  Nav labels: Discover, Supply, Campaigns; optional external Guide when `VITE_GUIDE_URL` is set
+  (ADR-0015). In-app how-to copy lives in `src/lib/copy.ts`; shared `FieldHint` / `Wizard` in
+  `src/components/`.
 - **embed**: zero runtime dependencies; no framework; ES2020; shadow DOM; must pass
   `scripts/check-size.mjs` (≤ 5 KB gzipped). Only network target is `/v1/serve`. The serve JSON
   type in `embed/src/types.ts` must match `api/src/openad/schemas/serve.py`.

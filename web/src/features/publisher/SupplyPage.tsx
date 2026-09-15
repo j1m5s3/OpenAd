@@ -1,19 +1,19 @@
 import type { FormEvent, ReactNode } from 'react';
-import { useState } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
+import { useState } from 'react';
 
+import { Field, FieldLabel } from '../../components/Field';
 import { api, API_URL } from '../../lib/api';
-import { formatDuration, formatUsdc, parseUsdc } from '../../lib/format';
+import { formatUsdc, parseUsdc } from '../../lib/format';
 import { getContract, hasProtocol } from '../../lib/deployments';
 import {
-  APPROVAL_MODE_LABEL,
-  KIND_LABEL,
+  SALE_CPC,
   approvalStatusLabel,
   datetimeLocalToUnix,
-  unixToDatetimeLocal,
 } from '../../lib/labels';
 import { targetChainId } from '../../lib/wagmi';
 import { approvalActionLabel } from './components/ApproveDialog';
+import { SlotSetupWizard } from './components/SlotSetupWizard';
 import { usePublisher, usePublisherApprovals } from './api';
 
 export function SupplyPage() {
@@ -23,6 +23,7 @@ export function SupplyPage() {
   const approvals = usePublisherApprovals(address);
   const { writeContractAsync, isPending } = useWriteContract();
   const [msg, setMsg] = useState<string | null>(null);
+  const lastSlotId = pub.data?.slotIds.at(-1) ?? '1';
 
   async function mint(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -64,16 +65,21 @@ export function SupplyPage() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const market = getContract(targetChainId, 'Marketplace');
+    const saleMode = Number(fd.get('saleMode'));
+    const approvalMode = Number(fd.get('approvalMode'));
+    const cpc = saleMode === SALE_CPC;
     await writeContractAsync({
       ...market,
       functionName: 'set_terms',
       args: [
         BigInt(String(fd.get('slotId'))),
-        parseUsdc(String(fd.get('startPrice'))),
-        parseUsdc(String(fd.get('floorPrice'))),
-        BigInt(String(fd.get('leadSeconds'))),
+        cpc ? 0n : parseUsdc(String(fd.get('startPrice'))),
+        cpc ? 0n : parseUsdc(String(fd.get('floorPrice'))),
+        cpc ? 0n : BigInt(String(fd.get('leadSeconds'))),
         0n,
-        Number(fd.get('approvalMode')),
+        approvalMode,
+        saleMode,
+        cpc ? parseUsdc(String(fd.get('floorCpc'))) : 0n,
       ],
     });
     setMsg('Terms submitted');
@@ -144,8 +150,9 @@ export function SupplyPage() {
         <p className="text-sm text-accent">Publisher</p>
         <h1 className="mt-1 text-3xl font-semibold">Supply</h1>
         <p className="mt-2 text-muted">
-          Mint slots, set calendars and terms, approve creatives. Proceeds arrive in the same buy
-          transaction — no Net-60 invoice.
+          Mint slots, set calendars and terms (Lease Dutch or CPC), approve creatives. Lease
+          proceeds arrive in the same buy transaction; CPC proceeds arrive when the settler
+          settles payable clicks — no Net-60 invoice.
         </p>
       </div>
       {!isConnected && <p className="text-muted">Connect the wallet that owns your slots.</p>}
@@ -165,71 +172,25 @@ export function SupplyPage() {
       </section>
 
       <FormCard title="Pricing suggestion" onSubmit={(e) => void suggest(e)} pending={false}>
-        <Field name="slotId" label="Slot id" defaultValue="1" />
+        <Field name="slotId" label="Slot id" defaultValue="1" hintKey="pricingSlotId" />
       </FormCard>
 
-      <FormCard title="Mint slot" onSubmit={(e) => void mint(e)} pending={isPending}>
-        <Field name="domain" label="Domain" placeholder="example.com" />
-        <Field name="width" label="Width (px)" defaultValue="300" />
-        <Field name="height" label="Height (px)" defaultValue="250" />
-        <label className="block text-sm text-muted">
-          Kind
-          <select
-            name="kind"
-            defaultValue="0"
-            className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
-          >
-            {Object.entries(KIND_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </FormCard>
-
-      <FormCard title="Calendar" onSubmit={(e) => void setCalendar(e)} pending={isPending}>
-        <Field name="slotId" label="Slot id" defaultValue="1" />
-        <Field name="periodSeconds" label="Period length (seconds)" defaultValue="86400" />
-        <p className="text-xs text-muted">86400 = 1 day. {formatDuration(86400)} is typical.</p>
-        <Field
-          name="firstStart"
-          label="First period start"
-          type="datetime-local"
-          defaultValue={unixToDatetimeLocal(Math.floor(Date.now() / 1000) + 3600)}
-        />
-      </FormCard>
-
-      <FormCard title="Terms" onSubmit={(e) => void setTerms(e)} pending={isPending}>
-        <Field name="slotId" label="Slot id" defaultValue="1" />
-        <Field name="startPrice" label="Start USDC" defaultValue="10" />
-        <Field name="floorPrice" label="Floor USDC" defaultValue="1" />
-        <Field name="leadSeconds" label="Lead time (seconds)" defaultValue="3600" />
-        <p className="text-xs text-muted">
-          Auction opens this long before the period. 3600 = {formatDuration(3600)}.
-        </p>
-        <label className="block text-sm text-muted">
-          Approval mode
-          <select
-            name="approvalMode"
-            defaultValue="0"
-            className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
-          >
-            {Object.entries(APPROVAL_MODE_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </FormCard>
+      <SlotSetupWizard
+        pending={isPending}
+        defaultSlotId={lastSlotId}
+        onMint={mint}
+        onCalendar={setCalendar}
+        onTerms={setTerms}
+      />
 
       <FormCard title="Pause sales" onSubmit={(e) => void setPaused(e)} pending={isPending}>
-        <Field name="slotId" label="Slot id" defaultValue="1" />
-        <label className="flex items-center gap-2 text-sm text-muted">
-          <input type="checkbox" name="paused" className="accent-accent" />
-          Paused
-        </label>
+        <Field name="slotId" label="Slot id" defaultValue="1" hintKey="slotId" />
+        <FieldLabel label="Paused" hintKey="paused">
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input type="checkbox" name="paused" className="accent-accent" />
+            Paused
+          </label>
+        </FieldLabel>
       </FormCard>
 
       <section className="rounded-2xl border border-line bg-surface p-5">
@@ -265,7 +226,7 @@ export function SupplyPage() {
       </section>
 
       <FormCard title="Allowlist" onSubmit={(e) => void setAllowlist(e)} pending={isPending}>
-        <Field name="advertiser" label="Advertiser address" placeholder="0x…" />
+        <Field name="advertiser" label="Advertiser address" placeholder="0x…" hintKey="advertiserAllowlist" />
         <label className="flex items-center gap-2 text-sm text-muted">
           <input type="checkbox" name="allowed" defaultChecked className="accent-accent" />
           Allowed
@@ -273,13 +234,13 @@ export function SupplyPage() {
       </FormCard>
 
       <FormCard title="House ad" onSubmit={(e) => void saveHouse(e)} pending={false}>
-        <Field name="slotId" label="Slot id" defaultValue="1" />
-        <Field name="mediaUrl" label="Media URL" placeholder="https://" />
-        <Field name="clickUrl" label="Click URL" placeholder="https://" />
+        <Field name="slotId" label="Slot id" defaultValue="1" hintKey="slotId" />
+        <Field name="mediaUrl" label="Media URL" placeholder="https://" hintKey="houseMediaUrl" />
+        <Field name="clickUrl" label="Click URL" placeholder="https://" hintKey="houseClickUrl" />
       </FormCard>
 
       <FormCard title="Domain verification" onSubmit={(e) => void verifyDomain(e)} pending={false}>
-        <Field name="slotId" label="Slot id" defaultValue="1" />
+        <Field name="slotId" label="Slot id" defaultValue="1" hintKey="verifyDomain" />
       </FormCard>
 
       <section className="rounded-2xl border border-line bg-surface p-5">
@@ -317,32 +278,5 @@ function FormCard({
         Submit
       </button>
     </form>
-  );
-}
-
-function Field({
-  name,
-  label,
-  defaultValue,
-  placeholder,
-  type = 'text',
-}: {
-  name: string;
-  label: string;
-  defaultValue?: string;
-  placeholder?: string;
-  type?: string;
-}) {
-  return (
-    <label className="block text-sm text-muted">
-      {label}
-      <input
-        name={name}
-        type={type}
-        defaultValue={defaultValue}
-        placeholder={placeholder}
-        className="mt-1 w-full rounded-xl border border-line bg-canvas px-3 py-2 text-ink"
-      />
-    </label>
   );
 }

@@ -10,11 +10,13 @@ around the contracts.
 
 ```text
 OpenAd/
-├── contracts/   Vyper + Moccasin.  AdSlot, Marketplace, CreativeRegistry, MockUSDC.   → deployments/<chainId>.json
-├── api/         Python (FastAPI).  Three processes from one package `openad`:
+├── contracts/   Vyper + Moccasin.  AdSlot, Marketplace, CreativeRegistry, MockUSDC,
+│                CampaignVault (ADR-0014).   → deployments/<chainId>.json
+├── api/         Python (FastAPI).  Four processes from one package `openad`:
 │                  • api      – read API + auth + publisher/advertiser write helpers (off-chain data only)
 │                  • serve    – GET /v1/serve/{slot_id} and /media  (may later move to a CDN worker)
 │                  • indexer  – event → Postgres worker
+│                  • settler  – CPC `settle_batch` signer (ADR-0014). Not the HTTP API.
 ├── web/         Vite + React + TypeScript + Tailwind + RainbowKit + wagmi. Discover, Supply, Campaigns.
 ├── embed/       Vanilla TypeScript web component <open-ad>.  Zero dependencies.  Talks only to /v1/serve.
 ├── e2e/         Playwright + YAML scenarios (ADR-0010). Mock EIP-1193 wallets.
@@ -112,12 +114,14 @@ Chain-derived (rebuildable):
 | Table                 | Key                                         | Source events                                                                                 |
 | --------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `slots`               | `slot_id`                                   | `SlotMinted`, `Transfer` (owner), `CalendarSet` (version, period_seconds, first_period_start) |
-| `terms`               | `slot_id`                                   | `TermsSet`, `PausedSet`                                                                       |
+| `terms`               | `slot_id`                                   | `TermsSet` (`sale_mode`, `floor_cpc`, prices), `PausedSet`                                    |
 | `leases`              | `(slot_id, calendar_version, period_index)` | `LeaseSet` + `Purchased` (price, fee, approval_mode, tx hash)                                 |
 | `creatives`           | `creative_id`                               | `CreativeRegistered`, `NftCreativeRegistered`, `CreativeRevoked`                              |
 | `approvals`           | `(publisher, creative_id)`                  | `ApprovalRequested`, `ApprovalSet`                                                            |
 | `allowed_advertisers` | `(publisher, advertiser)`                   | `AdvertiserAllowed`                                                                           |
-| `protocol_config`     | singleton per chain                         | `MarketSet`, `FeeSet`, `TreasurySet`, `ModeratorSet`                                          |
+| `protocol_config`     | singleton per chain                         | `MarketSet`, `FeeSet`, `TreasurySet`, `ModeratorSet`, `CampaignVaultSet`, vault owner events  |
+| `campaigns`           | `campaign_id`                               | `CampaignOpened` + top-up / max CPC / pause / close / finalize                                |
+| `campaign_settlements`| `batch_id`                                  | `Settled`                                                                                     |
 | `indexer_cursor`      | `(chain_id, contract)`                      | last processed block number + hash; one row with `contract = "protocol"` covers all contracts |
 
 Off-chain only:
@@ -127,7 +131,8 @@ Off-chain only:
 | `house_ads`               | Publisher fallback creative per slot (`media_url`, `click_url`). Set via authenticated API.                                                   |
 | `domain_verifications`    | `(slot_id, method, token, verified_at)`. See § 3.6.                                                                                           |
 | `creative_verifications`  | `(creative_id, status, checked_at, cached_path, resolved_image_url, error)`. See § 3.5.                                                       |
-| `serve_events`            | Append-only: `(slot_id, lease key or null, served_kind, origin_ok, at)`. Aggregated for delivery reports. No IPs, no user agents, no cookies. |
+| `serve_events`            | Append-only: `(slot_id, lease key or campaign_id or null, served_kind, origin_ok, at, gsp_cpc?)`. No IPs, no user agents, no cookies. |
+| `click_events`            | Token hash, campaign_id, payable flag, IVT reason, GSP, optional settle batch. No raw IPs. |
 | `auth_nonces`, `sessions` | SIWE login state.                                                                                                                             |
 
 Migrations: Alembic, one revision per PR that touches models. Postgres in dev/prod, SQLite in
@@ -147,7 +152,8 @@ Public reads:
 Serving (public, cacheable):
 
 - `GET /v1/serve/{slot_id}` — JSON described in § 3.4.
-- `GET /v1/serve/{slot_id}/media` — the verified media bytes for the current lease (or house ad), with `Cache-Control` and `ETag`. Advertisers never see visitor traffic.
+- `GET /v1/serve/{slot_id}/media` — the verified media bytes for the current lease, CPC winner, or house ad, with `Cache-Control` and `ETag`. Advertisers never see visitor traffic.
+- `GET /v1/c/{token}` — one-time click token → 302 to the creative `click_url` if valid; 404 otherwise. Not a media proxy.
 
 Authenticated (SIWE session; wallet must match the acting address):
 
@@ -166,7 +172,7 @@ Pydantic model: `api/src/openad/schemas/serve.py`.
 ```json
 {
   "slotId": "42",
-  "status": "lease" | "house" | "empty" | "unknown",
+  "status": "lease" | "campaign" | "house" | "empty" | "unknown",
   "creative": {
     "kind": "image",
     "mediaUrl": "https://api.example/v1/serve/42/media?v=0xabc…",
@@ -176,13 +182,16 @@ Pydantic model: `api/src/openad/schemas/serve.py`.
     "alt": "Sponsored"
   } | null,
   "lease": { "advertiser": "0x…", "expiresAt": "2026-09-15T00:00:00Z" } | null,
+  "campaign": { "advertiser": "0x…", "campaignId": "3" } | null,
   "ttl": 30
 }
 ```
 
 Rules: `ttl` seconds is how long the embed may reuse the response; the API sets
 `Cache-Control: public, max-age=<ttl>`. `mediaUrl` is always same-origin to the API (verified
-cache), never the advertiser's URL. `status = "unknown"` → HTTP 404.
+cache), never the advertiser's URL. `status = "unknown"` → HTTP 404. `status = "campaign"`:
+`campaign` is set, `lease` is null, `clickUrl` is `{api}/v1/c/{token}`
+not the advertiser landing URL. House ads keep the publisher `clickUrl` and are never payable.
 
 Origin enforcement: when `OPENAD_SERVE_ENFORCE_ORIGIN=true`, requests whose `Origin`/`Referer`
 host does not match the slot's `domain` (or a subdomain of it) are answered with the house ad
@@ -225,7 +234,8 @@ weekly. The marketplace UI shows unverified slots with a warning.
 
 ### 3.7 Indexer
 
-- One multi-address `eth_getLogs` per block range covering all three contracts, starting at the
+- One multi-address `eth_getLogs` per block range covering AdSlot, Marketplace,
+  CreativeRegistry, and CampaignVault, starting at the
   lowest `startBlock` in the deployments artifact. Events are applied in global
   `(blockNumber, logIndex)` order, which guarantees cross-contract ordering inside a
   transaction (`AdSlot.LeaseSet` precedes `Marketplace.Purchased`) and during replays.
@@ -236,16 +246,32 @@ weekly. The marketplace UI shows unverified slots with a warning.
 - Batches `OPENAD_INDEXER_BATCH_BLOCKS` (default 2000) per query.
 - Stores a single `(block_number, block_hash)` cursor (`indexer_cursor.contract = "protocol"`);
   on hash mismatch rewinds `OPENAD_INDEXER_REORG_DEPTH` blocks and re-processes. Handlers are
-  therefore idempotent upserts keyed by on-chain identifiers.
+  therefore idempotent upserts keyed by on-chain identifiers. Public list/dashboard reads only
+  include rows whose `updated_block` (or lease `block_number`) is ≤ the protocol cursor, so a
+  stale Postgres cache from a previous Anvil life cannot appear as live inventory. **Chain 31337
+  only:** if the cursor block is missing, or any chain-derived row has a block number past the
+  current chain head (previous Anvil life), the indexer deletes chain-derived rows (and FK
+  dependents) and replays from genesis.
 - One handler per event in `handlers.py`; the list of events must match `PROTOCOL.md` § 6.
-- After `LeaseSet`, `ApprovalSet`, `CreativeRevoked`, `AdvertiserAllowed`, and verification
-  changes, the indexer invalidates the serve cache for affected slots.
+- After `LeaseSet`, `ApprovalSet`, `CreativeRevoked`, `AdvertiserAllowed`, campaign
+  open/pause/close/settle, and verification changes, the indexer invalidates the serve cache
+  for affected slots.
 
 ### 3.8 Configuration
 
 All settings are environment variables with the `OPENAD_` prefix, loaded by `openad.config.Settings`.
 See `.env.example` at the repo root for the full list with defaults. Never read `os.environ`
-directly outside `config.py`.
+directly outside `config.py` (the settler process uses `openad.settler.settings` so
+`OPENAD_SETTLER_KEY` is never a field on HTTP `Settings`). Click vars:
+`OPENAD_CLICK_HMAC_SECRET`, `OPENAD_CLICK_IVT`, `OPENAD_CLICK_MAX_PER_CAMPAIGN_HOUR`
+(default 120), `OPENAD_SETTLER_POLL_SECONDS` (settler process).
+
+### 3.9 Settler process (ADR-0014)
+
+Fourth process from package `openad`: `python -m openad.settler`. Reads payable `click_events`,
+signs `CampaignVault.settle_batch`. Must not run inside the HTTP API process. `web/` never
+loads this key. Indexer has no spending key. `OPENAD_SETTLER_KEY` is loaded only by
+`openad.settler.settings`.
 
 ---
 
@@ -273,6 +299,7 @@ packages. Committed for public networks; `31337.json` is regenerated locally and
     "AdSlot":           { "address": "0x…", "startBlock": 123, "abi": [ … ] },
     "Marketplace":      { "address": "0x…", "startBlock": 124, "abi": [ … ] },
     "CreativeRegistry": { "address": "0x…", "startBlock": 122, "abi": [ … ] },
+    "CampaignVault":    { "address": "0x…", "startBlock": 125, "abi": [ … ] },
     "USDC":             { "address": "0x…", "startBlock": 0,   "abi": [ … ] }
   }
 }
@@ -290,24 +317,27 @@ Consumers: `api` (`OPENAD_DEPLOYMENTS_DIR`, picks `<OPENAD_CHAIN_ID>.json`), `we
   RainbowKit (dark) for connect (ADR-0008). Optional Turnkey when `VITE_TURNKEY_*` is set
   (ADR-0011). SIWE sessions against the API (ADR-0009).
 - Chains: Anvil (`foundry`, 31337), Base Sepolia, Base. Selected by `VITE_CHAIN_ID`.
+- Optional user guide: `VITE_GUIDE_URL` (GitBook or similar). When unset, the header Guide
+  link and “Learn more” deep links are hidden; `FieldHint` copy still renders (ADR-0015).
 - Connectors: RainbowKit defaults (injected, Coinbase Wallet, WalletConnect).
 - Layout:
 
 ```text
 web/src/
   main.tsx            providers: RainbowKit, Wagmi, QueryClient, Router
-  app/                routes + layout shell (Discover / Supply / Campaigns)
+  app/                routes + layout shell (Discover / Supply / Campaigns; optional Guide)
   features/
-    marketplace/      Discover browse + slot page + buy dialog (quote via wagmi, buy via wagmi)
-    publisher/        Supply: mint slot, calendar/terms, approvals, house ad, earnings
-    advertiser/       Campaigns: creatives, approvals requested, leases, delivery report
+    marketplace/      Discover browse + slot page + stepped buy dialog (quote via wagmi, buy via wagmi)
+    publisher/        Supply: slot setup wizard (mint → calendar → terms), approvals, house ad, earnings
+    advertiser/       Campaigns: creative wizard, approvals, leases, stepped CPC fund/top-up/close
     auth/             SIWE sign-in against the API
-  components/         shared presentational components
+  components/         shared presentational components (Field, FieldHint, Wizard, SlotCard, …)
   lib/
     api.ts            typed fetch client for /v1 (OpenAPI types; ROADMAP 3.5)
     wagmi.ts          chains + connectors + transports
     deployments.ts    addresses/ABIs from src/generated/deployments/<chainId>.json
     format.ts         USDC / time formatting helpers (base units in, strings out)
+    copy.ts           in-app field hints, wizard copy, optional GitBook `guideUrl` (ADR-0015)
   styles/             Tailwind entry + design tokens
   generated/          git-ignored; produced by scripts/sync-deployments.mjs
   dev/                ADR-0013 Anvil EIP-1193 forwarder (DEV + localhost + 31337 only)
@@ -336,6 +366,8 @@ web/src/
   requests (media is same-origin to the API).
 - Size budget: **≤ 5 KB gzipped** for `dist/open-ad.js`, enforced by `scripts/check-size.mjs`.
 - Dispatches `openad:render` (`{ slotId, status }`) and `openad:error` events for publishers.
+- `status` may be `"campaign"`; treat like a creative render. Click navigation may 302
+  through `{api}/v1/c/…` (http(s)). No extra embed logic required.
 
 ---
 

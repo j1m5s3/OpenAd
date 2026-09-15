@@ -6,12 +6,19 @@ import { type Persona, personas } from './accounts';
 export async function installMockWallet(page: Page, persona: Persona): Promise<void> {
   const { address } = personas[persona];
   await page.addInitScript((addr: string) => {
+    let unlocked = false;
     const provider = {
       isMetaMask: true,
-      selectedAddress: addr,
+      get selectedAddress() {
+        return unlocked ? addr : undefined;
+      },
       chainId: '0x7a69',
       request: async ({ method }: { method: string }) => {
-        if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [addr];
+        if (method === 'eth_requestAccounts') {
+          unlocked = true;
+          return [addr];
+        }
+        if (method === 'eth_accounts') return unlocked ? [addr] : [];
         if (method === 'eth_chainId') return '0x7a69';
         if (method === 'net_version') return '31337';
         if (method === 'wallet_switchEthereumChain') return null;

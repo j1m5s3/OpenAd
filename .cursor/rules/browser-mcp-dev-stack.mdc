@@ -1,0 +1,35 @@
+---
+description: Confirm the OpenAd local stack before any Playwright or browser MCP live UI session
+alwaysApply: true
+---
+
+# Fresh stack before browser MCP
+
+When you are about to use a Playwright / browser MCP tool against the OpenAd web
+app, confirm the local stack once at the start of the session. Do not restart
+mid-session (Anvil is ephemeral; a restart wipes leases and sim state).
+
+Windows (canonical):
+
+```text
+.\scripts\dev-up.cmd -Embed
+.\scripts\sim-up.cmd
+```
+
+Then confirm:
+
+- API `http://localhost:8000/v1/health` (port 8000)
+- Web `http://localhost:5173` (port 5173)
+- Embed demo `http://localhost:5174` when `-Embed` was used
+- Anvil 8545, Postgres 15432
+- Sim control `http://127.0.0.1:8610` after `sim-up`
+
+Pause the sim tick loop (`sim_pause_loop` paused true) before interactive wallet
+steps so MCP buys do not race sim nonces. Wear `?devwallet=pub-3` … `adv-9` only
+(ADR-0013). Never Anvil `#0`–`#2`.
+
+Never restart for pytest, vitest, `npm run typecheck`, or file-only edits.
+
+If `GetDynamicTools` has no `playwright` namespace after `.cursor/mcp.json` lists
+it, stop headed MCP and tell the user to enable the Playwright MCP server. Scripted
+Playwright in `e2e/` may still run.

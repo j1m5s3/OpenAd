@@ -6,6 +6,7 @@ import { NavLink, Outlet, useNavigate, useSearchParams } from 'react-router';
 import { IndexerLagBanner } from '../components/IndexerLagBanner';
 import { WalletRail } from '../components/WalletRail';
 import { useSiwe } from '../features/auth/useSiwe';
+import { guideUrl } from '../lib/copy';
 import { withDevWalletParam } from '../lib/devWalletQuery';
 import { routes } from './paths';
 
@@ -20,6 +21,7 @@ export function Layout() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [q, setQ] = useState(params.get('q') ?? '');
+  const guideHref = guideUrl();
 
   function onSearch(e: FormEvent) {
     e.preventDefault();
@@ -52,6 +54,16 @@ export function Layout() {
                 {item.label}
               </NavLink>
             ))}
+            {guideHref && (
+              <a
+                href={guideHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-full px-3 py-1.5 text-sm text-muted hover:text-ink"
+              >
+                Guide
+              </a>
+            )}
           </nav>
           <form onSubmit={onSearch} className="ml-auto flex-1 md:block md:max-w-xs">
             <input
@@ -79,6 +91,16 @@ export function Layout() {
               {item.label}
             </NavLink>
           ))}
+          {guideHref && (
+            <a
+              href={guideHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full px-3 py-1 text-sm text-muted"
+            >
+              Guide
+            </a>
+          )}
         </nav>
       </header>
       <IndexerLagBanner />

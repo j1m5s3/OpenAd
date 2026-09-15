@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     session_secret: str = "change-me-in-real-environments"  # noqa: S105 - documented placeholder
     session_ttl_seconds: int = 86400
 
+    # --- CPC clicks (ADR-0014). Settler key is NOT here; see openad.settler.settings.
+    click_hmac_secret: str = "change-me-click-hmac"  # noqa: S105 - documented placeholder
+    click_ivt: bool = True
+    click_max_per_campaign_hour: int = Field(default=120, ge=1)
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

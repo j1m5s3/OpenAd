@@ -1,6 +1,7 @@
 # OpenAd Protocol Specification (v1)
 
-Status: **Implemented** (Anvil via ROADMAP 1.4). Base Sepolia broadcast is optional — see `docs/deploy-sepolia.md`.
+Status: **Implemented** (Anvil via ROADMAP 1.4 for LEASE; ROADMAP 5.2–5.3 for CPC /
+`CampaignVault`). Base Sepolia broadcast is optional — see `docs/deploy-sepolia.md`.
 Signatures are canonical in `contracts/src/interfaces/*.vyi`. Semantics are canonical here.
 If you change one, change the other in the same commit.
 
@@ -10,22 +11,23 @@ Terms are defined in [`GLOSSARY.md`](GLOSSARY.md). Read it first.
 
 ## 1. Overview
 
-Three Vyper contracts on Base, settled in USDC:
+Four Vyper contracts on Base, settled in USDC:
 
 | Contract           | Responsibility                                                                                                    | Owner-of-record            |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------- |
 | `AdSlot`           | ERC-721 collection of slots. Holds each slot's `SlotSpec`, `Calendar`, and `Lease`s. Exposes ERC-4907 read views. | Platform (`set_market`)    |
 | `Marketplace`      | Per-slot sale `Terms`, Dutch pricing, `buy` (payment + fee split + lease write).                                  | Platform (fee/treasury)    |
 | `CreativeRegistry` | Creatives, publisher approvals/allowlists, moderator revocation.                                                  | Platform (`set_moderator`) |
+| `CampaignVault`    | CPC campaign escrow + batch settle (ADR-0014, §11).                                                               | Platform (fee/treasury/settler) |
 
 Design principles (do not violate without an ADR):
 
-1. **Non-custodial.** Publishers and advertisers sign their own transactions. The platform key can only change fee/treasury/moderator/market settings; it can never move user funds or write leases.
-2. **The slot is permanent; the lease is temporary.** Slots are never sold by the protocol; only periods are leased. Publishers may transfer slot NFTs freely (standard ERC-721); leases and future proceeds follow the token.
-3. **One transaction to buy.** Dutch auction, first taker wins, atomic payment + lease. No bids, no escrow, no settle step, no keepers.
-4. **Funds pass through.** `Marketplace` never holds USDC; each buy pushes the fee to the treasury and the remainder to the publisher.
+1. **Non-custodial.** Publishers and advertisers sign their own transactions. The platform key can only change fee/treasury/moderator/market/settler settings; it can never write leases. HTTP `api/` and `web/` never hold keys that move funds. `CampaignVault` (ADR-0014) may hold campaign USDC; only the **settler** EOA may `settle_batch`.
+2. **The slot is permanent; the lease is temporary.** Slots are never sold by the protocol; only periods are leased. Publishers may transfer slot NFTs freely (standard ERC-721); leases and future proceeds follow the token. CPC mode does not write leases.
+3. **One transaction to buy (LEASE mode).** Dutch auction, first taker wins, atomic payment + lease. No bids, no escrow, no settle step, no keepers **on `Marketplace`**.
+4. **Funds pass through `Marketplace`.** `Marketplace` never holds USDC; each buy pushes the fee to the treasury and the remainder to the publisher. CPC budgets escrow in `CampaignVault` (ADR-0014, §11).
 5. **Everything emits an event.** The off-chain indexer must be able to rebuild all read state from logs alone.
-6. **The asset outlives the logic.** `AdSlot` is the permanent contract; `Marketplace` is replaceable via `AdSlot.set_market`. No proxies in v1.
+6. **The asset outlives the logic.** `AdSlot` is the permanent contract; `Marketplace` and `CampaignVault` are replaceable. No proxies in v1.
 
 ---
 
@@ -39,7 +41,7 @@ Design principles (do not violate without an ADR):
 | `AdSlot.set_market`, `set_base_uri`                                          |       ✔        |           |                                 |                |                        |
 | `Marketplace.set_terms`, `set_paused`                                        |                |           |                ✔                |                |                        |
 | `Marketplace.buy`, `buy_with_permit`                                         |                |           |                                 |       ✔        |                        |
-| `Marketplace.set_fee_bps`, `set_treasury`                                    |       ✔        |           |                                 |                |                        |
+| `Marketplace.set_fee_bps`, `set_treasury`, `set_campaign_vault`              |       ✔        |           |                                 |                |                        |
 | `CreativeRegistry.register_media`, `register_nft`                            |                |           |                                 |     anyone     |                        |
 | `CreativeRegistry.request_approval`                                          |                |           |                                 | creative owner |                        |
 | `CreativeRegistry.set_approval`, `revoke_approval`, `set_advertiser_allowed` |                |           | any address, scoped to itself ² |                |                        |
@@ -94,13 +96,19 @@ Constants
 ### 3.2 `Marketplace`
 
 ```text
-Terms                         # per slot; set by publisher; edits affect only future buys
-  start_price:   uint256      # USDC base units; >= floor_price
-  floor_price:   uint256      # USDC base units; may be 0
-  lead_seconds:  uint64       # > 0; auction for a period opens this long before period start
-  sale_end:      uint64       # 0 = no limit; otherwise periods must END at or before this timestamp
-  approval_mode: uint8        # ApprovalMode enum
+Terms                         # per slot; set by publisher; edits affect only future buys / new campaigns
+  start_price:   uint256      # LEASE: USDC; >= floor_price. CPC: unused (0)
+  floor_price:   uint256      # LEASE: USDC; may be 0. CPC: unused (0)
+  lead_seconds:  uint64       # LEASE: > 0. CPC: 0 allowed
+  sale_end:      uint64       # LEASE: 0 = no limit. CPC: unused (campaigns have valid_until)
+  approval_mode: uint8        # ApprovalMode enum (LEASE buy and CPC open_campaign + serve)
+  sale_mode:     uint8        # SaleMode enum
+  floor_cpc:     uint256      # CPC only; > 0 when sale_mode == CPC
   paused:        bool
+
+SaleMode (uint8)
+  0 = LEASE                   # Dutch / remainder `buy` (default)
+  1 = CPC                     # CampaignVault matching; `buy` reverts `"cpc mode"`
 
 ApprovalMode (uint8)
   0 = REQUIRED
@@ -111,9 +119,10 @@ Immutables
   AD_SLOT:  address
   REGISTRY: address
 Storage
-  fee_bps:  uint16            # <= MAX_FEE_BPS
-  treasury: address
-  terms:    HashMap[uint256, Terms]
+  fee_bps:         uint16            # <= MAX_FEE_BPS
+  treasury:        address
+  campaign_vault:  address           # wired after CampaignVault deploy; used for CPC→LEASE checks
+  terms:           HashMap[uint256, Terms]
 Constants
   MAX_FEE_BPS = 1000          # 10%
   BPS_DENOMINATOR = 10_000
@@ -250,21 +259,22 @@ Composition: snekmate `ownable`. `@nonreentrant` on `buy` and `buy_with_permit`.
 
 | Function                                                                              | Access                  | Behaviour                                                                                                                                                                                                                                         |
 | ------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `set_terms(slot_id, start_price, floor_price, lead_seconds, sale_end, approval_mode)` | slot owner              | Requires `start_price >= floor_price`, `lead_seconds > 0`, `approval_mode <= 1`. Overwrites terms; `paused` unchanged. Emits `TermsSet`. Reverts: `"not owner"`, `"bad prices"`, `"bad lead"`, `"bad mode"`.                                      |
+| `set_terms(slot_id, start_price, floor_price, lead_seconds, sale_end, approval_mode, sale_mode, floor_cpc)` | slot owner | Check order: `"not owner"`; `"bad mode"` (`approval_mode > 1` or `sale_mode > 1`); LEASE `"bad prices"` / `"bad lead"` or CPC `"bad floor cpc"`; `"leases outstanding"` (`LEASE → CPC` while `last_leased_end > now`); `"campaigns open"` (`CPC → LEASE` while `CampaignVault.open_campaigns_of > 0`). `paused` unchanged. Emits `TermsSet`. |
 | `set_paused(slot_id, paused)`                                                         | slot owner              | Emits `PausedSet`.                                                                                                                                                                                                                                |
 | `USDC()`, `AD_SLOT()`, `REGISTRY()`                                                   | view                    | Immutable addresses.                                                                                                                                                                                                                              |
-| `fee_bps() -> uint16`, `treasury() -> address`                                        | view                    |                                                                                                                                                                                                                                                   |
-| `terms_of(slot_id) -> Terms`                                                          | view                    | Empty struct (`lead_seconds == 0`) means no terms.                                                                                                                                                                                                |
-| `price(slot_id, period_index) -> uint256`                                             | view                    | § 4.2. Reverts `"no terms"` if `lead_seconds == 0`.                                                                                                                                                                                               |
+| `fee_bps() -> uint16`, `treasury() -> address`, `campaign_vault() -> address`         | view                    |                                                                                                                                                                                                                                                   |
+| `terms_of(slot_id) -> Terms`                                                          | view                    | Configured iff LEASE and `lead_seconds > 0`, or CPC and `floor_cpc > 0`.                                                                                                                                                                          |
+| `price(slot_id, period_index) -> uint256`                                             | view                    | § 4.2. Reverts `"cpc mode"` if `sale_mode == CPC`, else `"no terms"` if `lead_seconds == 0`.                                                                                                                                                       |
 | `quote(slot_id, period_index) -> Quote`                                               | view                    | Non-reverting UI helper: `(sellable: bool, reason: String[32], price, fee, open_at, start, end)`. `reason` is the revert string `buy` would produce, or empty.                                                                                    |
 | `buy(slot_id, period_index, creative_id, max_price)`                                  | anyone (becomes lessee) | See ordered checks below.                                                                                                                                                                                                                         |
 | `buy_with_permit(slot_id, period_index, creative_id, max_price, deadline, v, r, s)`   | anyone                  | Calls `USDC.permit(msg.sender, self, max_price, deadline, v, r, s)` **non-reverting** (a failed permit is ignored; the subsequent `transferFrom` enforces allowance), then behaves as `buy`. Rationale: permit front-running griefing (ADR-0004). |
 | `set_fee_bps(fee_bps)`                                                                | owner                   | Requires `<= MAX_FEE_BPS`. Emits `FeeSet`. Reverts `"fee too high"`.                                                                                                                                                                              |
 | `set_treasury(treasury)`                                                              | owner                   | Requires non-empty. Emits `TreasurySet`. Reverts `"bad treasury"`.                                                                                                                                                                                |
+| `set_campaign_vault(vault)`                                                           | owner                   | Requires non-empty. Emits `CampaignVaultSet`. Reverts `"bad vault"`. Wired after `CampaignVault` deploy (Marketplace cannot take the vault in its constructor).                                                                                    |
 
 `buy` performs these checks **in this order** (tests rely on the order for revert strings):
 
-1. `terms.lead_seconds > 0` else `"no terms"`; `not terms.paused` else `"paused"`.
+1. `terms.sale_mode != CPC` else `"cpc mode"`; `terms.lead_seconds > 0` else `"no terms"`; `not terms.paused` else `"paused"`.
 2. `(start, end) = AD_SLOT.period_window(slot_id, period_index)`; if `terms.sale_end != 0` require `end <= terms.sale_end` else `"beyond sale end"`.
 3. `p = price(...)` (may revert `"not open"` / `"closed"`); require `p <= max_price` else `"price exceeds max"`.
 4. `publisher = AD_SLOT.ownerOf(slot_id)`; `c = REGISTRY.get_creative(creative_id)`; require `c.advertiser == msg.sender` else `"not creative owner"`.
@@ -316,11 +326,26 @@ AdSlot
   Transfer(...)                        # standard ERC-721; indexer tracks current owner (publisher)
 
 Marketplace
-  TermsSet(slot_id: indexed uint256, start_price: uint256, floor_price: uint256, lead_seconds: uint64, sale_end: uint64, approval_mode: uint8)
+  TermsSet(slot_id: indexed uint256, start_price: uint256, floor_price: uint256, lead_seconds: uint64, sale_end: uint64, approval_mode: uint8, sale_mode: uint8, floor_cpc: uint256)
+  CampaignVaultSet(vault: address)
   PausedSet(slot_id: indexed uint256, paused: bool)
   Purchased(slot_id: indexed uint256, period_index: indexed uint256, buyer: indexed address, publisher: address, creative_id: uint256, price: uint256, fee: uint256, approval_mode: uint8, start: uint64, end: uint64)
   FeeSet(fee_bps: uint16)
   TreasurySet(treasury: address)
+
+CampaignVault
+  CampaignOpened(campaign_id: indexed uint256, advertiser: indexed address, slot_id: indexed uint256, creative_id: uint256, max_cpc: uint256, budget: uint256, valid_from: uint64, valid_until: uint64)
+  CampaignToppedUp(campaign_id: indexed uint256, amount: uint256, remaining: uint256)
+  MaxCpcSet(campaign_id: indexed uint256, max_cpc: uint256)
+  CampaignPausedSet(campaign_id: indexed uint256, paused: bool)
+  CloseRequested(campaign_id: indexed uint256, close_after: uint64)
+  CampaignFinalized(campaign_id: indexed uint256, refund: uint256)
+  Settled(campaign_id: indexed uint256, slot_id: uint256, publisher: address, payable_clicks: uint256, charged: uint256, fee: uint256, batch_id: bytes32)
+  SettlerSet(settler: address)
+  VaultFeeSet(fee_bps: uint16)
+  VaultTreasurySet(treasury: address)
+  CloseDelaySet(seconds: uint64)
+  MaxBatchChargeSet(max_batch_charge: uint256)
 
 CreativeRegistry
   CreativeRegistered(creative_id: indexed uint256, advertiser: indexed address, kind: uint8, content_hash: bytes32, uri: String[512], mime: String[64], width: uint16, height: uint16, click_url: String[512])
@@ -336,7 +361,10 @@ CreativeRegistry
 
 ## 7. Serving rule (off-chain, normative)
 
-At time `t`, for slot `s`, the serving edge returns:
+If indexed `terms.sale_mode == CPC`, skip this section and apply §11.4. Mode switch
+forbids an active lease on a CPC slot, so the two rules never both apply.
+
+At time `t`, for slot `s` in **LEASE** mode, the serving edge returns:
 
 1. The **current lease** `L` for `s` (current calendar version, period containing `t`), if any.
 2. If `L` exists, its creative `C` is **serveable** iff all of:
@@ -367,6 +395,11 @@ Property tests (`contracts/tests/`) must cover each of these.
 8. **Approval scoping.** `set_approval`/`revoke_approval`/`set_advertiser_allowed` only ever modify state under `[msg.sender]`.
 9. **Lease validity.** Every lease has `user != empty`, `creative_id > 0`, and was written with `end > block.timestamp` at write time.
 10. **Buy atomicity.** Either the lease is written _and_ both transfers succeed, or nothing changes.
+11. **Vault conservation.** `CampaignVault` USDC balance = sum of `remaining` over `closed == false` campaigns.
+12. **Settle / finalize.** `settle_batch` never increases any `remaining`; `finalize_close` sends exactly the pre-call `remaining` to the advertiser.
+13. **Marketplace vs vault.** `Marketplace` balance is unchanged by `buy`. Vault balance changes only on open / top_up / settle / finalize.
+14. **No CPC leases.** `CampaignVault` never calls `AdSlot.set_lease`.
+15. **Deposits bound payouts.** For each campaign, `charged_usdc + leftover_refund ≤` lifetime deposits.
 
 ---
 
@@ -375,12 +408,13 @@ Property tests (`contracts/tests/`) must cover each of these.
 | Item                                                                  | Status          | Notes                                                                                                                   |
 | --------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Late buy (buy the remainder of a started period at pro-rated floor)   | Implemented     | § 4.2 remainder phase. No new event; `Purchased` already carries `price`. |
+| Dual sale mode + CPC campaigns (`CampaignVault`, GSP, click settle)   | Implemented     | ADR-0014 · §11. Off-chain GSP / click / settler: ROADMAP 5.4–5.7. |
 | Calendar change while leases outstanding                              | Deferred (v2)   | Requires calendar epochs. v1 rule: pause, wait for leases to run out, then `set_calendar`.                              |
-| On-chain refunds / disputes                                           | Deferred        | Delivery is time-based (billboard model). Serve counts are reported off-chain.                                          |
+| On-chain refunds / disputes for **leases**                            | Deferred        | LEASE delivery is time-based. CPC leftover refunds via `finalize_close` (§11).                                          |
 | Approval portability on slot transfer                                 | By design       | Approvals are keyed by publisher address; a new owner starts with none.                                                 |
 | Full ERC-4907 (`setUser`)                                             | By design       | Read views only.                                                                                                        |
 | Pricing autopilot (VRGDA-style adjustment)                            | Implemented     | Publisher-side suggestion API; no protocol change.                                                                      |
-| English / sealed-bid auctions                                         | Deferred        | Only if data shows many simultaneous bidders per period.                                                                |
+| English / sealed-bid **occupancy** auctions                           | Deferred        | ADR-0014 rejects them; CPC matching is not occupancy.                                                                   |
 | Operators (ERC-721 `approve`/`setApprovalForAll`) acting as publisher | Deferred        | v1 requires `ownerOf == msg.sender`.                                                                                    |
 | Sublease / secondary market for leases                                | Deferred (v2)   | Would require lease transfer in `AdSlot`.                                                                               |
 
@@ -398,6 +432,111 @@ Property tests (`contracts/tests/`) must cover each of these.
 | `base_uri`             | `http://localhost:8000/v1/slots/`                 | testnet API URL + `/v1/slots/`                                                               | production API URL + `/v1/slots/`                                                    |
 
 Deploy order: `CreativeRegistry` → `AdSlot` → `Marketplace(USDC, AdSlot, CreativeRegistry)` →
-`AdSlot.set_market(Marketplace)` → `Marketplace.set_treasury`, `set_fee_bps` →
-`CreativeRegistry.set_moderator`. The deploy script writes `contracts/deployments/<chainId>.json`
-(see `ARCHITECTURE.md` § Deployments artifact).
+`CampaignVault(USDC, AdSlot, CreativeRegistry, Marketplace)` → `AdSlot.set_market(Marketplace)` →
+`Marketplace.set_campaign_vault(CampaignVault)` → `Marketplace.set_treasury`, `set_fee_bps` →
+`CampaignVault.set_treasury`, `set_fee_bps`, `set_settler` (optional `set_close_delay`) →
+`CreativeRegistry.set_moderator`. Marketplace cannot take the vault in its constructor (vault
+needs `MARKETPLACE` to read `terms_of`). The deploy script writes
+`contracts/deployments/<chainId>.json` (see `ARCHITECTURE.md` § Deployments artifact).
+
+---
+
+## 11. CPC sale mode (Implemented — ADR-0014)
+
+Canonical signatures: `contracts/src/interfaces/ICampaignVault.vyi` and `IMarketplace.vyi`.
+Semantics here are binding. Revert strings are exact.
+
+Constants: `CPC_TICK = 10_000` (0.01 USDC); `Q_DENOM = 1_000_000`; first implementation
+`q = Q_DENOM` for every campaign; `CLOSE_DELAY_SECONDS` default `3600` (owner-settable,
+max `604_800`); `MAX_FEE_BPS = 1000`; `MAX_BATCH_CHARGE` owner-settable (default
+`10_000_000_000` = 10_000 USDC).
+
+### 11.1 `Terms` / `Marketplace` deltas
+
+`CampaignVault` constructor takes `MARKETPLACE` as an immutable and reads `terms_of`. Marketplace
+owner `set_campaign_vault` emits `CampaignVaultSet` (same pattern as `AdSlot.set_market`).
+
+`set_terms(..., approval_mode, sale_mode, floor_cpc)` (slot owner). Check order: `"not owner"` →
+`"bad mode"` (`approval_mode > 1` or `sale_mode > 1`) → LEASE `"bad prices"` / `"bad lead"` or
+CPC `"bad floor cpc"` (`floor_cpc == 0`) → `"leases outstanding"` (`LEASE → CPC` while
+`last_leased_end > now`) → `"campaigns open"` (`CPC → LEASE` while
+`open_campaigns_of(slot_id) > 0`).
+
+Terms are configured iff LEASE and `lead_seconds > 0`, or CPC and `floor_cpc > 0`.
+
+`buy` / `buy_with_permit`: if `sale_mode == CPC`, revert `"cpc mode"` before other checks.
+`quote`: `sellable = false`, `reason = "cpc mode"` in that case.
+
+`paused` still gates CPC serve eligibility (indexed). It does not freeze `top_up` / close.
+
+### 11.2 `CampaignVault` data and functions
+
+```text
+Campaign
+  advertiser:   address
+  slot_id:      uint256
+  creative_id:  uint256
+  max_cpc:      uint256
+  remaining:    uint256
+  valid_from:   uint64     # 0 = no lower bound
+  valid_until:  uint64     # 0 = no upper bound
+  paused:       bool
+  close_after:  uint64     # 0 = not closing
+  closed:       bool
+```
+
+| Function | Access | Behaviour |
+| --- | --- | --- |
+| `open_campaign(slot_id, creative_id, max_cpc, budget, valid_from, valid_until) -> uint256` | advertiser | Checks in order: terms configured and `sale_mode == CPC` else `"no terms"` / `"lease mode"`; not paused (`"paused"`); `max_cpc >= floor_cpc` else `"below floor"`; `budget >= floor_cpc` else `"budget too small"`; `valid_until == 0 or valid_until > valid_from` else `"bad window"`; creative owner / active / dimensions / approval-or-blocked **same strings and order as `buy` steps 4–6**; `transferFrom` `budget` to self; write campaign; emit `CampaignOpened`. |
+| `top_up(campaign_id, amount)` | campaign advertiser | Not `closed`; `amount > 0`; `transferFrom`; `remaining += amount`; emit `CampaignToppedUp`. `"not advertiser"` / `"closed"` / `"bad amount"`. |
+| `set_max_cpc(campaign_id, max_cpc)` | campaign advertiser | Not `closed`; `max_cpc >=` current slot `floor_cpc`; emit `MaxCpcSet`. |
+| `set_paused(campaign_id, paused)` | campaign advertiser | Not `closed`; emit `CampaignPausedSet`. |
+| `request_close(campaign_id)` | campaign advertiser | Not `closed`; `close_after == 0` else `"closing"`; set `close_after = now + close_delay`; emit `CloseRequested`. Campaign is ineligible for new serves once `close_after != 0`. |
+| `finalize_close(campaign_id)` | anyone | `closed == false`, `close_after != 0`, `now >= close_after` else `"too early"` / `"not closing"`; refund `remaining` to advertiser; `remaining = 0`; `closed = true`; emit `CampaignFinalized`. |
+| `settle_batch(campaign_id, payable_clicks, charged_usdc, batch_id)` | settler | `@nonreentrant`. Not `closed`; `batch_id` unused; `0 < charged_usdc <= remaining`; `charged_usdc <= max_batch_charge`; `payable_clicks > 0`. `fee = charged * fee_bps / 10_000`; pay treasury then `ownerOf(slot_id)`; `remaining -= charged`; mark `batch_id`; emit `Settled`. Reverts `"not settler"`, `"closed"`, `"batch used"`, `"bad charge"`. |
+| `set_settler`, `set_fee_bps`, `set_treasury`, `set_close_delay`, `set_max_batch_charge` | owner | Same fee bound as Marketplace. `set_close_delay` `"bad delay"` if 0 or `> 604_800`. |
+
+Vault USDC balance equals `sum(remaining)` over non-closed campaigns (invariant 11).
+
+### 11.3 GSP (off-chain, used when recording a payable click)
+
+```text
+ad_rank(c) = c.max_cpc * c.q / Q_DENOM
+winner_cpc = min(
+  winner.max_cpc,
+  max(floor_cpc, runner.ad_rank * Q_DENOM / winner.q + CPC_TICK)
+)
+```
+
+No runner-up → `winner_cpc = min(winner.max_cpc, floor_cpc)`. First implementation:
+`q = Q_DENOM` for all, so this is `min(max_cpc, max(floor_cpc, runner.max_cpc + CPC_TICK))`.
+
+Charge at settle is the GSP recorded at **serve** (not at click), summed for payable clicks
+in the batch. Settler must not charge more than that sum; the contract does not verify the
+click log.
+
+### 11.4 Serve rule (CPC)
+
+At time `t`, slot `s` with `sale_mode == CPC`:
+
+1. If `terms.paused` → house else empty (same as paused LEASE with no lease).
+2. Eligible campaigns as ADR-0014 §4 (indexed; never RPC). Skip `close_after != 0`.
+3. Highest `ad_rank` (tie: lower `campaign_id`). Creative must be serveable under §7.2
+   checks (verified, active, not blocked, approval if REQUIRED).
+4. If a winner → `status = "campaign"`, media from verified cache, `clickUrl` =
+   `{api}/v1/c/{token}` (HMAC of `slot_id, campaign_id, creative_id, serve_event_id, exp`,
+   TTL 3600s, one-time). Record GSP on the serve/click row.
+5. Else house else empty.
+
+`GET /v1/c/{token}`: validate payable rules (ADR-0014 §5); if payable, append `click_events`
+(`payable=true`); 302 to registered `click_url`. Invalid token → 404, no 302.
+
+### 11.5 Extra invariants (property tests when implemented)
+
+11. `CampaignVault` USDC balance = sum of `remaining` over `closed == false` campaigns.
+12. `settle_batch` never increases any `remaining`; `finalize_close` sends exactly the
+    pre-call `remaining` to the advertiser.
+13. `Marketplace` balance still unchanged by `buy` (LEASE). Vault balance changes only
+    on open/top_up/settle/finalize.
+14. No `AdSlot.set_lease` from `CampaignVault`.
+15. `charged_usdc + leftover_refund ≤` lifetime deposits for that campaign.

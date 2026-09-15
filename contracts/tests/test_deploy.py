@@ -12,9 +12,10 @@ from script.artifacts import ContractRecord, build_artifact, read_artifact, writ
 
 def test_deploy_on_pyevm_deploys_full_protocol(capsys):
     deployed = deploy_script.deploy()
-    assert set(deployed) == {"USDC", "AdSlot", "Marketplace", "CreativeRegistry"}
+    assert set(deployed) == {"USDC", "AdSlot", "Marketplace", "CreativeRegistry", "CampaignVault"}
     assert deployed["USDC"].decimals() == 6
     assert deployed["AdSlot"].market() == deployed["Marketplace"].address
+    assert deployed["Marketplace"].campaign_vault() == deployed["CampaignVault"].address
     assert deployed["Marketplace"].fee_bps() == 250
     assert deployed["AdSlot"].ownerOf(1) == boa.env.eoa
     assert deployed["AdSlot"].lease_of(1, 0).creative_id == 1

@@ -6,7 +6,7 @@ import { auctionState } from '../../lib/auction';
 import { kindLabel } from '../../lib/labels';
 import { useSlots } from './api';
 
-const FILTERS = ['all', 'live', 'upcoming', 'remainder', 'paused', 'ended'] as const;
+const FILTERS = ['all', 'live', 'upcoming', 'remainder', 'cpc', 'paused', 'ended'] as const;
 const KINDS = [0, 1, 2, 3] as const;
 
 export function DiscoverPage() {
@@ -26,7 +26,7 @@ export function DiscoverPage() {
   const featured = useMemo(() => {
     const hot = items.filter((s) => {
       const state = auctionState(s);
-      return state === 'live' || state === 'remainder';
+      return state === 'live' || state === 'remainder' || state === 'cpc';
     });
     return (hot.length > 0 ? hot : items).slice(0, 4);
   }, [items]);
@@ -38,8 +38,8 @@ export function DiscoverPage() {
         <p className="text-sm text-accent">Marketplace</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Discover slots</h1>
         <p className="mt-2 max-w-2xl text-muted">
-          Periods sell by Dutch auction in USDC. One transaction to buy — no bids, no escrow. You
-          lease a period; the slot NFT stays with the publisher.
+          Periods sell by Dutch auction in USDC (one transaction to buy). CPC slots run campaigns
+          at a publisher floor CPC — matching is at serve, not a period buy.
         </p>
       </div>
 
@@ -53,7 +53,7 @@ export function DiscoverPage() {
               filter === f ? 'border-accent bg-accent text-accent-ink' : 'border-line text-muted'
             }`}
           >
-            {f}
+            {f === 'cpc' ? 'CPC' : f}
           </button>
         ))}
       </div>
@@ -98,7 +98,7 @@ export function DiscoverPage() {
 
       {featured.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-sm uppercase tracking-wide text-muted">Live now</h2>
+          <h2 className="text-sm uppercase tracking-wide text-muted">Available now</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {featured.map((slot) => (
               <SlotCard key={slot.slotId} slot={slot} />

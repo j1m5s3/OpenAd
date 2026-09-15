@@ -123,7 +123,7 @@ async def test_http_contract_and_serve_event(client: AsyncClient, session: Async
     assert res.status_code == 200
     assert res.headers["cache-control"] == "public, max-age=30"
     body = res.json()
-    assert set(body) == {"slotId", "status", "creative", "lease", "ttl"}
+    assert set(body) == {"slotId", "status", "creative", "lease", "campaign", "ttl"}
     assert body["status"] == "lease"
     assert set(body["creative"]) == {"kind", "mediaUrl", "clickUrl", "width", "height", "alt"}
     assert set(body["lease"]) == {"advertiser", "expiresAt"}

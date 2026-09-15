@@ -22,11 +22,16 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 
 - Non-custodial: no code in `api/` or `web/` signs user transactions or holds keys that can move
   funds or write leases. The opt-in `sim/` daemon may use public Anvil keys on 31337 only (ADR-0012).
-  The DEV-only Anvil injector (ADR-0013) forwards RPC and stores addresses, not keys.
+  The DEV-only Anvil injector (ADR-0013) forwards RPC and stores addresses, not keys. The CPC
+  settler process (ADR-0014) may hold `OPENAD_SETTLER_KEY` and may only `settle_batch`.
 - Slots are permanent; periods are leased; leases expire by time. Never "sell" a slot in protocol code.
-- One transaction to buy. No bids, escrow, settle steps, or keepers.
-- `Marketplace` never holds USDC after a transaction.
-- Serving (`api/src/openad/serve/`, `embed/`) never reads the chain and never proxies advertiser URLs.
+- One transaction to buy **in LEASE mode**. No bids, escrow, settle steps, or keepers on
+  `Marketplace`. CPC mode (ADR-0014) escrows in `CampaignVault` and batch-settles; HTTP `api/`
+  and `web/` still hold no spending keys. The settler process may hold `OPENAD_SETTLER_KEY` only.
+- `Marketplace` never holds USDC after a transaction. `CampaignVault` may, equal to open
+  `remaining` (PROTOCOL §11 invariant 11).
+- Serving (`api/src/openad/serve/`, `embed/`) never reads the chain and never proxies advertiser
+  **media** URLs. CPC clicks may 302 through `/v1/c` (ADR-0014).
 - Every on-chain state change emits exactly one event from `docs/PROTOCOL.md` §6, and every
   event has exactly one indexer handler.
 - Money is integer USDC base units end to end. Time is Unix seconds.
@@ -36,8 +41,8 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 
 | Need                                 | Location                                                                         |
 | ------------------------------------ | -------------------------------------------------------------------------------- |
-| Contract semantics                   | `docs/PROTOCOL.md`                                                               |
-| Contract signatures                  | `contracts/src/interfaces/*.vyi`                                                 |
+| Contract semantics                   | `docs/PROTOCOL.md` (CPC: §11 Implemented)                                    |
+| Contract signatures                  | `contracts/src/interfaces/*.vyi` (`ICampaignVault.vyi` = ROADMAP 5.2)        |
 | Contract code / tests / deploy       | `contracts/src/`, `contracts/tests/`, `contracts/script/deploy.py`               |
 | Addresses + ABIs per chain           | `contracts/deployments/<chainId>.json` (the only contracts → off-chain hand-off) |
 | API app, settings, routers, services | `api/src/openad/` (see `ARCHITECTURE.md` §3.1)                                   |
@@ -51,8 +56,8 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 | Playwright MCP                       | `.cursor/mcp.json` (`playwright` + `openad-sim`)                                 |
 | Local sim daemon                     | `sim/` (opt-in Anvil personas; ADR-0012)                                         |
 | Env vars                             | `.env.example` (all prefixed `OPENAD_`; web uses `VITE_`)                        |
-| Local infra                          | `docker-compose.yml` (Anvil + Postgres); `docker-compose.stack.yml` (api/indexer)|
-| API image                            | `api/Dockerfile` (also used for the indexer process)                             |
+| Local infra                          | `docker-compose.yml` (Anvil + Postgres); `docker-compose.stack.yml` (api/indexer/settler)|
+| API image                            | `api/Dockerfile` (also used for the indexer and settler processes)               |
 | CI                                   | `.github/workflows/ci.yml` (no GCP / no mainnet broadcast)                       |
 
 ## Commands
@@ -81,6 +86,7 @@ uv run pytest
 uv run alembic upgrade head                         # schema (bootstrap.py remains a test/dev helper; refuses prod)
 uv run uvicorn openad.main:app --reload             # http://localhost:8000/v1/health
 uv run python -m openad.indexer
+uv run python -m openad.settler                     # CPC settle; needs OPENAD_SETTLER_KEY
 
 # web + embed (npm workspaces at repo root)
 npm install                                         # once

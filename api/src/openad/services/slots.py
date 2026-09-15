@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openad.errors import NotFoundError
 from openad.models import Slot, Terms
 from openad.schemas.slot import SlotListOut, SlotOut, TermsOut
+from openad.services.indexed import protocol_indexed_block
 
 
 def _to_out(slot: Slot, terms: Terms | None) -> SlotOut:
@@ -28,6 +29,8 @@ def _to_out(slot: Slot, terms: Terms | None) -> SlotOut:
                 lead_seconds=terms.lead_seconds,
                 sale_end=terms.sale_end,
                 approval_mode=terms.approval_mode,
+                sale_mode=terms.sale_mode,
+                floor_cpc=str(terms.floor_cpc),
                 paused=terms.paused,
             )
             if terms
@@ -54,6 +57,10 @@ async def list_slots(
 ) -> SlotListOut:
     stmt = select(Slot, Terms).outerjoin(Terms, Terms.slot_id == Slot.slot_id)
     count_stmt = select(func.count()).select_from(Slot)
+    head = await protocol_indexed_block(session)
+    if head is not None:
+        stmt = stmt.where(Slot.updated_block <= head)
+        count_stmt = count_stmt.where(Slot.updated_block <= head)
     if domain:
         stmt = stmt.where(Slot.domain == domain.lower())
         count_stmt = count_stmt.where(Slot.domain == domain.lower())
