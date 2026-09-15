@@ -9,7 +9,7 @@ from typing import Literal
 
 from openad.schemas.common import ApiModel
 
-ServeStatus = Literal["lease", "house", "empty", "unknown"]
+ServeStatus = Literal["lease", "campaign", "house", "empty", "unknown"]
 
 
 class ServeCreative(ApiModel):
@@ -26,9 +26,15 @@ class ServeLease(ApiModel):
     expires_at: str  # ISO-8601 UTC
 
 
+class ServeCampaign(ApiModel):
+    advertiser: str
+    campaign_id: str
+
+
 class ServeResponse(ApiModel):
     slot_id: str
     status: ServeStatus
     creative: ServeCreative | None = None
     lease: ServeLease | None = None
+    campaign: ServeCampaign | None = None
     ttl: int

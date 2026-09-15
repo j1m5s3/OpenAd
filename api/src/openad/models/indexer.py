@@ -6,7 +6,7 @@ from sqlalchemy import BigInteger, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from openad.db.base import Base
-from openad.db.types import Address
+from openad.db.types import Address, Uint256
 
 
 class IndexerCursor(Base):
@@ -26,4 +26,10 @@ class ProtocolConfig(Base):
     fee_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     treasury: Mapped[str | None] = mapped_column(Address, nullable=True)
     moderator: Mapped[str | None] = mapped_column(Address, nullable=True)
+    campaign_vault: Mapped[str | None] = mapped_column(Address, nullable=True)
+    settler: Mapped[str | None] = mapped_column(Address, nullable=True)
+    vault_fee_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vault_treasury: Mapped[str | None] = mapped_column(Address, nullable=True)
+    close_delay_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_batch_charge: Mapped[int | None] = mapped_column(Uint256, nullable=True)
     updated_block: Mapped[int] = mapped_column(BigInteger, default=0)

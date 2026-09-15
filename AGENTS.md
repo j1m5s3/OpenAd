@@ -21,11 +21,17 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 ## Non-negotiable invariants
 
 - Non-custodial: no code in `api/` or `web/` signs user transactions or holds keys that can move
-  funds or write leases.
+  funds or write leases. The opt-in `sim/` daemon may use public Anvil keys on 31337 only (ADR-0012).
+  The DEV-only Anvil injector (ADR-0013) forwards RPC and stores addresses, not keys. The CPC
+  settler process (ADR-0014) may hold `OPENAD_SETTLER_KEY` and may only `settle_batch`.
 - Slots are permanent; periods are leased; leases expire by time. Never "sell" a slot in protocol code.
-- One transaction to buy. No bids, escrow, settle steps, or keepers.
-- `Marketplace` never holds USDC after a transaction.
-- Serving (`api/src/openad/serve/`, `embed/`) never reads the chain and never proxies advertiser URLs.
+- One transaction to buy **in LEASE mode**. No bids, escrow, settle steps, or keepers on
+  `Marketplace`. CPC mode (ADR-0014) escrows in `CampaignVault` and batch-settles; HTTP `api/`
+  and `web/` still hold no spending keys. The settler process may hold `OPENAD_SETTLER_KEY` only.
+- `Marketplace` never holds USDC after a transaction. `CampaignVault` may, equal to open
+  `remaining` (PROTOCOL §11 invariant 11).
+- Serving (`api/src/openad/serve/`, `embed/`) never reads the chain and never proxies advertiser
+  **media** URLs. CPC clicks may 302 through `/v1/c` (ADR-0014).
 - Every on-chain state change emits exactly one event from `docs/PROTOCOL.md` §6, and every
   event has exactly one indexer handler.
 - Money is integer USDC base units end to end. Time is Unix seconds.
@@ -35,8 +41,8 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 
 | Need                                 | Location                                                                         |
 | ------------------------------------ | -------------------------------------------------------------------------------- |
-| Contract semantics                   | `docs/PROTOCOL.md`                                                               |
-| Contract signatures                  | `contracts/src/interfaces/*.vyi`                                                 |
+| Contract semantics                   | `docs/PROTOCOL.md` (CPC: §11 Implemented)                                    |
+| Contract signatures                  | `contracts/src/interfaces/*.vyi` (`ICampaignVault.vyi` = ROADMAP 5.2)        |
 | Contract code / tests / deploy       | `contracts/src/`, `contracts/tests/`, `contracts/script/deploy.py`               |
 | Addresses + ABIs per chain           | `contracts/deployments/<chainId>.json` (the only contracts → off-chain hand-off) |
 | API app, settings, routers, services | `api/src/openad/` (see `ARCHITECTURE.md` §3.1)                                   |
@@ -45,15 +51,22 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 | Serve JSON contract                  | `api/src/openad/schemas/serve.py` ⇔ `embed/src/types.ts`                         |
 | Web app                              | `web/src/` (feature folders; wagmi for writes; API for reads)                    |
 | Embed element                        | `embed/src/open-ad.ts`                                                           |
+| Playwright E2E                       | `e2e/` (YAML scenarios, mock EIP-1193)                                           |
+| Headed SME / UX critique             | `.cursor/skills/sandbox-sme-critique/`, `sandbox-ux-critique/`; `docs/qa/`        |
+| Playwright MCP                       | `.cursor/mcp.json` (`playwright` + `openad-sim`)                                 |
+| Local sim daemon                     | `sim/` (opt-in Anvil personas; ADR-0012)                                         |
 | Env vars                             | `.env.example` (all prefixed `OPENAD_`; web uses `VITE_`)                        |
-| Local infra                          | `docker-compose.yml` (Anvil + Postgres)                                          |
+| Local infra                          | `docker-compose.yml` (Anvil + Postgres); `docker-compose.stack.yml` (api/indexer/settler)|
+| API image                            | `api/Dockerfile` (also used for the indexer and settler processes)               |
+| CI                                   | `.github/workflows/ci.yml` (no GCP / no mainnet broadcast)                       |
 
 ## Commands
 
 ```text
 # local stack (Windows; scripts/*.cmd bypass PowerShell execution policy)
-.\scripts\setup.cmd                                 # .env, docker, MockUSDC deploy, DB bootstrap, npm install (no wallet prompt)
+.\scripts\setup.cmd                                 # .env, docker, protocol deploy, alembic upgrade, npm install (no wallet prompt)
 .\scripts\dev-up.cmd                                # starts docker if needed; titled windows: api, indexer, web (-Embed optional)
+.\scripts\sim-up.cmd                                # optional live marketplace activity (does not start with the stack)
 .\scripts\dev-down.cmd                              # stops docker; next up restarts Anvil/Postgres (Anvil chain is ephemeral)
 # if npm.ps1 is blocked: use the .cmd files or npm.cmd run stack:*  (not `npm`)
 
@@ -70,13 +83,15 @@ uv run mox run deploy --network anvil               # writes deployments/31337.j
 cd api && uv sync                                   # once
 uv run ruff check && uv run ruff format --check && uv run mypy src
 uv run pytest
-uv run python -m openad.db.bootstrap                # dev tables until ROADMAP 2.2 (then: alembic upgrade head)
+uv run alembic upgrade head                         # schema (bootstrap.py remains a test/dev helper; refuses prod)
 uv run uvicorn openad.main:app --reload             # http://localhost:8000/v1/health
 uv run python -m openad.indexer
+uv run python -m openad.settler                     # CPC settle; needs OPENAD_SETTLER_KEY
 
 # web + embed (npm workspaces at repo root)
 npm install                                         # once
 npm run typecheck && npm run lint && npm run test && npm run build
+npm run test:e2e                                    # Playwright YAML (needs Chromium once)
 npm run dev:web                                     # http://localhost:5173
 npm run dev:embed                                   # demo page
 ```

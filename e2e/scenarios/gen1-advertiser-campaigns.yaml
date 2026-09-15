@@ -1,0 +1,8 @@
+id: gen1-advertiser-campaigns
+persona: advertiser
+generation: 1
+steps:
+  - visit: /campaigns
+  - expect: Campaigns
+  - expect: Register media
+  - expect: Request approval

@@ -3,6 +3,7 @@ import { OpenAdElement } from './open-ad';
 export { OpenAdElement };
 export type {
   OpenAdRenderDetail,
+  ServeCampaign,
   ServeCreative,
   ServeLease,
   ServeResponse,

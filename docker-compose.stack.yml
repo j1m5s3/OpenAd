@@ -1,0 +1,82 @@
+# Optional overlay: run API + indexer against compose Anvil/Postgres.
+#   docker compose -f docker-compose.yml -f docker-compose.stack.yml up --build
+#
+# Not a GCP/Cloud Run deploy. Origin stays local.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      OPENAD_ENV: dev
+      OPENAD_DATABASE_URL: postgresql+asyncpg://openad:openad@postgres:5432/openad
+      OPENAD_RPC_URL: http://anvil:8545
+      OPENAD_CHAIN_ID: "31337"
+      OPENAD_PUBLIC_URL: http://localhost:8000
+      OPENAD_CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      OPENAD_DEPLOYMENTS_DIR: /deployments
+    volumes:
+      - ./contracts/deployments:/deployments:ro
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 25s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      anvil:
+        condition: service_healthy
+
+  indexer:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    command: ["uv", "run", "python", "-m", "openad.indexer"]
+    environment:
+      OPENAD_ENV: dev
+      OPENAD_DATABASE_URL: postgresql+asyncpg://openad:openad@postgres:5432/openad
+      OPENAD_RPC_URL: http://anvil:8545
+      OPENAD_CHAIN_ID: "31337"
+      OPENAD_DEPLOYMENTS_DIR: /deployments
+    volumes:
+      - ./contracts/deployments:/deployments:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      anvil:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  settler:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    command: ["uv", "run", "python", "-m", "openad.settler"]
+    environment:
+      OPENAD_ENV: dev
+      OPENAD_DATABASE_URL: postgresql+asyncpg://openad:openad@postgres:5432/openad
+      OPENAD_RPC_URL: http://anvil:8545
+      OPENAD_CHAIN_ID: "31337"
+      OPENAD_DEPLOYMENTS_DIR: /deployments
+      OPENAD_SETTLER_KEY: ${OPENAD_SETTLER_KEY:-}
+    volumes:
+      - ./contracts/deployments:/deployments:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      anvil:
+        condition: service_healthy
+      api:
+        condition: service_healthy

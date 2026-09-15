@@ -1,0 +1,9 @@
+id: gen1-discover-filters
+persona: advertiser
+generation: 1
+steps:
+  - visit: /
+  - expect: Discover slots
+  - click: live
+  - click: upcoming
+  - click: remainder

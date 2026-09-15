@@ -15,9 +15,10 @@
   <body>
     <h1>OpenAd embed demo</h1>
     <p>
-      A publisher page with one 300×250 slot. The element asks the local API
-      (<code>http://localhost:8000</code>) for slot <code>1</code> and falls back to the house image
-      when there is no serveable lease. Change <code>slot-id</code>/<code>api</code> below to test.
+      A publisher page with one 300×250 slot. After local setup the indexer has a purchased
+      lease on slot <code>1</code>; this element asks <code>http://localhost:8000/v1/serve/1</code>
+      for it. After <code>revoke_approval</code> (or any unserveable lease) the API returns
+      <code>house</code>/<code>empty</code> and the element uses the house attributes below.
     </p>
 
     <div class="ad">

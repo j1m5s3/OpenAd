@@ -180,10 +180,10 @@ Invoke-Step 'mox run deploy --network anvil' {
     }
 }
 
-Invoke-Step 'openad.db.bootstrap' {
+Invoke-Step 'alembic upgrade head' {
     Push-Location (Join-Path $RepoRoot 'api')
     try {
-        uv run python -m openad.db.bootstrap
+        uv run alembic upgrade head
     } finally {
         Pop-Location
     }
@@ -200,10 +200,8 @@ Invoke-Step 'sync web deployments' {
 Write-Host ""
 Write-Host "Setup complete."
 Write-Host ""
-Write-Host "This stack is partial:"
-Write-Host "  - Deploy wrote MockUSDC only to contracts/deployments/31337.json."
-Write-Host "  - A NotImplementedError note from deploy is expected until protocol contracts exist."
-Write-Host "  - Protocol contracts arrive in ROADMAP 1.1-1.4."
-Write-Host "  - Until then the indexer will log indexer.nothing_to_index and keep polling."
+Write-Host "Protocol contracts are deployed on Anvil (CreativeRegistry, AdSlot, Marketplace, CampaignVault, MockUSDC)."
+Write-Host "  - Artifact: contracts/deployments/31337.json (git-ignored)."
+Write-Host "  - Demo: two slots, terms, one approved creative, one purchased period."
 Write-Host ""
 Write-Host "Next: .\scripts\dev-up.cmd"

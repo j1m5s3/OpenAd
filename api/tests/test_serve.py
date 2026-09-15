@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import time
 
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from openad.config import Settings
+from openad.db.session import Database
+from openad.main import create_app
 from openad.models import Approval, ServeEvent
 from openad.models.creative import APPROVAL_APPROVED, APPROVAL_REVOKED
 from openad.services.serve import ServeContext, resolve
@@ -120,7 +123,7 @@ async def test_http_contract_and_serve_event(client: AsyncClient, session: Async
     assert res.status_code == 200
     assert res.headers["cache-control"] == "public, max-age=30"
     body = res.json()
-    assert set(body) == {"slotId", "status", "creative", "lease", "ttl"}
+    assert set(body) == {"slotId", "status", "creative", "lease", "campaign", "ttl"}
     assert body["status"] == "lease"
     assert set(body["creative"]) == {"kind", "mediaUrl", "clickUrl", "width", "height", "alt"}
     assert set(body["lease"]) == {"advertiser", "expiresAt"}
@@ -136,7 +139,31 @@ async def test_http_unknown_is_404(client: AsyncClient) -> None:
     assert res.json()["status"] == "unknown"
 
 
-async def test_media_route_pending(client: AsyncClient) -> None:
-    res = await client.get("/v1/serve/1/media")
-    assert res.status_code == 404
-    assert res.json()["roadmap"] == "2.3"
+async def test_origin_enforcement_falls_back_to_house(
+    settings: Settings, db: Database, session: AsyncSession
+) -> None:
+    settings.serve_enforce_origin = True
+    app = create_app(settings=settings, database=db)
+    slot = make_slot(first_period_start=int(time.time()) - 60, period_seconds=3600)
+    session.add_all(
+        [slot, make_creative(), make_verified(), make_lease(slot, 0, approval_mode=1), make_house()]
+    )
+    await session.commit()
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://api.test") as c:
+            res = await c.get("/v1/serve/1", headers={"Origin": "https://evil.test"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "house"
+
+
+async def test_p95_resolve_under_50ms(session: AsyncSession) -> None:
+    _slot, now = await _seed_lease(session)
+    samples: list[float] = []
+    for _ in range(40):
+        t0 = time.perf_counter()
+        await resolve(session, 1, now, CTX)
+        samples.append(time.perf_counter() - t0)
+    samples.sort()
+    p95 = samples[int(len(samples) * 0.95) - 1]
+    assert p95 < 0.05

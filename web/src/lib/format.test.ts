@@ -27,6 +27,7 @@ describe('helpers', () => {
     expect(shortAddress('0x' + 'ab'.repeat(20))).toBe('0xabab…abab');
     expect(formatDuration(86_400)).toBe('1d');
     expect(formatDuration(3_600 * 6)).toBe('6h');
-    expect(formatDuration(90)).toBe('90s');
+    expect(formatDuration(90)).toBe('1m 30s');
+    expect(formatDuration(596_835)).toBe('6d 21h');
   });
 });

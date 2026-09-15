@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "openad-sim": {
+      "command": "npm.cmd",
+      "args": ["run", "mcp", "-w", "sim", "--silent"]
+    },
+    "playwright": {
+      "command": "npx.cmd",
+      "args": ["-y", "@playwright/mcp@latest", "--browser=msedge"]
+    }
+  }
+}

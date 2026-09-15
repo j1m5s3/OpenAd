@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 SUPPORTED_ARTIFACT_VERSION = 1
-PROTOCOL_CONTRACTS = ("AdSlot", "Marketplace", "CreativeRegistry")
+PROTOCOL_CONTRACTS = ("AdSlot", "Marketplace", "CreativeRegistry", "CampaignVault")
 
 
 class DeploymentsError(RuntimeError):
@@ -37,7 +37,7 @@ class Deployment:
 
     @property
     def protocol_contracts(self) -> list[ContractInfo]:
-        """The indexable contracts that are present (all three once Phase 1 is done)."""
+        """The indexable protocol contracts present in the artifact."""
         return [self.contracts[n] for n in PROTOCOL_CONTRACTS if n in self.contracts]
 
 

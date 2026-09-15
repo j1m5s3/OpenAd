@@ -54,6 +54,8 @@ class Terms(Base):
     lead_seconds: Mapped[int] = mapped_column(BigInteger)
     sale_end: Mapped[int] = mapped_column(BigInteger, default=0)
     approval_mode: Mapped[int] = mapped_column(SmallInteger)  # 0 REQUIRED, 1 WAIVED
+    sale_mode: Mapped[int] = mapped_column(SmallInteger, default=0)  # 0 LEASE, 1 CPC
+    floor_cpc: Mapped[int] = mapped_column(Uint256, default=0)
     paused: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_block: Mapped[int] = mapped_column(BigInteger)
 

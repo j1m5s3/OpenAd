@@ -12,7 +12,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class DecodedEvent:
-    contract: str  # "AdSlot" | "Marketplace" | "CreativeRegistry"
+    contract: str  # "AdSlot" | "Marketplace" | "CreativeRegistry" | "CampaignVault"
     name: str
     args: dict[str, Any]
     block_number: int
@@ -34,10 +34,23 @@ EXPECTED_EVENTS: frozenset[tuple[str, str]] = frozenset(
         ("AdSlot", "BaseURISet"),
         ("AdSlot", "Transfer"),
         ("Marketplace", "TermsSet"),
+        ("Marketplace", "CampaignVaultSet"),
         ("Marketplace", "PausedSet"),
         ("Marketplace", "Purchased"),
         ("Marketplace", "FeeSet"),
         ("Marketplace", "TreasurySet"),
+        ("CampaignVault", "CampaignOpened"),
+        ("CampaignVault", "CampaignToppedUp"),
+        ("CampaignVault", "MaxCpcSet"),
+        ("CampaignVault", "CampaignPausedSet"),
+        ("CampaignVault", "CloseRequested"),
+        ("CampaignVault", "CampaignFinalized"),
+        ("CampaignVault", "Settled"),
+        ("CampaignVault", "SettlerSet"),
+        ("CampaignVault", "VaultFeeSet"),
+        ("CampaignVault", "VaultTreasurySet"),
+        ("CampaignVault", "CloseDelaySet"),
+        ("CampaignVault", "MaxBatchChargeSet"),
         ("CreativeRegistry", "CreativeRegistered"),
         ("CreativeRegistry", "NftCreativeRegistered"),
         ("CreativeRegistry", "ApprovalRequested"),

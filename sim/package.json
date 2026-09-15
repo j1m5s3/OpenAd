@@ -1,0 +1,31 @@
+{
+  "name": "@openad/sim",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Opt-in Anvil persona daemon so the local marketplace looks live (ADR-0012).",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "mcp": "tsx src/mcp.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "viem": "^2.20.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.10.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.10.0",
+    "globals": "^15.9.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.5.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -35,8 +35,19 @@ export function formatUnixSeconds(ts: number, locale = 'en-US'): string {
 }
 
 export function formatDuration(seconds: number): string {
-  if (seconds % 86_400 === 0) return `${seconds / 86_400}d`;
-  if (seconds % 3_600 === 0) return `${seconds / 3_600}h`;
-  if (seconds % 60 === 0) return `${seconds / 60}m`;
-  return `${seconds}s`;
+  const s = Math.max(0, Math.floor(seconds));
+  const d = Math.floor(s / 86_400);
+  const h = Math.floor((s % 86_400) / 3_600);
+  const m = Math.floor((s % 3_600) / 60);
+  const rem = s % 60;
+  if (d > 0) return h > 0 ? `${d}d ${h}h` : `${d}d`;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  if (m > 0) return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
+  return `${rem}s`;
+}
+
+export function formatTimeLeft(targetUnix: number, nowUnix = Math.floor(Date.now() / 1000)): string {
+  const delta = targetUnix - nowUnix;
+  if (delta <= 0) return 'started';
+  return `in ${formatDuration(delta)}`;
 }

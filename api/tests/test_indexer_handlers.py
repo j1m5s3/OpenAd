@@ -10,6 +10,8 @@ from openad.indexer import handlers
 from openad.indexer.events import EXPECTED_EVENTS, DecodedEvent
 from openad.models import (
     Approval,
+    Campaign,
+    CampaignSettlement,
     Creative,
     CreativeVerification,
     Lease,
@@ -131,6 +133,81 @@ async def test_slot_lifecycle_mint_calendar_lease_purchase(session: AsyncSession
     assert len((await session.execute(Lease.__table__.select())).all()) == 1
 
 
+async def test_slot_minted_replaces_stale_spec(session: AsyncSession) -> None:
+    await handlers.dispatch(
+        session,
+        ev(
+            "AdSlot",
+            "SlotMinted",
+            slot_id=3,
+            owner=PUBLISHER,
+            width=728,
+            height=90,
+            kind=1,
+            domain="old.example",
+        ),
+    )
+    await handlers.dispatch(
+        session,
+        ev(
+            "AdSlot",
+            "CalendarSet",
+            slot_id=3,
+            version=1,
+            period_seconds=3600,
+            first_period_start=1_700_000_000,
+        ),
+    )
+    await handlers.dispatch(
+        session,
+        ev(
+            "Marketplace",
+            "TermsSet",
+            slot_id=3,
+            start_price=1,
+            floor_price=1,
+            lead_seconds=1,
+            sale_end=0,
+            approval_mode=0,
+        ),
+    )
+    await handlers.dispatch(
+        session,
+        ev(
+            "AdSlot",
+            "LeaseSet",
+            slot_id=3,
+            period_index=0,
+            user=ADVERTISER,
+            version=1,
+            start=1,
+            end=2,
+            creative_id=1,
+        ),
+    )
+    await handlers.dispatch(
+        session,
+        ev(
+            "AdSlot",
+            "SlotMinted",
+            block=50,
+            slot_id=3,
+            owner=PUBLISHER,
+            width=300,
+            height=250,
+            kind=0,
+            domain="Smoke.example",
+        ),
+    )
+    await session.commit()
+    slot = await session.get(Slot, 3)
+    assert slot is not None
+    assert slot.domain == "smoke.example"
+    assert slot.width == 300 and slot.calendar_version == 0
+    assert await session.get(Terms, 3) is None
+    assert await session.get(Lease, (3, 1, 0)) is None
+
+
 async def test_transfer_updates_publisher(session: AsyncSession) -> None:
     await handlers.dispatch(
         session,
@@ -226,6 +303,118 @@ async def test_protocol_config_events(session: AsyncSession) -> None:
         "0x" + "02" * 20,
         "0x" + "03" * 20,
     )
+
+
+async def test_campaign_lifecycle_replay(session: AsyncSession) -> None:
+    session.info["chain_id"] = 31337
+    await handlers.dispatch(
+        session,
+        ev(
+            "AdSlot",
+            "SlotMinted",
+            slot_id=9,
+            owner=PUBLISHER,
+            width=300,
+            height=250,
+            kind=0,
+            domain="cpc.example",
+        ),
+    )
+    await handlers.dispatch(
+        session,
+        ev(
+            "Marketplace",
+            "TermsSet",
+            slot_id=9,
+            start_price=0,
+            floor_price=0,
+            lead_seconds=0,
+            sale_end=0,
+            approval_mode=0,
+            sale_mode=1,
+            floor_cpc=100_000,
+        ),
+    )
+    events = [
+        ev(
+            "CampaignVault",
+            "CampaignOpened",
+            campaign_id=1,
+            advertiser=ADVERTISER,
+            slot_id=9,
+            creative_id=7,
+            max_cpc=1_000_000,
+            budget=10_000_000,
+            valid_from=0,
+            valid_until=0,
+        ),
+        ev(
+            "CampaignVault",
+            "CampaignToppedUp",
+            campaign_id=1,
+            amount=2_000_000,
+            remaining=12_000_000,
+        ),
+        ev("CampaignVault", "MaxCpcSet", campaign_id=1, max_cpc=2_000_000),
+        ev("CampaignVault", "CampaignPausedSet", campaign_id=1, paused=True),
+        ev("CampaignVault", "CampaignPausedSet", campaign_id=1, paused=False, block=11),
+        ev(
+            "CampaignVault",
+            "Settled",
+            campaign_id=1,
+            slot_id=9,
+            publisher=PUBLISHER,
+            payable_clicks=3,
+            charged=1_000_000,
+            fee=25_000,
+            batch_id=bytes.fromhex("aa" * 32),
+        ),
+        ev("CampaignVault", "CloseRequested", campaign_id=1, close_after=1_800_003_600),
+        ev("CampaignVault", "CampaignFinalized", campaign_id=1, refund=11_000_000),
+    ]
+    for e in events:
+        assert await handlers.dispatch(session, e)
+    await session.commit()
+
+    terms = await session.get(Terms, 9)
+    assert terms is not None and terms.sale_mode == 1 and terms.floor_cpc == 100_000
+    camp = await session.get(Campaign, 1)
+    assert camp is not None
+    assert camp.advertiser == ADVERTISER and camp.slot_id == 9
+    assert camp.closed is True and camp.remaining == 0
+    assert camp.max_cpc == 2_000_000 and camp.close_after == 1_800_003_600
+    row = await session.get(CampaignSettlement, "0x" + "aa" * 32)
+    assert row is not None and row.charged == 1_000_000 and row.fee == 25_000
+
+    for e in events:
+        await handlers.dispatch(session, e)
+    await session.commit()
+    assert len((await session.execute(CampaignSettlement.__table__.select())).all()) == 1
+    camp = await session.get(Campaign, 1)
+    assert camp is not None and camp.remaining == 0
+
+
+async def test_vault_config_events(session: AsyncSession) -> None:
+    session.info["chain_id"] = 31337
+    await handlers.dispatch(session, ev("Marketplace", "CampaignVaultSet", vault="0x" + "04" * 20))
+    await handlers.dispatch(session, ev("CampaignVault", "SettlerSet", settler="0x" + "05" * 20))
+    await handlers.dispatch(session, ev("CampaignVault", "VaultFeeSet", fee_bps=250))
+    await handlers.dispatch(
+        session, ev("CampaignVault", "VaultTreasurySet", treasury="0x" + "06" * 20)
+    )
+    await handlers.dispatch(session, ev("CampaignVault", "CloseDelaySet", seconds=3600))
+    await handlers.dispatch(
+        session, ev("CampaignVault", "MaxBatchChargeSet", max_batch_charge=10_000_000_000)
+    )
+    await session.commit()
+    cfg = await session.get(ProtocolConfig, 31337)
+    assert cfg is not None
+    assert cfg.campaign_vault == "0x" + "04" * 20
+    assert cfg.settler == "0x" + "05" * 20
+    assert cfg.vault_fee_bps == 250
+    assert cfg.vault_treasury == "0x" + "06" * 20
+    assert cfg.close_delay_seconds == 3600
+    assert cfg.max_batch_charge == 10_000_000_000
 
 
 async def test_unknown_event_is_reported(session: AsyncSession) -> None:

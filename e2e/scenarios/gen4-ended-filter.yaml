@@ -1,0 +1,8 @@
+id: gen4-ended-filter
+persona: advertiser
+generation: 4
+steps:
+  - visit: /
+  - expect: Search domain
+  - click: ended
+  - expect: Discover slots

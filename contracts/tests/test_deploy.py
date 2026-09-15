@@ -4,16 +4,23 @@ from __future__ import annotations
 
 import json
 
+import boa
+
 from script import deploy as deploy_script
 from script.artifacts import ContractRecord, build_artifact, read_artifact, write_artifact
 
 
-def test_deploy_on_pyevm_deploys_usdc_and_skips_protocol_until_implemented(capsys):
+def test_deploy_on_pyevm_deploys_full_protocol(capsys):
     deployed = deploy_script.deploy()
-    assert set(deployed) == {"USDC"}  # protocol contracts pending: ROADMAP 1.1-1.4
+    assert set(deployed) == {"USDC", "AdSlot", "Marketplace", "CreativeRegistry", "CampaignVault"}
     assert deployed["USDC"].decimals() == 6
+    assert deployed["AdSlot"].market() == deployed["Marketplace"].address
+    assert deployed["Marketplace"].campaign_vault() == deployed["CampaignVault"].address
+    assert deployed["Marketplace"].fee_bps() == 250
+    assert deployed["AdSlot"].ownerOf(1) == boa.env.eoa
+    assert deployed["AdSlot"].lease_of(1, 0).creative_id == 1
     out = capsys.readouterr().out
-    assert "not implemented yet" in out
+    assert "seeded" in out
     assert "wrote" not in out  # pyevm never writes an artifact file
 
 

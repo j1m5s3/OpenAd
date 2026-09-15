@@ -53,4 +53,4 @@ if ($Reset) {
 
 Write-Host ""
 Write-Host "Docker services stopped. This script does not kill app processes."
-Write-Host "Stop api/indexer/web/embed by closing each openad-* window or pressing Ctrl+C inside it."
+Write-Host "Stop api/indexer/web/embed/sim by closing each openad-* window or pressing Ctrl+C inside it."

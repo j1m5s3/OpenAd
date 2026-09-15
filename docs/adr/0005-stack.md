@@ -1,6 +1,6 @@
 # ADR-0005: Technology stack
 
-- **Status:** Accepted
+- **Status:** Accepted (web-app row superseded by [ADR-0008](0008-web-tailwind-rainbowkit.md))
 - **Date:** 2026-09-08
 - **Scope:** repo
 
@@ -15,7 +15,7 @@ serving edge, a wallet-connected web app, and a tiny embeddable component.
 | ------------------------ | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Contracts                | **Vyper 0.4 + Moccasin** (titanoboa tests), **snekmate** modules                        | Python-native toolchain; `uv run mox …`. Anvil via Docker for integration; Base fork tests.                                |
 | Off-chain services       | **Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic, Postgres, web3.py**, structlog   | One package `openad`, three processes (api, serve, indexer). `uv` for env/deps, `ruff` + `mypy --strict`.                  |
-| Web app                  | **Vite + React 19 + TypeScript + MUI**, react-router, TanStack Query, **wagmi + viem**  | SPA, no SSR. Injected + Coinbase Wallet connectors; RainbowKit/AppKit optional later.                                      |
+| Web app                  | **Vite + React 19 + TypeScript + Tailwind + RainbowKit**, react-router, TanStack Query, **wagmi + viem** | SPA, no SSR. See ADR-0008. MUI removed. Next.js still rejected. |
 | Embed                    | **Vanilla TypeScript web component**, Vite library build                                | Zero runtime deps, ≤ 5 KB gzipped.                                                                                         |
 | Package management       | `uv` (Python), **npm workspaces** (TypeScript)                                          | npm chosen over pnpm because it is already present on the maintainer's machine; no functional difference for two packages. |
 | Local infra              | `docker compose`: `ghcr.io/foundry-rs/foundry` (Anvil), `postgres:16`                   | No Foundry install required on the host.                                                                                   |
@@ -31,7 +31,10 @@ serving edge, a wallet-connected web app, and a tiny embeddable component.
   simpler. Prerender public slot pages later if SEO matters.
 - **TypeScript indexer (Ponder/Subsquid)** — good tools, but a Python indexer keeps one language
   for all off-chain code and shares the ORM models with the API.
-- **Tailwind/shadcn** — fine, but MUI was requested and gives complete components quickly.
+- **Tailwind/shadcn** — originally deferred for MUI speed; **superseded by ADR-0008** (Tailwind
+  adopted for the Discover-style UI). shadcn remains optional.
+- **RainbowKit/AppKit** — originally "optional later"; **adopted in ADR-0008**. Optional Turnkey
+  is ADR-0011.
 
 ## Consequences
 

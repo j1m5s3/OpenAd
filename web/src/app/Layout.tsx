@@ -1,59 +1,120 @@
-import AppBar from '@mui/material/AppBar';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Container from '@mui/material/Container';
-import Stack from '@mui/material/Stack';
-import Toolbar from '@mui/material/Toolbar';
-import Typography from '@mui/material/Typography';
-import { NavLink, Outlet } from 'react-router';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import type { FormEvent } from 'react';
+import { useState } from 'react';
+import { NavLink, Outlet, useNavigate, useSearchParams } from 'react-router';
 
-import { ConnectButton } from '../components/ConnectButton';
+import { IndexerLagBanner } from '../components/IndexerLagBanner';
+import { WalletRail } from '../components/WalletRail';
+import { useSiwe } from '../features/auth/useSiwe';
+import { guideUrl } from '../lib/copy';
+import { withDevWalletParam } from '../lib/devWalletQuery';
 import { routes } from './paths';
 
 const nav = [
-  { to: routes.marketplace, label: 'Marketplace', end: true },
-  { to: routes.publisher, label: 'Publisher', end: false },
-  { to: routes.advertiser, label: 'Advertiser', end: false },
+  { to: routes.discover, label: 'Discover', end: true },
+  { to: routes.supply, label: 'Supply', end: false },
+  { to: routes.campaigns, label: 'Campaigns', end: false },
 ];
 
 export function Layout() {
+  const { error } = useSiwe();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const [q, setQ] = useState(params.get('q') ?? '');
+  const guideHref = guideUrl();
+
+  function onSearch(e: FormEvent) {
+    e.preventDefault();
+    const next = q.trim();
+    navigate(withDevWalletParam(next ? `/?q=${encodeURIComponent(next)}` : '/'));
+  }
+
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <AppBar
-        position="static"
-        color="transparent"
-        elevation={0}
-        sx={{ borderBottom: 1, borderColor: 'divider' }}
-      >
-        <Toolbar sx={{ gap: 2 }}>
-          <Typography
-            variant="h6"
-            component={NavLink}
-            to={routes.marketplace}
-            sx={{ color: 'inherit', textDecoration: 'none' }}
+    <div className="min-h-screen bg-canvas text-ink">
+      <header className="sticky top-0 z-40 border-b border-line bg-canvas/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+          <NavLink
+            to={withDevWalletParam(routes.discover)}
+            className="text-lg font-semibold tracking-tight"
           >
             OpenAd
-          </Typography>
-          <Stack direction="row" spacing={1} sx={{ flexGrow: 1 }}>
+          </NavLink>
+          <nav className="hidden items-center gap-1 md:flex">
             {nav.map((item) => (
-              <Button
+              <NavLink
                 key={item.to}
-                component={NavLink}
-                to={item.to}
+                to={withDevWalletParam(item.to)}
                 end={item.end}
-                color="inherit"
-                sx={{ '&.active': { color: 'primary.main', fontWeight: 600 } }}
+                className={({ isActive }) =>
+                  `rounded-full px-3 py-1.5 text-sm ${
+                    isActive ? 'bg-surface text-ink' : 'text-muted hover:text-ink'
+                  }`
+                }
               >
                 {item.label}
-              </Button>
+              </NavLink>
             ))}
-          </Stack>
-          <ConnectButton />
-        </Toolbar>
-      </AppBar>
-      <Container component="main" maxWidth="lg" sx={{ py: 4, flexGrow: 1 }}>
-        <Outlet />
-      </Container>
-    </Box>
+            {guideHref && (
+              <a
+                href={guideHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-full px-3 py-1.5 text-sm text-muted hover:text-ink"
+              >
+                Guide
+              </a>
+            )}
+          </nav>
+          <form onSubmit={onSearch} className="ml-auto flex-1 md:block md:max-w-xs">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search domain"
+              className="w-full rounded-full border border-line bg-surface px-4 py-1.5 text-sm text-ink outline-none placeholder:text-muted"
+              aria-label="Search domain"
+            />
+          </form>
+          <div className="ml-auto md:ml-0">
+            <ConnectButton chainStatus="icon" showBalance={false} />
+          </div>
+        </div>
+        <nav className="flex gap-2 overflow-x-auto px-4 pb-3 md:hidden">
+          {nav.map((item) => (
+            <NavLink
+              key={item.to}
+              to={withDevWalletParam(item.to)}
+              end={item.end}
+              className={({ isActive }) =>
+                `rounded-full px-3 py-1 text-sm ${isActive ? 'bg-surface' : 'text-muted'}`
+              }
+            >
+              {item.label}
+            </NavLink>
+          ))}
+          {guideHref && (
+            <a
+              href={guideHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full px-3 py-1 text-sm text-muted"
+            >
+              Guide
+            </a>
+          )}
+        </nav>
+      </header>
+      <IndexerLagBanner />
+      {error && (
+        <p className="border-b border-accent/40 bg-surface px-4 py-2 text-center text-sm text-ink">
+          Sign-in: {error}
+        </p>
+      )}
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 lg:flex-row">
+        <main className="min-w-0 flex-1">
+          <Outlet />
+        </main>
+        <WalletRail />
+      </div>
+    </div>
   );
 }

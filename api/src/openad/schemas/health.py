@@ -8,3 +8,4 @@ class HealthResponse(ApiModel):
     version: str
     chain_id: int
     env: str
+    indexer_lag: int | None = None

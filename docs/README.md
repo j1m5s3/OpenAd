@@ -28,6 +28,8 @@ let it stand.
 | A term or its meaning                             | `GLOSSARY.md`                                           |
 | Task status, scope, or acceptance criteria        | `ROADMAP.md`                                            |
 | A decision with alternatives you rejected         | New file in `adr/` (copy `adr/0000-template.md`)        |
+| Headed SME/UX critique of the local web app       | `docs/qa/` plus the matching `.cursor/skills/sandbox-*-critique/` |
+| User-facing product guide (publisher/advertiser how-tos) | `docs/guide/` (published to GitBook; not protocol spec)     |
 
 ## Status legend used in these docs
 

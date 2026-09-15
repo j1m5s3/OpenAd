@@ -19,7 +19,12 @@ export interface DeploymentsArtifact {
   contracts: Record<string, ContractArtifact>;
 }
 
-export type ProtocolContract = 'AdSlot' | 'Marketplace' | 'CreativeRegistry' | 'USDC';
+export type ProtocolContract =
+  | 'AdSlot'
+  | 'Marketplace'
+  | 'CreativeRegistry'
+  | 'USDC'
+  | 'CampaignVault';
 
 export function getDeployment(chainId: number): DeploymentsArtifact | undefined {
   return deployments[chainId];
@@ -28,6 +33,11 @@ export function getDeployment(chainId: number): DeploymentsArtifact | undefined 
 export function hasProtocol(chainId: number): boolean {
   const d = deployments[chainId];
   return !!d && ['AdSlot', 'Marketplace', 'CreativeRegistry'].every((n) => n in d.contracts);
+}
+
+export function hasCampaignVault(chainId: number): boolean {
+  const d = deployments[chainId];
+  return !!d && 'CampaignVault' in d.contracts;
 }
 
 export function getContract(

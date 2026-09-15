@@ -2,8 +2,8 @@
 
     uv run python -m openad.db.bootstrap
 
-Use until the Alembic baseline migration exists (ROADMAP 2.2); after that, use
-``uv run alembic upgrade head``. Refuses to run when OPENAD_ENV=prod.
+Prefer ``uv run alembic upgrade head`` (ROADMAP 2.2). This helper remains for unit tests
+and one-off SQLite. Refuses to run when OPENAD_ENV=prod.
 """
 
 from __future__ import annotations

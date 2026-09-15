@@ -1,0 +1,9 @@
+id: gen3-paused-terms
+persona: publisher
+generation: 3
+steps:
+  - visit: /supply
+  - expect: Pause sales
+  - visit: /
+  - expect: paused
+  - click: paused

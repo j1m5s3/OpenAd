@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openad.indexer.events import DecodedEvent
@@ -21,6 +22,8 @@ from openad.logging import get_logger
 from openad.models import (
     AllowedAdvertiser,
     Approval,
+    Campaign,
+    CampaignSettlement,
     Creative,
     CreativeVerification,
     IndexerCursor,
@@ -31,6 +34,7 @@ from openad.models import (
 )
 from openad.models.creative import APPROVAL_REQUESTED, KIND_MEDIA, KIND_NFT_REF
 from openad.models.offchain import VERIFY_PENDING
+from openad.serve.cache import bump as bump_serve_cache
 
 log = get_logger(__name__)
 
@@ -103,20 +107,54 @@ async def slot_minted(session: AsyncSession, ev: DecodedEvent) -> None:
             updated_block=ev.block_number,
         )
         session.add(slot)
-    else:  # replay after reorg: refresh immutable fields defensively
+    else:  # replay after reorg / Anvil reset: refresh spec; calendar, terms, leases replay after
         slot.owner = _addr(a["owner"])
+        slot.width = int(a["width"])
+        slot.height = int(a["height"])
+        slot.kind = int(a["kind"])
+        slot.domain = str(a["domain"]).lower()
+        slot.calendar_version = 0
+        slot.period_seconds = None
+        slot.first_period_start = None
+        slot.minted_block = ev.block_number
+        slot.minted_tx = ev.tx_hash
         slot.updated_block = ev.block_number
+        terms = await session.get(Terms, slot.slot_id)
+        if terms is not None:
+            await session.delete(terms)
+        stale_settlements = (
+            await session.execute(
+                select(CampaignSettlement).where(CampaignSettlement.slot_id == slot.slot_id)
+            )
+        ).scalars()
+        for settlement in stale_settlements:
+            await session.delete(settlement)
+        stale_campaigns = (
+            await session.execute(select(Campaign).where(Campaign.slot_id == slot.slot_id))
+        ).scalars()
+        for campaign in stale_campaigns:
+            await session.delete(campaign)
+        stale_leases = (
+            await session.execute(select(Lease).where(Lease.slot_id == slot.slot_id))
+        ).scalars()
+        for lease in stale_leases:
+            await session.delete(lease)
+        bump_serve_cache()
 
 
 @on_event("AdSlot", "Transfer")
 async def slot_transferred(session: AsyncSession, ev: DecodedEvent) -> None:
     """ERC-721 Transfer: current owner == publisher. Mint transfers arrive with SlotMinted."""
     a = ev.args
-    slot = await session.get(Slot, int(a["tokenId"]))
+    token_id = a.get("tokenId", a.get("token_id"))
+    to_addr = a.get("to", a.get("receiver"))
+    if token_id is None or to_addr is None:
+        return
+    slot = await session.get(Slot, int(token_id))
     if slot is None:
         # Transfer may be decoded before SlotMinted in the same tx; SlotMinted will create it.
         return
-    slot.owner = _addr(a["to"])
+    slot.owner = _addr(to_addr)
     slot.updated_block = ev.block_number
 
 
@@ -156,6 +194,7 @@ async def lease_set(session: AsyncSession, ev: DecodedEvent) -> None:
         lease.creative_id = int(a["creative_id"])
         lease.start, lease.end = int(a["start"]), int(a["end"])
         lease.tx_hash, lease.block_number = ev.tx_hash, ev.block_number
+    bump_serve_cache(int(a["slot_id"]))
 
 
 @on_event("AdSlot", "MarketSet")
@@ -185,7 +224,10 @@ async def terms_set(session: AsyncSession, ev: DecodedEvent) -> None:
     terms.lead_seconds = int(a["lead_seconds"])
     terms.sale_end = int(a["sale_end"])
     terms.approval_mode = int(a["approval_mode"])
+    terms.sale_mode = int(a.get("sale_mode", 0))
+    terms.floor_cpc = int(a.get("floor_cpc", 0))
     terms.updated_block = ev.block_number
+    bump_serve_cache(int(a["slot_id"]))
 
 
 @on_event("Marketplace", "PausedSet")
@@ -196,6 +238,14 @@ async def paused_set(session: AsyncSession, ev: DecodedEvent) -> None:
         return
     terms.paused = bool(ev.args["paused"])
     terms.updated_block = ev.block_number
+    bump_serve_cache(int(ev.args["slot_id"]))
+
+
+@on_event("Marketplace", "CampaignVaultSet")
+async def campaign_vault_set(session: AsyncSession, ev: DecodedEvent) -> None:
+    cfg = await _protocol_config(session, _chain_id_of(session))
+    cfg.campaign_vault = _addr(ev.args["vault"])
+    cfg.updated_block = ev.block_number
 
 
 @on_event("Marketplace", "Purchased")
@@ -239,6 +289,178 @@ async def treasury_set(session: AsyncSession, ev: DecodedEvent) -> None:
     cfg.updated_block = ev.block_number
 
 
+# ----------------------------------------------------------------------------- CampaignVault
+
+
+async def _campaign(session: AsyncSession, campaign_id: int) -> Campaign | None:
+    return await session.get(Campaign, campaign_id)
+
+
+@on_event("CampaignVault", "CampaignOpened")
+async def campaign_opened(session: AsyncSession, ev: DecodedEvent) -> None:
+    a = ev.args
+    cid = int(a["campaign_id"])
+    camp = await session.get(Campaign, cid)
+    budget = int(a["budget"])
+    if camp is None:
+        camp = Campaign(
+            campaign_id=cid,
+            advertiser=_addr(a["advertiser"]),
+            slot_id=int(a["slot_id"]),
+            creative_id=int(a["creative_id"]),
+            max_cpc=int(a["max_cpc"]),
+            remaining=budget,
+            budget=budget,
+            valid_from=int(a["valid_from"]),
+            valid_until=int(a["valid_until"]),
+            paused=False,
+            close_after=0,
+            closed=False,
+            opened_tx=ev.tx_hash,
+            opened_block=ev.block_number,
+            updated_block=ev.block_number,
+        )
+        session.add(camp)
+    else:
+        camp.advertiser = _addr(a["advertiser"])
+        camp.slot_id = int(a["slot_id"])
+        camp.creative_id = int(a["creative_id"])
+        camp.max_cpc = int(a["max_cpc"])
+        camp.budget = budget
+        camp.valid_from = int(a["valid_from"])
+        camp.valid_until = int(a["valid_until"])
+        camp.opened_tx = ev.tx_hash
+        camp.opened_block = ev.block_number
+        camp.updated_block = ev.block_number
+    bump_serve_cache(int(a["slot_id"]))
+
+
+@on_event("CampaignVault", "CampaignToppedUp")
+async def campaign_topped_up(session: AsyncSession, ev: DecodedEvent) -> None:
+    a = ev.args
+    camp = await _campaign(session, int(a["campaign_id"]))
+    if camp is None:
+        log.warning("indexer.top_up_unknown_campaign", campaign_id=a["campaign_id"])
+        return
+    camp.remaining = int(a["remaining"])
+    camp.updated_block = ev.block_number
+    bump_serve_cache(camp.slot_id)
+
+
+@on_event("CampaignVault", "MaxCpcSet")
+async def max_cpc_set(session: AsyncSession, ev: DecodedEvent) -> None:
+    a = ev.args
+    camp = await _campaign(session, int(a["campaign_id"]))
+    if camp is None:
+        log.warning("indexer.max_cpc_unknown_campaign", campaign_id=a["campaign_id"])
+        return
+    camp.max_cpc = int(a["max_cpc"])
+    camp.updated_block = ev.block_number
+    bump_serve_cache(camp.slot_id)
+
+
+@on_event("CampaignVault", "CampaignPausedSet")
+async def campaign_paused_set(session: AsyncSession, ev: DecodedEvent) -> None:
+    a = ev.args
+    camp = await _campaign(session, int(a["campaign_id"]))
+    if camp is None:
+        log.warning("indexer.pause_unknown_campaign", campaign_id=a["campaign_id"])
+        return
+    camp.paused = bool(a["paused"])
+    camp.updated_block = ev.block_number
+    bump_serve_cache(camp.slot_id)
+
+
+@on_event("CampaignVault", "CloseRequested")
+async def close_requested(session: AsyncSession, ev: DecodedEvent) -> None:
+    a = ev.args
+    camp = await _campaign(session, int(a["campaign_id"]))
+    if camp is None:
+        log.warning("indexer.close_unknown_campaign", campaign_id=a["campaign_id"])
+        return
+    camp.close_after = int(a["close_after"])
+    camp.updated_block = ev.block_number
+    bump_serve_cache(camp.slot_id)
+
+
+@on_event("CampaignVault", "CampaignFinalized")
+async def campaign_finalized(session: AsyncSession, ev: DecodedEvent) -> None:
+    a = ev.args
+    camp = await _campaign(session, int(a["campaign_id"]))
+    if camp is None:
+        log.warning("indexer.finalize_unknown_campaign", campaign_id=a["campaign_id"])
+        return
+    camp.remaining = 0
+    camp.closed = True
+    camp.updated_block = ev.block_number
+    bump_serve_cache(camp.slot_id)
+
+
+@on_event("CampaignVault", "Settled")
+async def settled(session: AsyncSession, ev: DecodedEvent) -> None:
+    a = ev.args
+    batch_id = _hex(a["batch_id"])
+    existing = await session.get(CampaignSettlement, batch_id)
+    if existing is not None:
+        return
+    camp = await _campaign(session, int(a["campaign_id"]))
+    charged = int(a["charged"])
+    if camp is None:
+        log.warning("indexer.settle_unknown_campaign", campaign_id=a["campaign_id"])
+        return
+    camp.remaining = max(0, camp.remaining - charged)
+    camp.updated_block = ev.block_number
+    bump_serve_cache(camp.slot_id)
+    session.add(
+        CampaignSettlement(
+            batch_id=batch_id,
+            campaign_id=int(a["campaign_id"]),
+            slot_id=int(a["slot_id"]),
+            publisher=_addr(a["publisher"]),
+            payable_clicks=int(a["payable_clicks"]),
+            charged=charged,
+            fee=int(a["fee"]),
+            tx_hash=ev.tx_hash,
+            block_number=ev.block_number,
+        )
+    )
+
+
+@on_event("CampaignVault", "SettlerSet")
+async def settler_set(session: AsyncSession, ev: DecodedEvent) -> None:
+    cfg = await _protocol_config(session, _chain_id_of(session))
+    cfg.settler = _addr(ev.args["settler"])
+    cfg.updated_block = ev.block_number
+
+
+@on_event("CampaignVault", "VaultFeeSet")
+async def vault_fee_set(session: AsyncSession, ev: DecodedEvent) -> None:
+    cfg = await _protocol_config(session, _chain_id_of(session))
+    cfg.vault_fee_bps = int(ev.args["fee_bps"])
+    cfg.updated_block = ev.block_number
+
+
+@on_event("CampaignVault", "VaultTreasurySet")
+async def vault_treasury_set(session: AsyncSession, ev: DecodedEvent) -> None:
+    cfg = await _protocol_config(session, _chain_id_of(session))
+    cfg.vault_treasury = _addr(ev.args["treasury"])
+    cfg.updated_block = ev.block_number
+
+
+@on_event("CampaignVault", "CloseDelaySet")
+async def close_delay_set(session: AsyncSession, ev: DecodedEvent) -> None:
+    cfg = await _protocol_config(session, _chain_id_of(session))
+    cfg.close_delay_seconds = int(ev.args["seconds"])
+    cfg.updated_block = ev.block_number
+
+
+@on_event("CampaignVault", "MaxBatchChargeSet")
+async def max_batch_charge_set(session: AsyncSession, ev: DecodedEvent) -> None:
+    cfg = await _protocol_config(session, _chain_id_of(session))
+    cfg.max_batch_charge = int(ev.args["max_batch_charge"])
+    cfg.updated_block = ev.block_number
+
+
 # ----------------------------------------------------------------------------- CreativeRegistry
 
 
@@ -256,6 +478,8 @@ async def creative_registered(session: AsyncSession, ev: DecodedEvent) -> None:
             updated_block=ev.block_number,
         )
         session.add(creative)
+    creative.advertiser = _addr(a["advertiser"])
+    creative.kind = int(a["kind"])
     creative.uri = str(a["uri"])
     creative.content_hash = _hex(a["content_hash"]) if int(a["kind"]) == KIND_MEDIA else None
     creative.mime = str(a["mime"])
@@ -312,6 +536,7 @@ async def approval_set(session: AsyncSession, ev: DecodedEvent) -> None:
         session.add(approval)
     approval.status = int(a["status"])
     approval.updated_block = ev.block_number
+    bump_serve_cache()
 
 
 @on_event("CreativeRegistry", "AdvertiserAllowed")
@@ -324,6 +549,7 @@ async def advertiser_allowed(session: AsyncSession, ev: DecodedEvent) -> None:
         session.add(row)
     row.allowed = bool(a["allowed"])
     row.updated_block = ev.block_number
+    bump_serve_cache()
 
 
 @on_event("CreativeRegistry", "CreativeRevoked")
@@ -334,6 +560,7 @@ async def creative_revoked(session: AsyncSession, ev: DecodedEvent) -> None:
         return
     creative.revoked = True
     creative.updated_block = ev.block_number
+    bump_serve_cache()
 
 
 @on_event("CreativeRegistry", "ModeratorSet")

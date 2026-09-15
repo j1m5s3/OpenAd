@@ -10,8 +10,11 @@ Living subsystem index and architectural anchors for OpenAd.
 - `docs/ARCHITECTURE.md` — System architecture, write/read paths, package relationships, serve contract.
 - `docs/CONVENTIONS.md` — Coding rules, package constraints, testing rules, definition of done.
 - `docs/ROADMAP.md` — Phased development tasks, pointers, and acceptance criteria.
-- `docs/adr/` — Architecture Decision Records (0001-0007).
+- `docs/adr/` — Architecture Decision Records (0001–0013).
 - `docs/adr/0007-local-run-scripts.md` — Local run scripts: PowerShell-only, titled terminals, docker-only down, MockUSDC honesty.
+- `docs/adr/0012-local-sim-daemon.md` — Opt-in Anvil sim personas `#3–#9`.
+- `docs/adr/0013-dev-wallet-injector.md` — DEV-only keyless Anvil EIP-1193 forwarder for headed critique.
+- `docs/qa/` — Dual-persona SME/UX journeys, critique, findings, scorecard (ROADMAP 4.8).
 
 ### 2. Smart Contracts (`contracts/`)
 - `contracts/src/interfaces/*.vyi` — Canonical contract interfaces (`IAdSlot`, `IMarketplace`, `ICreativeRegistry`).
@@ -33,7 +36,8 @@ Living subsystem index and architectural anchors for OpenAd.
 ### 4. Web Application (`web/`)
 - `web/src/main.tsx` & `web/src/app/` — Application entrypoint, routing, layout providers.
 - `web/src/features/` — Feature modules: `marketplace/`, `publisher/`, `advertiser/`.
-- `web/src/lib/` — API fetch client (`api.ts`), Wagmi config (`wagmi.ts`), deployments reader (`deployments.ts`), formatting (`format.ts`).
+- `web/src/dev/` — ADR-0013 Anvil injector, EIP-6963 announce, RainbowKit auto-connect (`?devwallet=`).
+- `web/src/lib/` — API fetch client (`api.ts`), Wagmi config (`wagmi.ts`), deployments reader (`deployments.ts`), formatting (`format.ts`), `devWalletQuery.ts`.
 - `web/scripts/sync-deployments.mjs` — Deployment sync script creating `web/src/generated/deployments/`.
 
 ### 5. Embed Component (`embed/`)
@@ -45,11 +49,18 @@ Living subsystem index and architectural anchors for OpenAd.
 - `scripts/setup.ps1` — Idempotent first-time setup: `.env`, docker, `uv sync`, Moccasin wallet import (once), MockUSDC deploy, `openad.db.bootstrap`, `npm install`, web deployment sync. Honest summary: MockUSDC-only until ROADMAP 1.1–1.4.
 - `scripts/dev-up.ps1` — Preflight (`.env`, `31337.json`, docker health, port report); starts titled PowerShell windows for api, indexer, web (`-Embed` optional). Does not kill conflicting ports.
 - `scripts/dev-down.ps1` — `docker compose down` only (optional `-Reset` drops `pgdata`, `31337.json`, `api/.cache/`). Never kills app processes.
-- Root `package.json` — `stack:setup`, `stack:up`, `stack:down` npm wrappers (`powershell -ExecutionPolicy Bypass -File scripts/*.ps1`).
+- Root `package.json` — `stack:setup`, `stack:up`, `stack:down`, `stack:sim`, `stack:sim:down` npm wrappers (`powershell -ExecutionPolicy Bypass -File scripts/*.ps1`).
 
 **Local-run decision log (ADR-0007):** PowerShell 5.1 only (no bash twins yet); new titled terminals per process (not background jobs / `concurrently`); `stack:down` stops docker only — close `openad-*` windows or Ctrl+C to stop apps.
 
-### 7. Infrastructure & Tooling (`infra`)
+### 7. Local sim (`sim/`, ADR-0012)
+- `sim/src/main.ts` — opt-in daemon (Anvil #3–#9). Not started by `dev-up`.
+- `sim/src/mcp.ts` — MCP stdio adapter to `127.0.0.1:8610`.
+- `scripts/sim-up.ps1` / `sim-down.ps1` — titled `openad-sim` window; down is close-the-window.
+- `.cursor/skills/sandbox-sme-critique/` — AdTech + crypto business SME (headed critique).
+- `.cursor/skills/sandbox-ux-critique/` — ads + crypto UI/UX SME.
+
+### 8. Infrastructure & Tooling (`infra`)
 - `docker-compose.yml` — Local Anvil (host 8545) + Postgres 16 (host 15432 → container 5432).
 - `.env.example` — Master configuration template for all services.
 - `package.json` — Root npm workspaces script runner and `stack:*` local loop entry points.

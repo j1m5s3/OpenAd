@@ -19,6 +19,7 @@ from typing import Any, cast
 
 from eth_typing import ABIEvent
 from eth_utils.abi import event_abi_to_log_topic
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from web3 import AsyncWeb3
 from web3.types import LogReceipt
@@ -28,11 +29,44 @@ from openad.config import Settings
 from openad.indexer import handlers
 from openad.indexer.events import DecodedEvent
 from openad.logging import get_logger
-from openad.models import IndexerCursor
+from openad.models import (
+    AllowedAdvertiser,
+    Approval,
+    Campaign,
+    CampaignSettlement,
+    Creative,
+    CreativeVerification,
+    IndexerCursor,
+    Lease,
+    ProtocolConfig,
+    Slot,
+    Terms,
+)
+from openad.models.offchain import ClickEvent, DomainVerification, HouseAd, ServeEvent
 
 log = get_logger(__name__)
 
 CURSOR_NAME = "protocol"
+
+# Chain-derived rows plus FK dependents. Off-chain sessions/nonces are kept.
+# Order is children-first so Postgres FKs succeed on Anvil chain reset.
+_ANVIL_RESET_MODELS: tuple[type[Any], ...] = (
+    ClickEvent,
+    CampaignSettlement,
+    Campaign,
+    ServeEvent,
+    HouseAd,
+    DomainVerification,
+    Lease,
+    Terms,
+    CreativeVerification,
+    Approval,
+    AllowedAdvertiser,
+    Creative,
+    Slot,
+    ProtocolConfig,
+    IndexerCursor,
+)
 
 
 class IndexerRunner:
@@ -70,16 +104,37 @@ class IndexerRunner:
 
     # ------------------------------------------------------------------ head / cursor
 
+    async def _latest_block(self) -> int:
+        latest_raw: Any = self.w3.eth.block_number
+        if callable(latest_raw) and not hasattr(latest_raw, "__await__"):
+            latest_raw = latest_raw()
+        if hasattr(latest_raw, "__await__"):
+            return int(await latest_raw)
+        return int(latest_raw)
+
     async def safe_head(self) -> int:
-        """Block number safe to index: `safe` tag if supported, else latest - confirmations."""
+        """Block number safe to index.
+
+        Anvil implements the ``safe`` tag ~32 blocks behind ``latest`` and does not
+        mine empty blocks, so local leases would never index. Chain 31337 uses
+        ``latest - OPENAD_INDEXER_CONFIRMATIONS`` (ARCHITECTURE §3.7).
+        """
+        latest = await self._latest_block()
+        if self.deployment.chain_id == 31337:
+            return max(0, int(latest) - self.settings.indexer_confirmations)
         try:
             block = await self.w3.eth.get_block("safe")
             return int(block["number"])
         except Exception:
-            latest = await self.w3.eth.block_number
-            return max(0, latest - self.settings.indexer_confirmations)
+            return max(0, int(latest) - self.settings.indexer_confirmations)
 
     async def start_block(self) -> int:
+        if self.deployment.chain_id == 31337:
+            latest = await self._latest_block()
+            if await self._anvil_has_future_rows(latest):
+                log.warning("indexer.anvil_future_rows", latest=latest)
+                await self._wipe_anvil_derived()
+                return self.genesis_block
         async with self.sessions() as session:
             cursor = await session.get(IndexerCursor, (self.deployment.chain_id, CURSOR_NAME))
         if cursor is None:
@@ -92,6 +147,8 @@ class IndexerRunner:
                 cursor=cursor.block_number,
                 hint="local Anvil has no volume; compose down resets the chain",
             )
+            if self.deployment.chain_id == 31337:
+                await self._wipe_anvil_derived()
             return self.genesis_block
         if _hex(block["hash"]) != cursor.block_hash.lower():
             rewind = max(
@@ -100,6 +157,30 @@ class IndexerRunner:
             log.warning("indexer.reorg_detected", cursor=cursor.block_number, rewind_to=rewind)
             return rewind
         return cursor.block_number + 1
+
+    async def _anvil_has_future_rows(self, latest: int) -> bool:
+        async with self.sessions() as session:
+            slot = (
+                await session.execute(
+                    select(Slot.slot_id).where(Slot.updated_block > latest).limit(1)
+                )
+            ).first()
+            if slot is not None:
+                return True
+            creative = (
+                await session.execute(
+                    select(Creative.creative_id).where(Creative.updated_block > latest).limit(1)
+                )
+            ).first()
+            return creative is not None
+
+    async def _wipe_anvil_derived(self) -> None:
+        """Drop derived cache so a new Anvil life cannot mix with the previous one."""
+        async with self.sessions() as session:
+            for model in _ANVIL_RESET_MODELS:
+                await session.execute(delete(model))
+            await session.commit()
+        log.warning("indexer.anvil_cache_wiped")
 
     # ------------------------------------------------------------------ processing
 
@@ -138,7 +219,17 @@ class IndexerRunner:
             await session.commit()
         if events:
             log.info("indexer.range", start=start, end=end, events=len(events))
+        await self._verify_pending()
         return len(events)
+
+    async def _verify_pending(self) -> None:
+        from openad.services import media as media_service
+
+        try:
+            async with self.sessions() as session:
+                await media_service.verify_pending(session, self.settings)
+        except Exception:
+            log.exception("indexer.verify_failed")
 
     def decode(self, raw: LogReceipt) -> DecodedEvent | None:
         entry = self._decoders.get(str(raw["address"]).lower())

@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     public_url: str = "http://localhost:8000"
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     # --- serving edge
     serve_ttl_seconds: int = Field(default=30, ge=1)
@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     # --- auth (SIWE; ROADMAP 3.1)
     session_secret: str = "change-me-in-real-environments"  # noqa: S105 - documented placeholder
     session_ttl_seconds: int = 86400
+
+    # --- CPC clicks (ADR-0014). Settler key is NOT here; see openad.settler.settings.
+    click_hmac_secret: str = "change-me-click-hmac"  # noqa: S105 - documented placeholder
+    click_ivt: bool = True
+    click_max_per_campaign_hour: int = Field(default=120, ge=1)
 
     @property
     def cors_origin_list(self) -> list[str]:

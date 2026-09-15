@@ -16,13 +16,13 @@ dot_env = "../.env"
 is_zksync = false
 
 [networks.anvil]
-# `docker compose up -d anvil` from the repo root. Local setup deploys with
-# `--private-key` (Foundry account #0; key is in ../docker-compose.yml comments).
+# `docker compose up -d anvil` from the repo root. Anvil unlocks Foundry account #0;
+# `script/deploy.py` binds that EOA via `eth_accounts` (no Moccasin keystore).
+# `.\scripts\setup.cmd` may still pass `--private-key` from docker-compose.yml comments.
 url = "http://127.0.0.1:8545"
 chain_id = 31337
 prompt_live = false
 save_to_db = false
-default_account_name = "anvil"
 
 # ------------------------------------------------------------------ staging
 [networks.base-sepolia]

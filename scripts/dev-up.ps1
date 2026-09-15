@@ -218,6 +218,10 @@ Invoke-Step 'start openad-indexer' {
     Start-TitledWindow -Title 'openad-indexer' -WorkingDirectory $apiDir -Command 'uv run python -m openad.indexer'
 }
 
+Invoke-Step 'start openad-settler' {
+    Start-TitledWindow -Title 'openad-settler' -WorkingDirectory $apiDir -Command 'uv run python -m openad.settler'
+}
+
 Invoke-Step 'start openad-web' {
     Start-TitledWindow -Title 'openad-web' -WorkingDirectory $RepoRoot -Command 'npm.cmd run dev:web'
 }
@@ -228,9 +232,9 @@ if ($Embed) {
     }
 }
 
-$started = 'openad-api, openad-indexer, openad-web'
+$started = 'openad-api, openad-indexer, openad-settler, openad-web'
 if ($Embed) {
-    $started = 'openad-api, openad-indexer, openad-web, openad-embed'
+    $started = 'openad-api, openad-indexer, openad-settler, openad-web, openad-embed'
 }
 
 Write-Host ""
@@ -246,4 +250,4 @@ Write-Host ""
 Write-Host "Stop: close each openad-* window or press Ctrl+C inside it."
 Write-Host "      .\scripts\dev-down.cmd stops docker. The next .\scripts\dev-up.cmd starts it again."
 Write-Host ""
-Write-Host "The indexer will log indexer.nothing_to_index until ROADMAP 1.1-1.4 (protocol contracts)."
+Write-Host "Optional live marketplace activity: .\scripts\sim-up.cmd"

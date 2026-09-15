@@ -10,3 +10,4 @@ async def test_health(client: AsyncClient) -> None:
     assert body["status"] == "ok"
     assert body["chainId"] == 31337
     assert body["env"] == "test"
+    assert "indexerLag" in body
