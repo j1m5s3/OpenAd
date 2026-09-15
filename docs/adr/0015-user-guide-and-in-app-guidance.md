@@ -33,9 +33,10 @@ book.
    network and with `VITE_GUIDE_URL` unset. GitBook is the long-form expansion
    of the same facts.
 
-3. **`VITE_GUIDE_URL` is optional.** When unset, the Layout Guide link and every
-   “Learn more” link are omitted; hints still render. Documented in
-   `.env.example` and `ARCHITECTURE.md` §5.
+3. **`VITE_GUIDE_URL` is optional.** The hosted book is
+   `https://pam-2.gitbook.io/open-ad-docs`. When the env var is unset, the Layout
+   Guide link and every “Learn more” link are omitted; hints still render.
+   Documented in `.env.example` and `ARCHITECTURE.md` §5.
 
 4. **Two shared primitives, no new runtime dependencies.** `FieldHint` (click
    toggle, not hover; Escape / outside click; optional Learn more) and `Wizard`
@@ -64,8 +65,10 @@ book.
 
 ## Consequences
 
-- Editors change `docs/guide/` in PRs; operators paste the GitBook space URL
-  into `VITE_GUIDE_URL` when the space exists.
+- Editors change `docs/guide/` in PRs; Git Sync publishes to
+  [OpenAd docs](https://pam-2.gitbook.io/open-ad-docs/). Operators set
+  `VITE_GUIDE_URL` to that origin (`.env.example` already has it). Comment it
+  out to hide Guide / Learn more links.
 - e2e YAML and smoke scripts click wizard stages; headings `Mint slot`,
   `Calendar`, `Terms`, `Register media`, `Request approval` stay visible.
 - Non-custodial invariant unchanged: web never holds spending keys.

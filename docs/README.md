@@ -29,7 +29,7 @@ let it stand.
 | Task status, scope, or acceptance criteria        | `ROADMAP.md`                                            |
 | A decision with alternatives you rejected         | New file in `adr/` (copy `adr/0000-template.md`)        |
 | Headed SME/UX critique of the local web app       | `docs/qa/` plus the matching `.cursor/skills/sandbox-*-critique/` |
-| User-facing product guide (publisher/advertiser how-tos) | `docs/guide/` (GitBook Git Sync; not protocol spec). Site map: `gitbook-docs.yaml` at repo root; space config: `docs/guide/.gitbook.yaml`. |
+| User-facing product guide (publisher/advertiser how-tos) | `docs/guide/` (GitBook Git Sync; not protocol spec). Published: [open-ad-docs](https://pam-2.gitbook.io/open-ad-docs/). Site map: `gitbook-docs.yaml`; space config: `docs/guide/.gitbook.yaml`. |
 
 ## Status legend used in these docs
 

@@ -317,8 +317,9 @@ Consumers: `api` (`OPENAD_DEPLOYMENTS_DIR`, picks `<OPENAD_CHAIN_ID>.json`), `we
   RainbowKit (dark) for connect (ADR-0008). Optional Turnkey when `VITE_TURNKEY_*` is set
   (ADR-0011). SIWE sessions against the API (ADR-0009).
 - Chains: Anvil (`foundry`, 31337), Base Sepolia, Base. Selected by `VITE_CHAIN_ID`.
-- Optional user guide: `VITE_GUIDE_URL` (GitBook or similar). When unset, the header Guide
-  link and “Learn more” deep links are hidden; `FieldHint` copy still renders (ADR-0015).
+- Optional user guide: `VITE_GUIDE_URL` (default
+  `https://pam-2.gitbook.io/open-ad-docs`). When unset, the header Guide link and
+  “Learn more” deep links are hidden; `FieldHint` copy still renders (ADR-0015).
   Hosted pages sync from `docs/guide/` via site-wide Git Sync (`gitbook-docs.yaml` at the
   repo root).
 - Connectors: RainbowKit defaults (injected, Coinbase Wallet, WalletConnect).

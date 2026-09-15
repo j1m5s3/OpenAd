@@ -81,7 +81,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
       _Done 2026-09-12 (Edge `e2e/scripts/smoke-devwallet.mjs` + `critique-pass.mjs`; Playwright MCP was not connected this session; scorecard round 2 clear; no dual-tag protocol ADR)._
 - [x] **4.9 User guide + in-app guidance.** Pointers: ADR-0015 · `docs/guide/` · `web/src/lib/copy.ts` · `web/src/components/{FieldHint,Wizard,Field}.tsx` · Supply / Campaigns / BuyDialog / OpenCampaignDialog. Does **not** depend on 1.5 or 4.6.
       Acceptance: GitBook-ready `docs/guide/` (glossary terms; CPC never called auction); `VITE_GUIDE_URL` optional; FieldHint + Wizard with no new deps; mint→calendar→terms, register→approval, and buy/open-campaign are staged with “what happens next”; each stage still one on-chain call; e2e/smoke green without a live GitBook.
-      _Done 2026-09-14 (`docs/guide/` + Git Sync yaml; FieldHint/Wizard; primary create/buy flows stepped; `VITE_GUIDE_URL` hidden when unset). Git Sync site map `gitbook-docs.yaml` added 2026-09-14._
+      _Done 2026-09-14 (`docs/guide/` + Git Sync yaml; FieldHint/Wizard; primary create/buy flows stepped; `VITE_GUIDE_URL` hidden when unset). Git Sync site map `gitbook-docs.yaml` added 2026-09-14. Hosted book `https://pam-2.gitbook.io/open-ad-docs` wired as `VITE_GUIDE_URL` 2026-09-14._
 
 ---
 
