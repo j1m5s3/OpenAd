@@ -158,7 +158,7 @@ protocol contract changes in this phase (anything that would need one is recorde
       indexed leases/settlements; read-only endpoints; no new on-chain events; no chain reads
       in the serve path; `eCPM = earnings / impressions × 1000` in integer USDC base units
       (floor); Supply and Campaigns show stat tiles + a lightweight trend view.
-- [ ] **6.5 Cross-platform scripts.**
+- [x] **6.5 Cross-platform scripts.** _Done 2026-09-24._
       Pointers: `scripts/*.ps1` · ADR-0007.
       Acceptance: `scripts/{setup,dev-up,dev-down}.sh` at parity with the `.ps1` scripts,
       shellcheck-clean; `npm run stack:*:sh` and `stack:docker`; ADR-0007 amended (not

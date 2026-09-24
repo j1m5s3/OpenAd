@@ -1,6 +1,9 @@
 # Normalize line endings to LF in the repository and on checkout on every platform.
 * text=auto eol=lf
 
+# Explicit (in addition to the * text=auto eol=lf rule above): shell scripts must be LF.
+*.sh text eol=lf
+
 # Binary assets
 *.png binary
 *.jpg binary

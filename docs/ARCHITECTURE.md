@@ -385,14 +385,21 @@ web/src/
 | Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` (committed) | `8453.json` (committed) |
 
 Local loop (canonical on Windows: `.\scripts\setup.cmd`, `.\scripts\dev-up.cmd`, `.\scripts\dev-down.cmd`;
-`npm run stack:*` is the same if PowerShell can load `npm.ps1`). CI is `.github/workflows/ci.yml`
-(contracts, api, web/embed, Playwright). Live GCP and Base mainnet are out of scope.
+`npm run stack:*` is the same if PowerShell can load `npm.ps1`; bash twins on Linux/macOS/WSL
+per the ADR-0007 amendment). CI is `.github/workflows/ci.yml` (contracts, api, web/embed,
+Playwright, `check:sh`). Live GCP and Base mainnet are out of scope.
 
 ```text
 .\scripts\setup.cmd                      # .env, docker, protocol deploy, alembic upgrade, npm install
 .\scripts\dev-up.cmd                     # starts docker if needed; titled windows: api, indexer, web (-Embed optional)
 .\scripts\sim-up.cmd                     # optional: live Anvil personas (openad-sim). Not started by dev-up
 .\scripts\dev-down.cmd                   # stops docker; next up restarts Anvil/Postgres (Anvil chain is ephemeral)
+
+# Linux/macOS/WSL bash twins (ADR-0007 amendment); each supports --dry-run
+./scripts/setup.sh                       # same steps as setup.cmd
+./scripts/dev-up.sh                      # background children (not titled windows), line-prefixed output; --embed
+./scripts/dev-down.sh                    # stops docker; --reset drops pgdata/31337.json/api/.cache
+./scripts/stack-docker.sh                # one-command full stack: api/indexer/settler as containers
 ```
 
 What the scripts run (manual equivalent):
