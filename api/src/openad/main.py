@@ -17,7 +17,17 @@ from openad.config import Settings, get_settings
 from openad.db.session import Database
 from openad.errors import DomainError
 from openad.logging import configure_logging, get_logger
-from openad.routers import advertisers, auth, clicks, creatives, health, publishers, serve, slots
+from openad.routers import (
+    advertisers,
+    analytics,
+    auth,
+    clicks,
+    creatives,
+    health,
+    publishers,
+    serve,
+    slots,
+)
 
 log = get_logger(__name__)
 
@@ -68,6 +78,7 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     app.include_router(creatives.router, prefix="/v1")
     app.include_router(publishers.router, prefix="/v1")
     app.include_router(advertisers.router, prefix="/v1")
+    app.include_router(analytics.router, prefix="/v1")
     app.include_router(auth.router, prefix="/v1")
     return app
 

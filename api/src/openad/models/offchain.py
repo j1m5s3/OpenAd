@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from openad.db.base import Base
@@ -62,6 +62,7 @@ class ServeEvent(Base):
     """Append-only delivery log. Contains no visitor data by design."""
 
     __tablename__ = "serve_events"
+    __table_args__ = (Index("ix_serve_events_slot_id_at", "slot_id", "at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     slot_id: Mapped[int] = mapped_column(Uint256, index=True)
@@ -78,6 +79,7 @@ class ClickEvent(Base):
     """Off-chain payable-click log. Not rebuildable from chain. No visitor IPs."""
 
     __tablename__ = "click_events"
+    __table_args__ = (Index("ix_click_events_slot_id_at", "slot_id", "at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)

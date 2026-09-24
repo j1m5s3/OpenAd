@@ -158,6 +158,10 @@ protocol contract changes in this phase (anything that would need one is recorde
       indexed leases/settlements; read-only endpoints; no new on-chain events; no chain reads
       in the serve path; `eCPM = earnings / impressions × 1000` in integer USDC base units
       (floor); Supply and Campaigns show stat tiles + a lightweight trend view.
+      _API half done 2026-09-24 (JIT step 19+20, `feat/analytics`): `GET
+      /v1/analytics/slots/{slot_id}` and `GET /v1/analytics/advertisers/{address}`, schemas,
+      service, tests, `ARCHITECTURE.md` §3.10. UI half (Supply/Campaigns stat tiles + trend
+      view) is step 21+22, same branch._
 - [x] **6.5 Cross-platform scripts.** _Done 2026-09-24._
       Pointers: `scripts/*.ps1` · ADR-0007.
       Acceptance: `scripts/{setup,dev-up,dev-down}.sh` at parity with the `.ps1` scripts,
