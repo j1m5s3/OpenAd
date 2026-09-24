@@ -17,7 +17,7 @@ export class DemoNetworkError extends Error {
 /** Same-origin request paths that are still denied even though they resolve to the page's own
  * origin: the real API mounts under `/v1`, and the dev Vite proxy forwards `/anvil` to Anvil. A
  * demo build talking to either, same-origin or not, is a leak. */
-const DENIED_SAME_ORIGIN_PATH_PREFIXES = ['/v1/', '/v1', '/anvil'];
+const DENIED_SAME_ORIGIN_PATH_PREFIXES = ['/v1', '/anvil'];
 
 /** Origins denied outright, in addition to same-origin path prefixes: the configured real API
  * base (`VITE_API_URL`), if it can be parsed. Kept as a function (not a module-level constant)

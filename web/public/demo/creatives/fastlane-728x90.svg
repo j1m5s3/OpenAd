@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="728" height="90" viewBox="0 0 728 90">
+  <rect width="728" height="90" fill="#c2410c"/>
+  <polygon points="30,60 60,30 90,60 75,60 75,75 45,75 45,60" fill="#fed7aa"/>
+  <text x="112" y="40" font-family="sans-serif" font-size="26" font-weight="700" fill="#ffffff">Fastlane L2</text>
+  <text x="112" y="66" font-family="sans-serif" font-size="15" fill="#ffedd5">Sub-second rollup tooling for builders</text>
+</svg>

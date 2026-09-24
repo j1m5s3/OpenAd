@@ -1,11 +1,16 @@
 /** Demo mode installer (ADR-0016). Called once from `main.tsx` before `App` is imported, so it
  * never runs — and its module is never bundled — outside a `VITE_DEMO_MODE=1` build. */
+import { setRequestHandler } from '../lib/api';
+import { createDemoRequestHandler } from './demoApi';
 import { installNetworkGuard } from './networkGuard';
+import { demoStore } from './store';
 
 /** Installs the fixture-backed `lib/api.ts` request handler (ROADMAP 6.2 step 6,
- * `web/src/demo/demoApi.ts`). A no-op today: kept as a named step so `installDemo` already
- * calls the full sequence that step 6 fills in, in place, without changing this call site. */
-function installDemoRequestHandler(): void {}
+ * `web/src/demo/demoApi.ts`), so every `api.*` call resolves from `demoStore` instead of
+ * reaching the network. */
+function installDemoRequestHandler(): void {
+  setRequestHandler(createDemoRequestHandler(demoStore));
+}
 
 /** Installs the in-memory EIP-1193 simulator behind the wagmi `mock` connector (ROADMAP 6.2
  * step 7, `web/src/demo/demoChain.ts`). A no-op today, for the same reason as
