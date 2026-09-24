@@ -10,10 +10,11 @@ Living subsystem index and architectural anchors for OpenAd.
 - `docs/ARCHITECTURE.md` — System architecture, write/read paths, package relationships, serve contract.
 - `docs/CONVENTIONS.md` — Coding rules, package constraints, testing rules, definition of done.
 - `docs/ROADMAP.md` — Phased development tasks, pointers, and acceptance criteria.
-- `docs/adr/` — Architecture Decision Records (0001–0013).
+- `docs/adr/` — Architecture Decision Records (0001–0015; 0016 demo mode and 0017 GCP deploy planned in Phase 6).
 - `docs/adr/0007-local-run-scripts.md` — Local run scripts: PowerShell-only, titled terminals, docker-only down, MockUSDC honesty.
 - `docs/adr/0012-local-sim-daemon.md` — Opt-in Anvil sim personas `#3–#9`.
 - `docs/adr/0013-dev-wallet-injector.md` — DEV-only keyless Anvil EIP-1193 forwarder for headed critique.
+- `docs/business/` — (Phase 6) market fit, GTM/marketing, pitch-deck content source (`pitch-deck.md` → hosted slides), demo script, competitive table.
 - `docs/qa/` — Dual-persona SME/UX journeys, critique, findings, scorecard (ROADMAP 4.8).
 
 ### 2. Smart Contracts (`contracts/`)
@@ -64,3 +65,11 @@ Living subsystem index and architectural anchors for OpenAd.
 - `docker-compose.yml` — Local Anvil (host 8545) + Postgres 16 (host 15432 → container 5432).
 - `.env.example` — Master configuration template for all services.
 - `package.json` — Root npm workspaces script runner and `stack:*` local loop entry points.
+
+### 9. Phase 6 — Go-to-market decisions (2026-09-24, JIT_PLAN)
+- **Branch per slice:** each slice on its own branch off current `main` (`docs/market-fit-gtm`, `feat/web-demo-mode`, `feat/publisher-growth`, `feat/analytics`, `feat/bash-stack-scripts`, `feat/gcp-deploy`, `docs/launch-polish`), one PR each, merged before dependents start.
+- **Demo mode invariant (ADR-0016):** `VITE_DEMO_MODE=1` web build uses seeded in-memory fixtures (via `lib/api.ts` `setRequestHandler`) + wagmi `mock` connector over an in-memory EIP-1193 simulator; fetch guard throws on any API/RPC URL; never opens RPC, never calls the API, never requests real signatures; persistent "Demo — simulated data" banner; demo code tree-shaken from normal builds; static-hostable. Lives in `web/src/demo/`.
+- **Analytics:** CTR/eCPM/trends computed off-chain from `serve_events` + indexed leases/settlements; read-only endpoints; no new events, no chain reads in serve path.
+- **Deploy (ADR-0017):** GCP Cloud Run (api/indexer/settler/web), Cloud SQL, GCS media cache behind `OPENAD_MEDIA_BACKEND=local|gcs`, Secret Manager for settler key; CI deploy gated on GCP secrets; no mainnet broadcast from CI. Runbook `docs/deploy-gcp.md`.
+- **Scripts:** bash twins `scripts/*.sh` amend ADR-0007 (no longer PowerShell-only).
+- **No protocol contract changes** in Phase 6; revenue lever is GMV × `fee_bps` (250, cap 1000) to the owner-settable treasury. Slice A step 2 (competitive.md) moved to slice G.
