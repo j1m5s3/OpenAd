@@ -127,6 +127,57 @@ Do not start 5.2 until picking up this phase. Use glossary **sale mode** / **cam
 
 ---
 
+## Phase 6 — Go-to-market and production (2026-09)
+
+Business docs live in `docs/business/`; excluded from the GitBook guide unless linked. No
+protocol contract changes in this phase (anything that would need one is recorded in
+`docs/business/market-fit.md` as future work needing a spec and an ADR first).
+
+- [x] **6.1 Market-fit assessment + GTM plan + pitch-deck source + ROADMAP Phase 6.**
+      Pointers: `docs/GLOSSARY.md` · `docs/PROTOCOL.md` §11 · `AGENTS.md` invariants.
+      Acceptance: `docs/business/{README,market-fit,gtm-marketing,pitch-deck}.md` exist; pitch
+      deck has 12–14 numbered slides each with speaker notes; every adoption blocker in
+      `market-fit.md` maps to a 6.x task below; no fabricated customers/traction/quotes;
+      glossary vocabulary only (never "sell a slot").
+      _Done 2026-09-24._
+- [ ] **6.2 Demo mode + static showcase (ADR-0016).**
+      Pointers: ADR-0016 (new) · `web/src/demo/` · `ARCHITECTURE.md` §7.
+      Acceptance: `VITE_DEMO_MODE=1` build uses in-memory seeded fixtures and a simulated
+      wallet; never opens an RPC connection, never calls the API, never signs or requests a
+      real wallet signature; persistent "Demo — simulated data, no real funds" banner; demo
+      code tree-shaken out of normal builds; `web/dist-demo` static-hostable with SPA fallback.
+- [ ] **6.3 Publisher growth (embed code, share page, off-chain profile).**
+      Pointers: `web/src/features/publisher/` · `docs/guide/publisher/`.
+      Acceptance: copy-paste embed snippet generator with CMS instructions; public `/slot/:id`
+      share page with OG meta and current price; off-chain publisher profile (site URL,
+      audience description, category tags) via a SIWE-guarded API endpoint; no chain writes.
+- [ ] **6.4 Analytics read model (API + UI).**
+      Pointers: `ARCHITECTURE.md` §3.1 · `api/src/openad/schemas/analytics.py` (new) ·
+      `api/src/openad/services/analytics.py` (new).
+      Acceptance: CTR/eCPM/spend/earnings computed off-chain from existing `serve_events` and
+      indexed leases/settlements; read-only endpoints; no new on-chain events; no chain reads
+      in the serve path; `eCPM = earnings / impressions × 1000` in integer USDC base units
+      (floor); Supply and Campaigns show stat tiles + a lightweight trend view.
+- [ ] **6.5 Cross-platform scripts.**
+      Pointers: `scripts/*.ps1` · ADR-0007.
+      Acceptance: `scripts/{setup,dev-up,dev-down}.sh` at parity with the `.ps1` scripts,
+      shellcheck-clean; `npm run stack:*:sh` and `stack:docker`; ADR-0007 amended (not
+      rewritten) to note bash twins exist alongside PowerShell.
+- [ ] **6.6 Production deploy on GCP (ADR-0017).**
+      Pointers: ADR-0017 (new) · `docs/deploy-gcp.md` (new) · `.github/workflows/ci.yml`.
+      Acceptance: Cloud Run services for `api`/`indexer`/`settler` (settler key from Secret
+      Manager, may only `settle_batch`); Cloud SQL Postgres; GCS media-cache backend behind a
+      storage interface with local disk as default; web/demo served as a static site; CI
+      `deploy` job gated on GCP secret presence, demo-site deploy only, no mainnet broadcast.
+- [ ] **6.7 Docs polish and launch readiness.**
+      Pointers: `README.md` · `docs/business/demo-script.md` (new) · `docs/qa/scorecard.md`.
+      Acceptance: README rewritten with value proposition, demo link, bash+PowerShell
+      quickstart, docs map; demo script (5-min/15-min talk tracks) and launch checklist added,
+      including onramp guide links for USDC-only friction (blocker 5, no onramp code); ROADMAP
+      6.x fully ticked; GitBook guide `SUMMARY` updated.
+
+---
+
 ## Out of scope (do not build without a new ADR)
 
 English or sealed-bid occupancy auctions · per-click chain transactions · advertiser HTML/JS
