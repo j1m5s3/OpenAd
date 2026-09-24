@@ -10,8 +10,9 @@ An open, non-custodial advertising marketplace on Base.
 - **Pages** render the current creative through a ≤ 5 KB `<open-ad>` element backed by an
   indexer-fed serving edge that never reads the chain and never exposes visitors to advertisers.
 
-Status: **Phase 0 (foundation) complete; Phase 1 (protocol contracts) next.** See
-[`docs/ROADMAP.md`](docs/ROADMAP.md).
+Status: **Phases 0–5 complete and running end to end on local Anvil (LEASE and CPC sale
+modes).** Remaining: the Base Sepolia deployment (1.5) and the Base mainnet deployment (4.6).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Documentation
 
