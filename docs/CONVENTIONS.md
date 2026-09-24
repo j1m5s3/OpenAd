@@ -71,6 +71,11 @@ the matching `.mdc` file.
 - Pydantic v2 for all request/response schemas (`schemas/`); never return ORM objects.
 - SQLAlchemy 2.0 typed declarative models (`Mapped[...]`, `mapped_column`). Async sessions.
   Alembic migration for every model change; migration files are reviewed, not auto-trusted.
+- Migrations are frozen DDL: a revision never imports `openad.models` or `Base` and never calls
+  `create_all`/`drop_all`; write explicit `op.create_table`/`op.add_column` calls (custom types as
+  their `impl`, e.g. `Uint256` → `String(78)`). `tests/test_migrations.py` is the guard: a fresh
+  database must `upgrade head`, head must match `Base.metadata` (`compare_metadata`), and
+  `downgrade base` → `upgrade head` must round-trip. `openad.db.bootstrap` stays a test/dev helper.
 - Config only via `openad.config.Settings` (pydantic-settings, prefix `OPENAD_`).
 - Logging via `structlog` (`openad.logging.get_logger`). No `print`.
 - Errors: raise domain exceptions in services; translate to HTTP in one exception handler
