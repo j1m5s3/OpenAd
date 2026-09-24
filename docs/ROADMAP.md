@@ -146,7 +146,7 @@ protocol contract changes in this phase (anything that would need one is recorde
       wallet; never opens an RPC connection, never calls the API, never signs or requests a
       real wallet signature; persistent "Demo — simulated data, no real funds" banner; demo
       code tree-shaken out of normal builds; `web/dist-demo` static-hostable with SPA fallback.
-      _In progress: ADR-0016 accepted._
+      _In progress: ADR-0016 accepted; flows + persona switcher done (`npm run test:demo -w e2e`)._
 - [ ] **6.3 Publisher growth (embed code, share page, off-chain profile).**
       Pointers: `web/src/features/publisher/` · `docs/guide/publisher/`.
       Acceptance: copy-paste embed snippet generator with CMS instructions; public `/slot/:id`

@@ -69,6 +69,19 @@ function extractAddress(message: string): string | null {
   return match ? match[0] : null;
 }
 
+/** Mirrors `auth_service.get_session` + `require_slot_owner` (the real `/v1` off-chain publisher
+ * routes): 401 without a SIWE session, 404 for an unknown slot, 403 when the signed-in wallet does
+ * not own the slot. The "session" is `DemoState.connectedAddress`, set by `authVerify`. */
+function requireSlotOwner(state: DemoState, slotId: string): void {
+  const session = state.connectedAddress;
+  if (!session) throw new ApiError(401, 'unauthorized', 'sign in first');
+  const fixture = findSlot(state, slotId);
+  if (!fixture) notFound('slot', slotId);
+  if (fixture.slot.owner.toLowerCase() !== session.toLowerCase()) {
+    throw new ApiError(403, 'forbidden', 'wallet is not the slot owner');
+  }
+}
+
 function json(body: unknown): unknown {
   // Round-trip through JSON so callers get plain data (matching what `fetch().json()` would
   // hand back), never a live reference into the store.
@@ -138,9 +151,7 @@ export function createDemoRequestHandler(store: Store): RequestHandler {
       }
       if (method === 'PUT' && rest.length === 3 && rest[2] === 'house-ad') {
         const slotId = segment(rest, 1, path);
-        const state = store.get();
-        const fixture = findSlot(state, slotId);
-        if (!fixture) notFound('slot', slotId);
+        requireSlotOwner(store.get(), slotId);
         const body = init?.body ? (JSON.parse(String(init.body)) as { mediaUrl: string; clickUrl: string }) : null;
         if (!body) throw new ApiError(422, 'validation_error', 'missing house-ad body');
         const houseAd = {
@@ -155,12 +166,12 @@ export function createDemoRequestHandler(store: Store): RequestHandler {
       }
       if (method === 'POST' && rest.length === 3 && rest[2] === 'domain-verification') {
         const slotId = segment(rest, 1, path);
-        const state = store.get();
-        const fixture = findSlot(state, slotId);
-        if (!fixture) notFound('slot', slotId);
+        requireSlotOwner(store.get(), slotId);
         const requestedMethod = url.searchParams.get('method') ?? 'meta_tag';
         const token = pseudoHex(`domain:${slotId}`, 32);
-        const record = { slotId, method: requestedMethod, token, verifiedAt: now };
+        // Starting verification never verifies (the real API checks the meta tag / TXT record
+        // only on `?check=true`, which the demo cannot reach — there is no real domain).
+        const record = { slotId, method: requestedMethod, token, verifiedAt: null };
         store.update((s) => {
           s.domainVerifications[slotId] = record;
         });
@@ -198,6 +209,10 @@ export function createDemoRequestHandler(store: Store): RequestHandler {
       if (method === 'GET' && rest.length === 3 && rest[2] === 'pricing-suggestion') {
         const slotId = url.searchParams.get('slot_id');
         if (!slotId) throw new ApiError(422, 'validation_error', 'missing slot_id');
+        requireSlotOwner(state, slotId);
+        if (state.connectedAddress?.toLowerCase() !== address.toLowerCase()) {
+          throw new ApiError(403, 'forbidden', 'wallet is not the publisher');
+        }
         return json(suggestPrices(state, slotId, now));
       }
     }
@@ -219,7 +234,9 @@ export function createDemoRequestHandler(store: Store): RequestHandler {
         // Demo only (ADR-0016 D3): no signature is checked, and none is possible without a real
         // wallet. The "connected" address is whichever demo persona's address appears in the
         // signed message, so a later persona switcher can drive this without changing this file.
-        const address = extractAddress(body.message);
+        // Lowercase, like `auth_service.verify_siwe`: `useSiwe` compares the returned session
+        // address to `address.toLowerCase()`, and a checksummed one would re-sign forever.
+        const address = extractAddress(body.message)?.toLowerCase();
         if (!address) throw new ApiError(401, 'unauthorized', 'no demo persona address in message');
         store.update((s) => {
           s.connectedAddress = address;

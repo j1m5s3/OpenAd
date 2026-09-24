@@ -41,11 +41,32 @@ misleading.
    configured `VITE_API_URL` origin outright — a leak fails loudly instead of silently reaching
    a real API or RPC endpoint.
 6. **UX.** A persistent `DemoBanner` ("Demo — simulated data, no real funds or chain") renders
-   whenever `DEMO_MODE` is on, with a persona-switcher slot filled in a later step.
+   whenever `DEMO_MODE` is on. It hosts the persona switcher (`web/src/demo/PersonaSwitcher.tsx`,
+   a labelled "Viewing as" select: the advertiser Nimbus Wallet or the publisher Basecamp
+   Weekly, both fictional). Switching only calls the simulator's `setAccount` (which emits
+   `accountsChanged`) and invalidates queries; the in-memory store is shared, so a lease or
+   approval made as one persona shows for the other. The demo SIWE round trip (fake
+   `personal_sign` + demo `authVerify`, no signature check) runs on each switch, and the switcher
+   shows "Signed in" once the session belongs to the selected persona. The demo API enforces the
+   real session + slot-owner checks on house ad, domain verification and pricing suggestion.
 7. **Invariants.** In a `VITE_DEMO_MODE=1` build the app never opens an RPC connection, never
    calls the API, never signs or requests a signature from a real wallet, and always shows the
    banner. Demo code is tree-shaken out of normal builds. Demo fixtures use glossary vocabulary
    and real fee math (`lib/auction.ts`, 250 bps default fee) so the numbers shown are honest.
+
+8. **No persistence, by design.** The demo store and the simulated wallet live in memory only:
+   a full page reload re-seeds the fixtures and disconnects the wallet. There is nothing to
+   persist and nothing to leak. Navigate with in-app links to keep a session's state.
+9. **Font-offline.** The demo build makes no outside request, fonts included: a
+   `transformIndexHtml` plugin in `web/vite.config.ts` drops the Google Fonts `preconnect` and
+   stylesheet links when `VITE_DEMO_MODE=1` (the CSS stack falls back to system fonts) and adds an
+   empty inline favicon so the browser's `/favicon.ico` probe cannot 404. Normal builds keep
+   `index.html` unchanged. The wallet connector is `injected` over the simulator (item 4).
+10. **Verification.** `npm run test:demo -w e2e` (`e2e/demo/`) builds the demo, serves it with
+    `vite preview`, drives both personas end to end (buy with permit, CPC campaign open/top
+    up/pause, mint + calendar + terms, approval, house ad, domain verification, pricing
+    suggestion, persona switch), and fails on any request off the preview origin, any
+    WebSocket, console error, page error or network-guard block.
 
 ## Alternatives considered
 

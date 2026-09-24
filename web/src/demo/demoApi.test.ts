@@ -59,20 +59,15 @@ describe('createDemoRequestHandler', () => {
     const advertiser = await api.advertiser(DEMO_PERSONAS.advertiserWallet.address);
     expect(advertiser.creativeIds.length).toBeGreaterThan(0);
 
-    const suggestion = await api.pricingSuggestion(DEMO_PERSONAS.publisherNewsletter.address, '0');
-    expect(suggestion.suggestedStartPrice).toMatch(/^\d+$/);
-
     const nonce = await api.authNonce();
     expect(nonce.nonce.length).toBeGreaterThan(0);
 
-    const verified = await api.authVerify(
-      `sign in as ${DEMO_PERSONAS.advertiserWallet.address}`,
-      '0xdeadbeef',
-    );
-    expect(verified.address).toBe(DEMO_PERSONAS.advertiserWallet.address);
+    const newsletter = DEMO_PERSONAS.publisherNewsletter.address;
+    const verified = await api.authVerify(`sign in as ${newsletter}`, '0xdeadbeef');
+    expect(verified.address).toBe(newsletter.toLowerCase());
 
-    const loggedOut = await api.authLogout();
-    expect(loggedOut.ok).toBe(true);
+    const suggestion = await api.pricingSuggestion(newsletter, '0');
+    expect(suggestion.suggestedStartPrice).toMatch(/^\d+$/);
 
     const houseAd = await api.putHouseAd('0', {
       mediaUrl: '/demo/creatives/nimbus-728x90.svg',
@@ -81,7 +76,11 @@ describe('createDemoRequestHandler', () => {
     expect(houseAd.mediaUrl).toBe('/demo/creatives/nimbus-728x90.svg');
 
     const verification = await api.startDomainVerification('0', 'meta_tag');
-    expect(verification.verified).toBe(true);
+    expect(verification.verified).toBe(false);
+    expect(String(verification.token)).toMatch(/^[0-9a-f]{32}$/);
+
+    const loggedOut = await api.authLogout();
+    expect(loggedOut.ok).toBe(true);
 
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -116,5 +115,35 @@ describe('createDemoRequestHandler', () => {
     first.domain = 'tampered.example';
     const second = await api.getSlot('0');
     expect(second.domain).not.toBe('tampered.example');
+  });
+
+  it('authVerify returns the lowercase session address, like the real API (useSiwe compares lowercase)', async () => {
+    const addr = DEMO_PERSONAS.advertiserWallet.address;
+    const rec = await api.authVerify(
+      `localhost wants you to sign in:\n${addr}\nNonce: demo-1`,
+      '0x',
+    );
+    expect(rec.address).toBe(addr.toLowerCase());
+    expect(demoStore.get().connectedAddress).toBe(addr.toLowerCase());
+  });
+
+  it('off-chain publisher routes require a SIWE session that owns the slot', async () => {
+    const body = { mediaUrl: '/demo/creatives/nimbus-300x250.svg', clickUrl: 'https://x.example' };
+    const newsletter = DEMO_PERSONAS.publisherNewsletter.address;
+    await expect(api.putHouseAd('1', body)).rejects.toMatchObject({ status: 401 });
+    await expect(api.startDomainVerification('1')).rejects.toMatchObject({ status: 401 });
+    await expect(api.pricingSuggestion(newsletter, '1')).rejects.toMatchObject({ status: 401 });
+
+    // Signed in as an advertiser: not the slot owner.
+    await api.authVerify(`as ${DEMO_PERSONAS.advertiserWallet.address}`, '0x');
+    await expect(api.putHouseAd('1', body)).rejects.toMatchObject({ status: 403 });
+    await expect(api.pricingSuggestion(newsletter, '1')).rejects.toMatchObject({ status: 403 });
+
+    // Signed in as the owner: allowed; another publisher's slot is still forbidden.
+    await api.authVerify(`as ${newsletter}`, '0x');
+    await expect(api.putHouseAd('1', body)).resolves.toMatchObject({ slotId: '1' });
+    expect(demoStore.get().houseAds['1']?.mediaUrl).toBe(body.mediaUrl);
+    await expect(api.startDomainVerification('2')).rejects.toMatchObject({ status: 403 });
+    await expect(api.startDomainVerification('99')).rejects.toMatchObject({ status: 404 });
   });
 });

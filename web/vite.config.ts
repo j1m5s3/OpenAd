@@ -2,12 +2,35 @@ import { fileURLToPath } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { loadEnv, type Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
+/** Demo builds (ADR-0016) make no outside request, fonts included: drop the Google Fonts
+ * `preconnect` + stylesheet links from `index.html` so the CSS stack falls back to system fonts,
+ * and declare an empty inline favicon so the browser's implicit `/favicon.ico` probe cannot 404
+ * on a static host. Normal builds keep `index.html` unchanged. */
+function demoIndexHtml(demo: boolean): Plugin {
+  return {
+    name: 'openad-demo-index-html',
+    transformIndexHtml(html) {
+      if (!demo) return html;
+      return html
+        .replace(/[ \t]*<link\b[^>]*fonts\.(?:googleapis|gstatic)\.com[^>]*>\s*/g, '')
+        .replace('</title>', '</title>\n    <link rel="icon" href="data:," />');
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => ({
+  plugins: [
+    react(),
+    tailwindcss(),
+    demoIndexHtml(
+      (process.env.VITE_DEMO_MODE ?? loadEnv(mode, repoRoot, 'VITE_').VITE_DEMO_MODE) === '1',
+    ),
+  ],
   envDir: repoRoot,
   server: {
     host: true,
@@ -27,4 +50,4 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     setupFiles: ['src/test/setup.ts'],
   },
-});
+}));
