@@ -1,7 +1,9 @@
 /** Demo mode installer (ADR-0016). Called once from `main.tsx` before `App` is imported, so it
  * never runs — and its module is never bundled — outside a `VITE_DEMO_MODE=1` build. */
 import { setRequestHandler } from '../lib/api';
+import { createDemoProvider, type DemoProvider } from './demoChain';
 import { createDemoRequestHandler } from './demoApi';
+import { registerDemoDeployment } from './deployment';
 import { installNetworkGuard } from './networkGuard';
 import { demoStore } from './store';
 
@@ -12,10 +14,22 @@ function installDemoRequestHandler(): void {
   setRequestHandler(createDemoRequestHandler(demoStore));
 }
 
-/** Installs the in-memory EIP-1193 simulator behind the wagmi `mock` connector (ROADMAP 6.2
- * step 7, `web/src/demo/demoChain.ts`). A no-op today, for the same reason as
- * `installDemoRequestHandler` above. */
-function installDemoWalletConnector(): void {}
+let demoProvider: DemoProvider | null = null;
+
+/** Registers the synthetic chain-31337 deployment (so `hasProtocol`/`getContract` resolve to the
+ * demo addresses) and creates the in-memory EIP-1193 simulator (`demoChain.ts`) that
+ * `wagmiDemo.ts` wires in as the only transport and the only wallet (ROADMAP 6.2 step 7). Must run
+ * before `App` renders. */
+function installDemoWalletConnector(): void {
+  registerDemoDeployment();
+  demoProvider ??= createDemoProvider(demoStore);
+}
+
+/** The simulator `installDemo()` created. Throws if called before `installDemo()`. */
+export function getDemoProvider(): DemoProvider {
+  if (!demoProvider) throw new Error('installDemo() must run before the demo wagmi config is built');
+  return demoProvider;
+}
 
 /** Mounts the persistent `DemoBanner`. `app/Layout.tsx` renders it directly behind the
  * `DEMO_MODE` flag (ROADMAP 6.2 step 8); this hook is a no-op placeholder kept for symmetry with

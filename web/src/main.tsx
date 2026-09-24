@@ -16,11 +16,21 @@ async function boot(): Promise<void> {
   }
   // Load wagmi/RainbowKit only after the injector exists so `injectedWallet` sees it.
   const { App } = await import('./app/App');
+  const { queryClient } = await import('./app/queryClient');
+  let config;
+  if (DEMO_MODE) {
+    const { createDemoWagmiConfig, syncDemoQueries } = await import('./demo/wagmiDemo');
+    syncDemoQueries(queryClient);
+    config = createDemoWagmiConfig();
+  } else {
+    const { createRealConfig } = await import('./lib/wagmi');
+    config = createRealConfig();
+  }
   const container = document.getElementById('root');
   if (!container) throw new Error('#root not found');
   createRoot(container).render(
     <StrictMode>
-      <App />
+      <App config={config} />
     </StrictMode>,
   );
 }

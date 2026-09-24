@@ -24,9 +24,15 @@ misleading.
 3. **Reads.** `web/src/lib/api.ts` gets a pluggable request resolver
    (`setRequestHandler(fn)`); the default is the current `fetch` path. Demo mode installs a
    fixture-backed handler (ROADMAP 6.2 step 6). Feature `api.ts` modules are unchanged.
-4. **Writes.** wagmi `mock` connector + `custom` transport backed by an in-memory EIP-1193
-   simulator (ROADMAP 6.2 step 7); `lib/wagmi.ts` exports a config factory that chooses demo vs.
-   real. Feature write code is unchanged. No `http()` transport is constructed in demo mode.
+4. **Writes.** A wagmi `injected` connector (RainbowKit wallet "OpenAd Demo Wallet") whose
+   target is an in-memory EIP-1193 simulator (`web/src/demo/demoChain.ts`), plus a `custom`
+   transport over the same simulator (ROADMAP 6.2 step 7); `injected` rather than `mock` because
+   `mock` answers some methods itself instead of asking the provider. `lib/wagmi.ts` exports
+   `createRealConfig()`; `main.tsx` builds either it or `demo/wagmiDemo.ts`'s config. Feature
+   write code is unchanged. No `http()` transport is constructed in demo mode, and EIP-6963
+   discovery is off so a real browser wallet is never offered. The demo registers a synthetic
+   chain-31337 deployment (fake addresses + committed `web/src/demo/abis.generated.ts`, from
+   `web/scripts/gen-demo-abis.mjs`), since static/CI builds have no deployments artifact.
 5. **Network guard.** `installDemo()` wraps `fetch`, `XMLHttpRequest.open`, `WebSocket`,
    `EventSource` and `navigator.sendBeacon` so any request whose URL is not an allowed
    same-origin static asset is blocked: `fetch` logs and rejects with `DemoNetworkError` (it
@@ -52,8 +58,8 @@ misleading.
 ## Consequences
 
 - ROADMAP 6.2. `web/src/demo/` holds the flag, installer, network guard, banner, and (6.2, in
-  progress) the fixtures, fixture API adapter, and in-memory chain simulator behind the wagmi
-  `mock` connector.
+  progress) the fixtures, fixture API adapter, and in-memory chain simulator behind the demo wallet's
+  `injected` connector.
 - `npm run build:demo` (6.2, in progress) will produce a static `web/dist-demo` bundle (SPA
   fallback) with no RPC URL or API base baked in; CI will build it to guard the tree-shaking
   invariant.

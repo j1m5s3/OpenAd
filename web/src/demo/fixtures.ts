@@ -11,6 +11,7 @@
 import { getAddress } from 'viem';
 
 import { dutchPrice, feeSplit, remainderPrice } from '../lib/auction';
+import { DEMO_CONTRACTS, DEMO_TREASURY } from './deployment';
 import type {
   AdvertiserOut,
   ApprovalOut,
@@ -190,6 +191,19 @@ export interface DemoSlotFixture {
   leases: Record<number, DemoLeaseRecord>;
 }
 
+/** Token-side state the in-memory wallet simulator (`demoChain.ts`, `reducers.ts`) reads and
+ * writes: what `MockUSDC`, and `CreativeRegistry`'s blanket allowlist, would hold on chain.
+ * All keys are lowercase addresses; amounts are integer USDC base-unit strings. */
+export interface DemoLedger {
+  usdc: Record<string, string>;
+  /** `${owner}:${spender}` → remaining allowance (set by EIP-2612 permit, spent by transferFrom). */
+  allowances: Record<string, string>;
+  /** EIP-2612 permit nonces. */
+  nonces: Record<string, string>;
+  /** publisher → advertisers blanket-approved via `set_advertiser_allowed`. */
+  allowedAdvertisers: Record<string, string[]>;
+}
+
 export interface DemoState {
   slots: DemoSlotFixture[];
   creatives: Record<string, CreativeOut>;
@@ -198,6 +212,7 @@ export interface DemoState {
   houseAds: Record<string, DemoHouseAd>;
   domainVerifications: Record<string, DemoDomainVerification>;
   connectedAddress: string | null;
+  ledger: DemoLedger;
 }
 
 const DAY = 86_400;
@@ -472,7 +487,7 @@ export function seedDemoState(now: number): DemoState {
     },
   };
 
-  return {
+  const state: DemoState = {
     slots,
     creatives,
     approvals,
@@ -480,7 +495,42 @@ export function seedDemoState(now: number): DemoState {
     houseAds: {},
     domainVerifications: {},
     connectedAddress: null,
+    ledger: { usdc: {}, allowances: {}, nonces: {}, allowedAdvertisers: {} },
   };
+  state.ledger.usdc = seedBalances(state);
+  return state;
+}
+
+/** Starting wallet balance of each demo advertiser (1,000 USDC — MockUSDC, not real funds). */
+export const DEMO_ADVERTISER_START_BALANCE = 1_000_000_000n;
+
+/** USDC balances consistent with the seeded history: each publisher holds exactly its net
+ * earnings (lease `price - fee` + settlement `charged - fee`), the treasury holds every fee,
+ * `CampaignVault` holds exactly the open campaigns' `remaining` (PROTOCOL §11 invariant 11), and
+ * `Marketplace` holds nothing. */
+function seedBalances(state: DemoState): Record<string, string> {
+  const usdc: Record<string, bigint> = {};
+  const credit = (addr: string, amount: bigint) => {
+    const key = addr.toLowerCase();
+    usdc[key] = (usdc[key] ?? 0n) + amount;
+  };
+  for (const persona of Object.values(DEMO_PERSONAS)) {
+    credit(persona.address, persona.role === 'advertiser' ? DEMO_ADVERTISER_START_BALANCE : 0n);
+  }
+  let fees = 0n;
+  let escrow = 0n;
+  for (const fixture of state.slots) {
+    credit(fixture.slot.owner, slotEarnings(state, fixture.slot.slotId));
+    for (const record of Object.values(fixture.leases)) fees += feeSplit(BigInt(record.price)).fee;
+  }
+  for (const campaign of Object.values(state.campaigns)) {
+    for (const settlement of campaign.settlements) fees += BigInt(settlement.fee);
+    if (!campaign.closed) escrow += BigInt(campaign.remaining);
+  }
+  credit(DEMO_TREASURY, fees);
+  credit(DEMO_CONTRACTS.CampaignVault, escrow);
+  credit(DEMO_CONTRACTS.Marketplace, 0n);
+  return Object.fromEntries(Object.entries(usdc).map(([k, v]) => [k, v.toString()]));
 }
 
 // ---------------------------------------------------------------------------------------------
