@@ -4,8 +4,13 @@ import { createRoot } from 'react-dom/client';
 import '@rainbow-me/rainbowkit/styles.css';
 import './styles/index.css';
 
+import { DEMO_MODE } from './demo/flag';
+
 async function boot(): Promise<void> {
-  if (import.meta.env.DEV) {
+  if (DEMO_MODE) {
+    const { installDemo } = await import('./demo/install');
+    installDemo();
+  } else if (import.meta.env.DEV) {
     const { installDevWallet } = await import('./dev/anvilWallet');
     installDevWallet();
   }

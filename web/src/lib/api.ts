@@ -24,7 +24,9 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export type RequestHandler = (path: string, init?: RequestInit) => Promise<unknown>;
+
+async function defaultRequestHandler(path: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     credentials: 'include',
@@ -42,8 +44,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(res.status, code, message);
   }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  if (res.status === 204) return undefined;
+  return (await res.json()) as unknown;
+}
+
+let requestHandler: RequestHandler = defaultRequestHandler;
+
+/** Swaps the resolver `request()` delegates to. Demo mode (ADR-0016) installs a fixture-backed
+ * handler here instead of hitting the network; behaviour is unchanged when never called. */
+export function setRequestHandler(handler: RequestHandler = defaultRequestHandler): void {
+  requestHandler = handler;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await requestHandler(path, init)) as T;
 }
 
 export const api = {
