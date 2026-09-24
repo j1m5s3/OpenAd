@@ -173,6 +173,8 @@ protocol contract changes in this phase (anything that would need one is recorde
       Manager, may only `settle_batch`); Cloud SQL Postgres; GCS media-cache backend behind a
       storage interface with local disk as default; web/demo served as a static site; CI
       `deploy` job gated on GCP secret presence, demo-site deploy only, no mainnet broadcast.
+      Prerequisite done: `alembic upgrade head` works on a fresh database (`0001_baseline`
+      frozen to explicit DDL; guarded by `api/tests/test_migrations.py`).
 - [ ] **6.7 Docs polish and launch readiness.**
       Pointers: `README.md` · `docs/business/demo-script.md` (new) · `docs/qa/scorecard.md`.
       Acceptance: README rewritten with value proposition, demo link, bash+PowerShell
