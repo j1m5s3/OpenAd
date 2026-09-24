@@ -20,6 +20,11 @@ dependencies = [
     "eth-account>=0.13",
 ]
 
+[project.optional-dependencies]
+# ADR-0017: only needed when OPENAD_MEDIA_BACKEND=gcs (Cloud Run). Imported lazily, so the
+# default install works without it.
+gcs = ["google-cloud-storage>=2.18"]
+
 [dependency-groups]
 dev = [
     "pytest>=8",

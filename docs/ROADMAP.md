@@ -171,6 +171,9 @@ protocol contract changes in this phase (anything that would need one is recorde
       `deploy` job gated on GCP secret presence, demo-site deploy only, no mainnet broadcast.
       Prerequisite done: `alembic upgrade head` works on a fresh database (`0001_baseline`
       frozen to explicit DDL; guarded by `api/tests/test_migrations.py`).
+      _Progress (step 25+26): ADR + runbook + GCS backend done. Cloud Run service YAMLs,
+      `web/Dockerfile`, `infra/gcp/cloudbuild.yaml`, `scripts/deploy-gcp.sh` and the gated CI
+      deploy job remain (step 27+28)._
 - [ ] **6.7 Docs polish and launch readiness.**
       Pointers: `README.md` · `docs/business/demo-script.md` (new) · `docs/qa/scorecard.md`.
       Acceptance: README rewritten with value proposition, demo link, bash+PowerShell

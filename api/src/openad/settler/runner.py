@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from web3 import AsyncWeb3
 
 from openad.chain.deployments import Deployment
+from openad.health import Liveness
 from openad.logging import get_logger
 from openad.models import Campaign, CampaignSettlement, ProtocolConfig
 from openad.models.offchain import ClickEvent
@@ -33,12 +34,14 @@ class SettlerRunner:
         deployment: Deployment,
         w3: AsyncWeb3[Any],
         account: LocalAccount,
+        liveness: Liveness | None = None,
     ) -> None:
         self.settings = settings
         self.sessions = sessions
         self.deployment = deployment
         self.w3 = w3
         self.account = account
+        self.liveness = liveness
         vault = deployment.require("CampaignVault")
         self.vault = w3.eth.contract(
             address=AsyncWeb3.to_checksum_address(vault.address), abi=vault.abi
@@ -51,6 +54,8 @@ class SettlerRunner:
                 await self.tick()
             except Exception:
                 log.exception("settler.tick_failed")
+            if self.liveness is not None:
+                self.liveness.tick()
             await asyncio.sleep(self.settings.settler_poll_seconds)
 
     async def tick(self) -> None:
