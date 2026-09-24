@@ -108,7 +108,9 @@ fi
 echo ""
 if command -v shellcheck >/dev/null 2>&1; then
     echo "==> shellcheck"
-    if ! shellcheck "${SCRIPT_DIR}"/*.sh; then
+    # -x follows `source` directives; the scripts' `# shellcheck source=scripts/lib.sh`
+    # comments are relative to the repo root, so run from there (not from scripts/).
+    if ! (cd "$REPO_ROOT" && shellcheck -x scripts/*.sh); then
         fail "shellcheck reported issues"
     else
         echo "  ok: shellcheck clean"
