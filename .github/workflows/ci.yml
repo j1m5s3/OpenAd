@@ -56,6 +56,7 @@ jobs:
       - run: npm run lint
       - run: npm run test
       - run: npm run build
+      - run: npm run check:sh
 
   e2e:
     runs-on: ubuntu-latest

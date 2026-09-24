@@ -70,6 +70,14 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 .\scripts\dev-down.cmd                              # stops docker; next up restarts Anvil/Postgres (Anvil chain is ephemeral)
 # if npm.ps1 is blocked: use the .cmd files or npm.cmd run stack:*  (not `npm`)
 
+# local stack (Linux/macOS/WSL; bash twins, ADR-0007 amendment; PowerShell stays canonical on Windows)
+./scripts/setup.sh                                  # same steps as setup.ps1; --skip-docker, --dry-run
+./scripts/dev-up.sh                                 # starts docker if needed; background children, not titled windows; --embed, --dry-run
+./scripts/dev-down.sh                               # stops docker; --reset drops pgdata/31337.json/api/.cache; --dry-run
+./scripts/stack-docker.sh                           # one-command full stack: api/indexer/settler as containers; --dry-run
+npm run stack:setup:sh / stack:up:sh / stack:down:sh / stack:docker   # npm wrappers for the above
+npm run check:sh                                    # static self-test for scripts/*.sh (bash -n, --help, --dry-run)
+
 # infra
 docker compose up -d
 

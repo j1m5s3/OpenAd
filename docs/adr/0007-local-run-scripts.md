@@ -65,6 +65,33 @@ current local step (baseline is ROADMAP 2.2) and must never recommend `mox insta
 - A macOS/Linux or CI port will need a follow-up ADR or a bash/Make sibling; until then the
   scripts are Windows PowerShell only.
 
+## Amendment (2026-09-24): bash twins
+
+- **Context.** Phase 6 (JIT plan, slice E) needs Linux/macOS/WSL and CI support without
+  replacing the PowerShell scripts, which remain canonical on Windows (D8 above is superseded
+  for that one point only).
+- **D9 — Bash twins.** `scripts/{setup,dev-up,dev-down}.sh` mirror the `.ps1` scripts'
+  behaviour and step order, sourcing shared helpers from `scripts/lib.sh`. `scripts/stack-docker.sh`
+  wraps `docker compose -f docker-compose.yml -f docker-compose.stack.yml up --build` as a
+  one-command full-stack option (API/indexer/settler in containers). npm wrappers:
+  `stack:setup:sh`, `stack:up:sh`, `stack:down:sh`, `stack:docker`. Never `mox install`, same as
+  the `.ps1` twins.
+- **D10 — Process model: background children, not titled windows.** Bash has no portable
+  equivalent of a titled `cmd.exe` window, so `dev-up.sh` starts api/indexer/web (and embed with
+  `--embed`) as background children with line-prefixed output (`[api] …`), and a trap on
+  INT/TERM/EXIT stops them on Ctrl+C. This is the one documented behavioural deviation from the
+  `.ps1` scripts (D7); everything else (preflight checks, port reporting without killing
+  holders, docker-only `dev-down.sh`) matches.
+- **D11 — `--dry-run` everywhere.** Every bash script accepts `--dry-run` (prints the command
+  each step would run instead of running it) so behaviour is verifiable without a docker daemon
+  or a real Anvil/Postgres, including in CI and in agent sandboxes. `scripts/check-sh.sh`
+  (`npm run check:sh`) syntax-checks every script (`bash -n`), exercises `--help` and
+  `--dry-run`, asserts the expected command lines appear (e.g. `mox run deploy --network anvil`,
+  never `mox install`), and runs `shellcheck` when it is on `PATH`. Wired into CI's `web` job.
+- **Consequences.** PowerShell scripts stay the documented Windows entry point (D1); the bash
+  twins are the documented entry point for Linux/macOS/WSL/CI. The two implementations must be
+  kept in step by hand — there is no code sharing between `.ps1` and `.sh`, only shared intent.
+
 ## References
 
 - `docs/ARCHITECTURE.md` §7
