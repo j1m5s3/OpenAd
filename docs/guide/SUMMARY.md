@@ -25,4 +25,5 @@
 
 * [Concepts](marketplace/concepts.md)
 * [Fees and permits](marketplace/fees-and-permits.md)
+* [Reading your performance numbers](marketplace/performance.md)
 * [FAQ](marketplace/faq.md)

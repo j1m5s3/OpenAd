@@ -155,17 +155,22 @@ protocol contract changes in this phase (anything that would need one is recorde
       Acceptance: copy-paste embed snippet generator with CMS instructions; public `/slot/:id`
       share page with OG meta and current price; off-chain publisher profile (site URL,
       audience description, category tags) via a SIWE-guarded API endpoint; no chain writes.
-- [ ] **6.4 Analytics read model (API + UI).**
-      Pointers: `ARCHITECTURE.md` §3.1 · `api/src/openad/schemas/analytics.py` (new) ·
-      `api/src/openad/services/analytics.py` (new).
+- [x] **6.4 Analytics read model (API + UI).** _Done 2026-09-25._
+      Pointers: `ARCHITECTURE.md` §3.1, §3.10 · `api/src/openad/schemas/analytics.py` ·
+      `api/src/openad/services/analytics.py` · `web/src/lib/analytics.ts` ·
+      `web/src/features/{publisher,advertiser}/components/*Performance.tsx`.
       Acceptance: CTR/eCPM/spend/earnings computed off-chain from existing `serve_events` and
       indexed leases/settlements; read-only endpoints; no new on-chain events; no chain reads
       in the serve path; `eCPM = earnings / impressions × 1000` in integer USDC base units
       (floor); Supply and Campaigns show stat tiles + a lightweight trend view.
       _API half done 2026-09-24 (JIT step 19+20, `feat/analytics`): `GET
       /v1/analytics/slots/{slot_id}` and `GET /v1/analytics/advertisers/{address}`, schemas,
-      service, tests, `ARCHITECTURE.md` §3.10. UI half (Supply/Campaigns stat tiles + trend
-      view) is step 21+22, same branch._
+      service, tests, `ARCHITECTURE.md` §3.10. UI half (JIT step 21+22, same branch): typed
+      client methods, `lib/analytics.ts` helpers, `Sparkline`/`StatTile`, `SlotPerformance` on
+      Supply, `AdvertiserPerformance` on Campaigns (settled vs. accrued CPC always kept
+      separate, money as `BigInt`, "—" for a null CTR/eCPM), demo analytics computed from the
+      in-memory store with a deterministic seeded traffic generator, guide page
+      `docs/guide/marketplace/performance.md`._
 - [x] **6.5 Cross-platform scripts.** _Done 2026-09-24._
       Pointers: `scripts/*.ps1` · ADR-0007.
       Acceptance: `scripts/{setup,dev-up,dev-down}.sh` at parity with the `.ps1` scripts,

@@ -451,6 +451,54 @@ test('/why: the earnings calculator updates with integer USDC and shows the disc
   await expect(openAdPayout).toHaveText('4,875.00 USDC');
 });
 
+/** A `StatTile`'s value, found by its label text (PLAN 21+22). */
+function statValue(page: Page, label: string) {
+  return page
+    .locator('p.text-xs.text-muted', { hasText: new RegExp(`^${label}$`) })
+    .locator('xpath=following-sibling::p[1]');
+}
+
+test('performance: buying a period moves Campaigns spend and Supply earnings by exactly the quote', async ({
+  page,
+}) => {
+  await connect(page); // default persona: advertiser (Nimbus Wallet)
+  await nav(page, 'Campaigns');
+  await expect(statValue(page, 'Spend')).not.toHaveText('');
+  const spendBefore = usdc((await statValue(page, 'Spend').textContent()) ?? '');
+
+  await switchPersona(page, PUBLISHER);
+  await nav(page, 'Supply');
+  await page.getByRole('combobox', { name: 'Slot' }).selectOption('0');
+  await expect(statValue(page, 'Earnings')).not.toHaveText('');
+  const earningsBefore = usdc((await statValue(page, 'Earnings').textContent()) ?? '');
+
+  await switchPersona(page, ADVERTISER);
+  await openSlot(page, '0');
+  const { price } = await buyFirstPeriod(page);
+
+  // The only buyable period right now is the live Dutch auction, which starts *after* "now" —
+  // analytics attribute LEASE spend to the day of the period's start (PLAN D4), not the buy tx,
+  // so it will not appear in a window ending "now" until that day arrives. Advance the frozen
+  // clock past it so the assertion below observes the real, documented behaviour rather than an
+  // artifact of buying a not-yet-started period.
+  const nowMs = await page.evaluate(() => Date.now());
+  await page.clock.setFixedTime(new Date(nowMs + 2 * 24 * 60 * 60 * 1000));
+
+  await nav(page, 'Campaigns');
+  await expect
+    .poll(async () => usdc((await statValue(page, 'Spend').textContent()) ?? ''))
+    .toBe(spendBefore + price);
+
+  await switchPersona(page, PUBLISHER);
+  await nav(page, 'Supply');
+  await page.getByRole('combobox', { name: 'Slot' }).selectOption('0');
+  await expect
+    .poll(async () => usdc((await statValue(page, 'Earnings').textContent()) ?? ''))
+    .toBe(earningsBefore + publisherShare(price));
+  // Settled and accrued CPC are never summed: the tile is shown, separately labelled.
+  await expect(page.getByText('unsettled — not yet earnings')).toBeVisible();
+});
+
 /** Same output as `web/src/lib/format.ts` `formatUsdc` (kept local: e2e does not import web). */
 function formatUsdc(baseUnits: bigint): string {
   const whole = baseUnits / USDC;
