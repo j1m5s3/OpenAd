@@ -292,7 +292,7 @@ protocol contract changes in this phase (anything that would need one is recorde
       shipped it off by default — follow §11's verify-then-enable steps); the settler is a
       dedicated, gas-only EOA (6.13); the `staging` environment's `vars` are set in GitHub
       (6.12); and every "(inferred; verify before deploy)" fact in the runbook has been checked.
-- [x] **6.11 The deploy images boot on Cloud Run (ADR-0017).** _Done 2026-09-25 (PR #20)._
+- [x] **6.11 The deploy images boot-check in CI (ADR-0017).** _Done 2026-09-25 (PR #20)._
       Pointers: `api/Dockerfile` · `web/Dockerfile` · `web/nginx/default.conf.template` ·
       `infra/gcp/cloudbuild.yaml` · `infra/gcp/services/{web,web-demo}.yaml` ·
       `web/src/lib/wagmi.ts` · `e2e/scripts/web-boot-check.mjs` · `.github/workflows/ci.yml`

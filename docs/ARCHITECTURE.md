@@ -164,7 +164,7 @@ Public reads:
 Serving (public; campaign responses are never cached, § 3.4):
 
 - `GET /v1/serve/{slot_id}` — JSON described in § 3.4.
-- `GET /v1/serve/{slot_id}/media` — the verified media bytes for the current lease, CPC winner, or house ad, with `Cache-Control` and `ETag`. Advertisers never see visitor traffic.
+- `GET /v1/serve/{slot_id}/media` — the verified media bytes for the current lease or CPC winner, with `Cache-Control` and `ETag`. Advertisers never see visitor traffic.
 - `GET /v1/c/{token}` — one-time click token → 302 to the creative `click_url` if valid; 404 otherwise. Not a media proxy.
 
 Authenticated (SIWE session; wallet must match the acting address):
@@ -242,7 +242,8 @@ Pydantic model: `api/src/openad/schemas/serve.py`.
 ```
 
 Rules: `ttl` seconds is how long the embed may reuse the response before it asks again.
-`mediaUrl` is always same-origin to the API (verified cache), never the advertiser's URL.
+For a paid (`lease`/`campaign`) response, `mediaUrl` is always same-origin to the API (verified
+cache), never the advertiser's URL; a house ad's `mediaUrl` is the publisher's own URL instead.
 `status = "unknown"` → HTTP 404. `status = "campaign"`: `campaign` is set, `lease` is null,
 `clickUrl` is `{api}/v1/c/{token}` not the advertiser landing URL. House ads keep the
 publisher `clickUrl` and are never payable.
