@@ -111,7 +111,10 @@ export function EmbedCodePanel({ slotIds }: { slotIds: string[] }) {
 
       <div className="mt-4 flex flex-wrap gap-3">
         <label className="text-sm">
-          <span className="block text-muted">Slot</span>
+          {/* "Slot to embed", not just "Slot": Supply also has slice D's SlotPerformance panel,
+              whose own slot picker is also labelled "Slot" — a shared label would resolve to two
+              comboboxes for any accessible-name query on this page. */}
+          <span className="block text-muted">Slot to embed</span>
           <select
             value={slotId}
             onChange={(e) => setSlotId(e.target.value)}

@@ -30,7 +30,7 @@ describe('EmbedCodePanel', () => {
 
   it('changing the slot select updates the snippet', () => {
     renderPanel();
-    fireEvent.change(screen.getByLabelText('Slot'), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('Slot to embed'), { target: { value: '2' } });
     const pre = document.querySelector('pre');
     expect(pre?.textContent).toContain('slot-id="2"');
   });
