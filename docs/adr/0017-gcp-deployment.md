@@ -51,7 +51,10 @@ interface, and a Cloud Run Job for migrations.**
   `python -m openad.settler`. Its service account is the only one bound to the
   `OPENAD_SETTLER_KEY` secret (Secret Manager IAM, not a repo-level grant), and per ADR-0014
   this process may only ever call `settle_batch`. `api` and `web` service accounts get no
-  access to that secret.
+  access to that secret. The secret holds a dedicated, gas-only settler EOA's key, never the
+  contracts' owner (deploy) key, which stays in the contracts environment (Moccasin wallet, or
+  the Safe on Base); off Anvil the process refuses to start if its key owns `CampaignVault` or
+  is the deployer.
 - `openad-web` — a static site (nginx serving the Vite build; step 27+28 adds the
   `web/Dockerfile` and service YAML) behind Cloud Run or a bucket + load balancer. The demo
   build (`VITE_DEMO_MODE=1`, ADR-0016) is a **separate** Cloud Run service or a separate bucket
