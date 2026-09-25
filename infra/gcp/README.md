@@ -8,7 +8,9 @@ turn into once `scripts/deploy-gcp.sh` exists.
 
 - `cloudbuild.yaml` — builds and pushes the `api`, `web` and `web-demo` images to Artifact
   Registry, tagged `$SHORT_SHA` and `latest-<env>`. Substitutions: `_REGION`, `_REPO`, `_ENV`,
-  `_API_URL`, `_CHAIN_ID`. Run via `gcloud builds submit --config infra/gcp/cloudbuild.yaml`.
+  `_API_URL`, `_CHAIN_ID`, `_WALLETCONNECT_PROJECT_ID`, `_GUIDE_URL`, `_DEMO_URL` (the last three
+  default to `""`, meaning unset — see `web/Dockerfile`). Run via
+  `gcloud builds submit --config infra/gcp/cloudbuild.yaml`.
 - `services/api.yaml`, `services/indexer.yaml`, `services/settler.yaml`, `services/web.yaml`,
   `services/web-demo.yaml` — Cloud Run (Knative `serving.knative.dev/v1`) service specs, one
   per `gcloud run services replace`. `${VAR}` placeholders, not real values — see each file's
