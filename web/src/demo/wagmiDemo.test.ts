@@ -38,7 +38,11 @@ describe('createDemoWagmiConfig', () => {
 
     const usdc = getContract(DEMO_CHAIN_ID, 'USDC');
     expect(usdc.address).toBe(DEMO_CONTRACTS.USDC);
-    const balance = await readContract(config, { ...usdc, functionName: 'balanceOf', args: [accounts[0]] });
+    const balance = await readContract(config, {
+      ...usdc,
+      functionName: 'balanceOf',
+      args: [accounts[0]],
+    });
     expect(typeof balance).toBe('bigint');
 
     const registry = getContract(DEMO_CHAIN_ID, 'CreativeRegistry');
@@ -47,7 +51,9 @@ describe('createDemoWagmiConfig', () => {
       functionName: 'register_media',
       args: ['/demo/x.svg', `0x${'f'.repeat(64)}`, 'image/svg+xml', 300, 250, 'https://x.example'],
     });
-    expect(Object.values(demoStore.get().creatives).some((c) => c.uri === '/demo/x.svg')).toBe(true);
+    expect(Object.values(demoStore.get().creatives).some((c) => c.uri === '/demo/x.svg')).toBe(
+      true,
+    );
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

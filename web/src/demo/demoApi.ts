@@ -152,7 +152,9 @@ export function createDemoRequestHandler(store: Store): RequestHandler {
       if (method === 'PUT' && rest.length === 3 && rest[2] === 'house-ad') {
         const slotId = segment(rest, 1, path);
         requireSlotOwner(store.get(), slotId);
-        const body = init?.body ? (JSON.parse(String(init.body)) as { mediaUrl: string; clickUrl: string }) : null;
+        const body = init?.body
+          ? (JSON.parse(String(init.body)) as { mediaUrl: string; clickUrl: string })
+          : null;
         if (!body) throw new ApiError(422, 'validation_error', 'missing house-ad body');
         const houseAd = {
           slotId,
@@ -230,7 +232,9 @@ export function createDemoRequestHandler(store: Store): RequestHandler {
         return json({ nonce: `demo-${pseudoHex('nonce', 16)}` });
       }
       if (method === 'POST' && rest[1] === 'verify') {
-        const body = init?.body ? (JSON.parse(String(init.body)) as { message: string }) : { message: '' };
+        const body = init?.body
+          ? (JSON.parse(String(init.body)) as { message: string })
+          : { message: '' };
         // Demo only (ADR-0016 D3): no signature is checked, and none is possible without a real
         // wallet. The "connected" address is whichever demo persona's address appears in the
         // signed message, so a later persona switcher can drive this without changing this file.

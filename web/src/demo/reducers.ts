@@ -92,7 +92,13 @@ function transfer(state: DemoState, from: string, to: string, amount: bigint): v
   state.ledger.usdc[lc(to)] = (balanceOf(state, to) + amount).toString();
 }
 
-function transferFrom(state: DemoState, spender: string, from: string, to: string, amount: bigint): void {
+function transferFrom(
+  state: DemoState,
+  spender: string,
+  from: string,
+  to: string,
+  amount: bigint,
+): void {
   const allowance = allowanceOf(state, from, spender);
   ensure(allowance >= amount, 'erc20: insufficient allowance');
   state.ledger.allowances[`${lc(from)}:${lc(spender)}`] = (allowance - amount).toString();
@@ -101,7 +107,14 @@ function transferFrom(state: DemoState, spender: string, from: string, to: strin
 
 /** `_try_permit`: a NON-REVERTING EIP-2612 permit. The demo accepts any (fake) signature but still
  * honours the deadline and bumps the nonce, so a stale deadline fails later on allowance. */
-function tryPermit(state: DemoState, owner: string, spender: string, value: bigint, deadline: bigint, now: number): void {
+function tryPermit(
+  state: DemoState,
+  owner: string,
+  spender: string,
+  value: bigint,
+  deadline: bigint,
+  now: number,
+): void {
   if (deadline < BigInt(now)) return;
   state.ledger.allowances[`${lc(owner)}:${lc(spender)}`] = value.toString();
   state.ledger.nonces[lc(owner)] = (nonceOf(state, owner) + 1n).toString();
@@ -116,9 +129,19 @@ export function findSlot(state: DemoState, slotId: bigint | string): DemoSlotFix
 }
 
 /** `AdSlot.period_window`: reverts "no calendar" when the slot has none. */
-export function periodWindow(state: DemoState, slotId: bigint | string, periodIndex: bigint): { start: number; end: number } {
+export function periodWindow(
+  state: DemoState,
+  slotId: bigint | string,
+  periodIndex: bigint,
+): { start: number; end: number } {
   const slot = findSlot(state, slotId)?.slot;
-  ensure(slot && slot.calendarVersion !== 0 && slot.periodSeconds != null && slot.firstPeriodStart != null, 'no calendar');
+  ensure(
+    slot &&
+      slot.calendarVersion !== 0 &&
+      slot.periodSeconds != null &&
+      slot.firstPeriodStart != null,
+    'no calendar',
+  );
   const start = slot.firstPeriodStart + Number(periodIndex) * slot.periodSeconds;
   return { start, end: start + slot.periodSeconds };
 }
@@ -142,19 +165,34 @@ function nextId(ids: Iterable<string>): string {
 // CreativeRegistry
 // ---------------------------------------------------------------------------------------------
 
-export function approvalStatus(state: DemoState, publisher: string, creativeId: bigint | string): number {
+export function approvalStatus(
+  state: DemoState,
+  publisher: string,
+  creativeId: bigint | string,
+): number {
   const found = state.approvals.find(
     (a) => lc(a.publisher) === lc(publisher) && a.creativeId === String(creativeId),
   );
   return found?.status ?? STATUS_NONE;
 }
 
-function setApprovalStatus(state: DemoState, publisher: string, creative: CreativeOut, status: number): void {
+function setApprovalStatus(
+  state: DemoState,
+  publisher: string,
+  creative: CreativeOut,
+  status: number,
+): void {
   const found = state.approvals.find(
     (a) => lc(a.publisher) === lc(publisher) && a.creativeId === creative.creativeId,
   );
   if (found) found.status = status;
-  else state.approvals.push({ publisher, creativeId: creative.creativeId, status, advertiser: creative.advertiser });
+  else
+    state.approvals.push({
+      publisher,
+      creativeId: creative.creativeId,
+      status,
+      advertiser: creative.advertiser,
+    });
 }
 
 function isActive(state: DemoState, creativeId: bigint | string): boolean {
@@ -168,11 +206,19 @@ function isBlockedFor(state: DemoState, publisher: string, creativeId: bigint | 
   return status === STATUS_REJECTED || status === STATUS_REVOKED;
 }
 
-export function isAdvertiserAllowed(state: DemoState, publisher: string, advertiser: string): boolean {
+export function isAdvertiserAllowed(
+  state: DemoState,
+  publisher: string,
+  advertiser: string,
+): boolean {
   return (state.ledger.allowedAdvertisers[lc(publisher)] ?? []).includes(lc(advertiser));
 }
 
-export function isApprovedFor(state: DemoState, publisher: string, creativeId: bigint | string): boolean {
+export function isApprovedFor(
+  state: DemoState,
+  publisher: string,
+  creativeId: bigint | string,
+): boolean {
   if (!isActive(state, creativeId) || isBlockedFor(state, publisher, creativeId)) return false;
   if (approvalStatus(state, publisher, creativeId) === STATUS_APPROVED) return true;
   const creative = state.creatives[String(creativeId)];
@@ -187,7 +233,13 @@ function requireCreative(state: DemoState, creativeId: bigint | string): Creativ
 
 /** The creative / dimension / approval checks shared by `Marketplace._buy` and
  * `CampaignVault._open_campaign`. */
-function checkCreative(state: DemoState, fixture: DemoSlotFixture, terms: Terms, creativeId: bigint, sender: string): void {
+function checkCreative(
+  state: DemoState,
+  fixture: DemoSlotFixture,
+  terms: Terms,
+  creativeId: bigint,
+  sender: string,
+): void {
   const publisher = fixture.slot.owner;
   const creative = state.creatives[creativeId.toString()];
   ensure(creative && lc(creative.advertiser) === lc(sender), 'not creative owner');
@@ -200,7 +252,10 @@ function checkCreative(state: DemoState, fixture: DemoSlotFixture, terms: Terms,
   if (terms.approvalMode === APPROVAL_REQUIRED) {
     ensure(isApprovedFor(state, publisher, creativeId), 'not approved');
   } else {
-    ensure(isActive(state, creativeId) && !isBlockedFor(state, publisher, creativeId), 'creative blocked');
+    ensure(
+      isActive(state, creativeId) && !isBlockedFor(state, publisher, creativeId),
+      'creative blocked',
+    );
   }
 }
 
@@ -230,7 +285,13 @@ function currentPrice(terms: Terms, start: number, end: number, now: number): bi
   ensure(now >= openAt, 'not open');
   ensure(now < end, 'closed');
   if (now < start) {
-    return dutchPrice(BigInt(terms.startPrice), BigInt(terms.floorPrice), terms.leadSeconds, start, now);
+    return dutchPrice(
+      BigInt(terms.startPrice),
+      BigInt(terms.floorPrice),
+      terms.leadSeconds,
+      start,
+      now,
+    );
   }
   return remainderPrice(BigInt(terms.floorPrice), end - start, end, now);
 }
@@ -246,8 +307,21 @@ export interface DemoQuote {
 }
 
 /** `Marketplace.quote`: the non-reverting UI helper, same reason strings and order. */
-export function quote(state: DemoState, slotId: bigint, periodIndex: bigint, now: number): DemoQuote {
-  const q: DemoQuote = { sellable: false, reason: '', price: 0n, fee: 0n, open_at: 0n, start: 0n, end: 0n };
+export function quote(
+  state: DemoState,
+  slotId: bigint,
+  periodIndex: bigint,
+  now: number,
+): DemoQuote {
+  const q: DemoQuote = {
+    sellable: false,
+    reason: '',
+    price: 0n,
+    fee: 0n,
+    open_at: 0n,
+    start: 0n,
+    end: 0n,
+  };
   const terms = termsOf(state, slotId);
   if (terms.saleMode === SALE_CPC) return { ...q, reason: 'cpc mode' };
   if (terms.leadSeconds === 0) return { ...q, reason: 'no terms' };
@@ -267,7 +341,15 @@ export function quote(state: DemoState, slotId: bigint, periodIndex: bigint, now
 
 /** `Marketplace._buy`: one transaction — lease written, `fee` to treasury, `price - fee` to the
  * publisher, nothing left in Marketplace. Spends the buyer's allowance to Marketplace. */
-function buy(state: DemoState, slotId: bigint, periodIndex: bigint, creativeId: bigint, maxPrice: bigint, sender: string, now: number): void {
+function buy(
+  state: DemoState,
+  slotId: bigint,
+  periodIndex: bigint,
+  creativeId: bigint,
+  maxPrice: bigint,
+  sender: string,
+  now: number,
+): void {
   const terms = termsOf(state, slotId);
   ensure(terms.saleMode !== SALE_CPC, 'cpc mode');
   ensure(terms.leadSeconds > 0, 'no terms');
@@ -284,18 +366,25 @@ function buy(state: DemoState, slotId: bigint, periodIndex: bigint, creativeId: 
   ensure(end > now, 'period ended');
   ensure(creativeId !== 0n, 'bad lease');
   ensure(!fixture.leases[Number(periodIndex)], 'already leased');
-  fixture.leases[Number(periodIndex)] = { lessee: sender, creativeId: creativeId.toString(), price: price.toString() };
+  fixture.leases[Number(periodIndex)] = {
+    lessee: sender,
+    creativeId: creativeId.toString(),
+    price: price.toString(),
+  };
   const { fee, publisherAmount } = feeSplit(price, FEE_BPS);
   if (fee > 0n) transferFrom(state, DEMO_CONTRACTS.Marketplace, sender, DEMO_TREASURY, fee);
-  if (publisherAmount > 0n) transferFrom(state, DEMO_CONTRACTS.Marketplace, sender, publisher, publisherAmount);
+  if (publisherAmount > 0n)
+    transferFrom(state, DEMO_CONTRACTS.Marketplace, sender, publisher, publisherAmount);
 }
 
 function openCampaignsOf(state: DemoState, slotId: bigint | string): number {
-  return Object.values(state.campaigns).filter((c) => c.slotId === String(slotId) && !c.closed).length;
+  return Object.values(state.campaigns).filter((c) => c.slotId === String(slotId) && !c.closed)
+    .length;
 }
 
 function setTerms(state: DemoState, args: readonly unknown[], sender: string, now: number): void {
-  const [slotId, startPrice, floorPrice, leadSeconds, saleEnd, approvalMode, saleMode, floorCpc] = args;
+  const [slotId, startPrice, floorPrice, leadSeconds, saleEnd, approvalMode, saleMode, floorCpc] =
+    args;
   const fixture = findSlot(state, big(slotId));
   ensure(fixture && lc(fixture.slot.owner) === lc(sender), 'not owner');
   ensure(num(approvalMode) <= 1 && num(saleMode) <= SALE_CPC, 'bad mode');
@@ -345,7 +434,13 @@ function openCampaign(state: DemoState, args: readonly unknown[], sender: string
   const fixture = findSlot(state, big(slotId));
   ensure(fixture, 'erc721: invalid token ID');
   checkCreative(state, fixture, terms, big(creativeId), sender);
-  transferFrom(state, DEMO_CONTRACTS.CampaignVault, sender, DEMO_CONTRACTS.CampaignVault, big(budget));
+  transferFrom(
+    state,
+    DEMO_CONTRACTS.CampaignVault,
+    sender,
+    DEMO_CONTRACTS.CampaignVault,
+    big(budget),
+  );
   const campaignId = nextId(Object.keys(state.campaigns));
   state.campaigns[campaignId] = {
     campaignId,
@@ -380,7 +475,12 @@ function topUp(state: DemoState, campaignId: unknown, amount: bigint, sender: st
 // ---------------------------------------------------------------------------------------------
 
 /** Applies one state-changing call as `sender` at `now`. Throws `DemoRevert` on any revert. */
-export function applyCall(input: DemoState, call: DemoCall, sender: string, now: number): DemoCallResult {
+export function applyCall(
+  input: DemoState,
+  call: DemoCall,
+  sender: string,
+  now: number,
+): DemoCallResult {
   const state = structuredClone(input);
   const a = call.args;
   const key = `${call.contract}.${call.functionName}`;
@@ -390,7 +490,8 @@ export function applyCall(input: DemoState, call: DemoCall, sender: string, now:
       const spec = a[0] as { width: number; height: number; kind: number; domain: string };
       ensure(spec.domain.length > 0, 'empty domain');
       ensure(spec.kind <= SLOT_KIND_OTHER, 'bad kind');
-      if (spec.kind === SLOT_KIND_WEB_DISPLAY) ensure(spec.width > 0 && spec.height > 0, 'bad dimensions');
+      if (spec.kind === SLOT_KIND_WEB_DISPLAY)
+        ensure(spec.width > 0 && spec.height > 0, 'bad dimensions');
       const slotId = nextId(state.slots.map((s) => s.slot.slotId));
       state.slots.push({
         slot: {
@@ -502,7 +603,9 @@ export function applyCall(input: DemoState, call: DemoCall, sender: string, now:
     case 'CreativeRegistry.set_advertiser_allowed': {
       const publisher = lc(sender);
       const advertiser = lc(str(a[0]));
-      const current = (state.ledger.allowedAdvertisers[publisher] ?? []).filter((x) => x !== advertiser);
+      const current = (state.ledger.allowedAdvertisers[publisher] ?? []).filter(
+        (x) => x !== advertiser,
+      );
       state.ledger.allowedAdvertisers[publisher] = a[1] ? [...current, advertiser] : current;
       return { state };
     }

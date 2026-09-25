@@ -60,12 +60,12 @@ export function WhyPage() {
         </h1>
         <p className="mt-3 max-w-2xl text-muted">
           OpenAd is a non-custodial advertising marketplace on Base, at the default 2.5% protocol
-          fee (on-chain governed, capped at 10%). Publishers lease ad slots by Dutch auction
-          (LEASE) or run pay-per-click campaigns (CPC); advertisers pay in USDC. Non-custodial:
-          LEASE pays the publisher inside the buy transaction; CPC budgets sit in an on-chain
-          escrow vault the advertiser can close, paid out at batch settlement. No one at OpenAd
-          holds keys to your funds. There are no tracking scripts in the embed, and no ad-network
-          approval gate — publishers approve creatives directly.
+          fee (on-chain governed, capped at 10%). Publishers lease ad slots by Dutch auction (LEASE)
+          or run pay-per-click campaigns (CPC); advertisers pay in USDC. Non-custodial: LEASE pays
+          the publisher inside the buy transaction; CPC budgets sit in an on-chain escrow vault the
+          advertiser can close, paid out at batch settlement. No one at OpenAd holds keys to your
+          funds. There are no tracking scripts in the embed, and no ad-network approval gate —
+          publishers approve creatives directly.
         </p>
       </section>
 
@@ -162,8 +162,12 @@ export function WhyPage() {
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <div>
-            <p className="text-sm text-muted">{preset.label.replace(/\s*\(approx.*\)$/, '')} payout</p>
-            <p className="mt-1 text-2xl font-semibold">{formatUsdc(result.networkPublisherPayout)}</p>
+            <p className="text-sm text-muted">
+              {preset.label.replace(/\s*\(approx.*\)$/, '')} payout
+            </p>
+            <p className="mt-1 text-2xl font-semibold">
+              {formatUsdc(result.networkPublisherPayout)}
+            </p>
           </div>
           <div>
             <p className="text-sm text-muted">OpenAd payout</p>
@@ -174,7 +178,8 @@ export function WhyPage() {
         </div>
         <div className="mt-4 rounded-xl bg-canvas p-4 text-sm">
           <p>
-            Monthly uplift: <span className="font-semibold">{formatUsdc(result.monthlyUplift)}</span> · Annual
+            Monthly uplift:{' '}
+            <span className="font-semibold">{formatUsdc(result.monthlyUplift)}</span> · Annual
             uplift: <span className="font-semibold">{formatUsdc(result.annualUplift)}</span>
           </p>
         </div>

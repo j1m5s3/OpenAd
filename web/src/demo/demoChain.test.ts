@@ -84,14 +84,29 @@ describe('createDemoProvider (viem over custom transport)', () => {
     })) as { sellable: boolean; price: bigint; fee: bigint };
     expect(q.sellable).toBe(true);
 
-    const name = await publicClient.readContract({ address: DEMO_CONTRACTS.USDC, abi: usdcAbi, functionName: 'name' });
+    const name = await publicClient.readContract({
+      address: DEMO_CONTRACTS.USDC,
+      abi: usdcAbi,
+      functionName: 'name',
+    });
     expect(name).toBe(DEMO_USDC_NAME);
     const deadline = BigInt(NOW + 3600);
     const signature = await walletClient.signTypedData({
-      domain: { name: DEMO_USDC_NAME, version: '2', chainId: 31337, verifyingContract: DEMO_CONTRACTS.USDC },
+      domain: {
+        name: DEMO_USDC_NAME,
+        version: '2',
+        chainId: 31337,
+        verifyingContract: DEMO_CONTRACTS.USDC,
+      },
       types: usdcPermitTypes,
       primaryType: 'Permit',
-      message: { owner: ADV, spender: DEMO_CONTRACTS.Marketplace, value: q.price, nonce: 0n, deadline },
+      message: {
+        owner: ADV,
+        spender: DEMO_CONTRACTS.Marketplace,
+        value: q.price,
+        nonce: 0n,
+        deadline,
+      },
     });
     expect(signature).toMatch(/^0x[0-9a-f]{130}$/);
 
@@ -118,7 +133,16 @@ describe('createDemoProvider (viem over custom transport)', () => {
         address: DEMO_CONTRACTS.Marketplace,
         abi: marketAbi,
         functionName: 'buy_with_permit',
-        args: [1n, 0n, 3n, 1n, BigInt(NOW + 3600), 27, `0x${'1'.repeat(64)}`, `0x${'2'.repeat(64)}`],
+        args: [
+          1n,
+          0n,
+          3n,
+          1n,
+          BigInt(NOW + 3600),
+          27,
+          `0x${'1'.repeat(64)}`,
+          `0x${'2'.repeat(64)}`,
+        ],
       }),
     ).rejects.toThrow(/cpc mode/);
     expect(store.get()).toEqual(before);
@@ -134,7 +158,9 @@ describe('createDemoProvider (viem over custom transport)', () => {
 
   it('rejects unknown methods with EIP-1193 code 4200', async () => {
     const { provider } = setup();
-    await expect(provider.request({ method: 'eth_subscribe', params: ['newHeads'] })).rejects.toMatchObject({
+    await expect(
+      provider.request({ method: 'eth_subscribe', params: ['newHeads'] }),
+    ).rejects.toMatchObject({
       code: 4200,
     });
   });

@@ -10,7 +10,9 @@ describe('buildServeResponse', () => {
   it('matches the ServeResponse keys the real API returns', () => {
     const state = seedDemoState(NOW);
     const res = buildServeResponse(state, '0', NOW);
-    expect(Object.keys(res).sort()).toEqual(['campaign', 'creative', 'lease', 'slotId', 'status', 'ttl'].sort());
+    expect(Object.keys(res).sort()).toEqual(
+      ['campaign', 'creative', 'lease', 'slotId', 'status', 'ttl'].sort(),
+    );
   });
 
   it('prefers an active lease over a campaign', () => {
@@ -34,7 +36,11 @@ describe('buildServeResponse', () => {
     // Slot 3 is CPC with no campaigns seeded → empty.
     expect(buildServeResponse(state, '3', NOW).status).toBe('empty');
 
-    state.houseAds['3'] = { slotId: '3', mediaUrl: '/demo/creatives/house.svg', clickUrl: 'https://example.test' };
+    state.houseAds['3'] = {
+      slotId: '3',
+      mediaUrl: '/demo/creatives/house.svg',
+      clickUrl: 'https://example.test',
+    };
     expect(buildServeResponse(state, '3', NOW).status).toBe('house');
   });
 
@@ -53,7 +59,11 @@ describe('buildServeResponse', () => {
     expect(before.status).not.toBe('lease');
     const { state: after } = applyCall(
       state,
-      { contract: 'Marketplace', functionName: 'buy_with_permit', args: [4n, 3n, 3n, 8_000_000n, BigInt(NOW + 3600)] },
+      {
+        contract: 'Marketplace',
+        functionName: 'buy_with_permit',
+        args: [4n, 3n, 3n, 8_000_000n, BigInt(NOW + 3600)],
+      },
       advertiser,
       NOW,
     );

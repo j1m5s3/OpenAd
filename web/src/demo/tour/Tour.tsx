@@ -2,12 +2,25 @@
  * personas across 6 steps (`steps.ts`), switching persona through the demo wallet's
  * `setAccount` — never a real wallet — and navigating with the app's own router so the in-memory
  * store carries over (a full reload would reset it, by design; see `e2e/demo/flows.spec.ts`). */
-import { type CSSProperties, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { getDemoProvider } from '../install';
 import { TOUR_FINISH_ROUTE, TOUR_STEPS, type TourTarget } from './steps';
-import { getStoredStepIndex, isTourActive, setStoredStepIndex, setTourActive, subscribeTourRestart } from './tourState';
+import {
+  getStoredStepIndex,
+  isTourActive,
+  setStoredStepIndex,
+  setTourActive,
+  subscribeTourRestart,
+} from './tourState';
 
 const CARD_WIDTH = 320;
 const CARD_MARGIN = 16;
@@ -76,7 +89,12 @@ export function Tour() {
       const el = resolveTarget(step.target);
       if (el) {
         const box = el.getBoundingClientRect();
-        setRect({ top: box.top + window.scrollY, left: box.left + window.scrollX, width: box.width, height: box.height });
+        setRect({
+          top: box.top + window.scrollY,
+          left: box.left + window.scrollX,
+          width: box.width,
+          height: box.height,
+        });
         el.style.outline = '2px solid var(--color-accent, #c8f542)';
         el.style.outlineOffset = '2px';
         highlighted = el;
@@ -138,10 +156,23 @@ export function Tour() {
 
   const wrapperStyle: CSSProperties = rect
     ? { position: 'absolute', top: 0, left: 0, width: 0, height: 0 }
-    : { position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 };
+    : {
+        position: 'fixed',
+        inset: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 50,
+      };
 
   const cardStyle: CSSProperties | undefined = rect
-    ? { position: 'absolute', top: rect.top + rect.height + 10, left: clampLeft(rect.left), width: CARD_WIDTH, zIndex: 50 }
+    ? {
+        position: 'absolute',
+        top: rect.top + rect.height + 10,
+        left: clampLeft(rect.left),
+        width: CARD_WIDTH,
+        zIndex: 50,
+      }
     : undefined;
 
   return (
@@ -176,7 +207,11 @@ export function Tour() {
             >
               Back
             </button>
-            <button type="button" onClick={next} className="rounded-full bg-accent px-3 py-1 text-sm text-accent-ink">
+            <button
+              type="button"
+              onClick={next}
+              className="rounded-full bg-accent px-3 py-1 text-sm text-accent-ink"
+            >
               {stepIndex === TOUR_STEPS.length - 1 ? 'Finish' : 'Next'}
             </button>
           </div>

@@ -47,11 +47,16 @@ function demoWallet(provider: DemoProvider): () => Wallet {
 }
 
 /** Builds the demo config over `provider` (defaults to the one `installDemo()` created). */
-export function createDemoWagmiConfig(provider: DemoProvider = getDemoProvider()): OpenAdWagmiConfig {
-  const connectors = connectorsForWallets([{ groupName: 'Demo', wallets: [demoWallet(provider)] }], {
-    appName: 'OpenAd (demo)',
-    projectId: 'openad-demo-no-walletconnect',
-  });
+export function createDemoWagmiConfig(
+  provider: DemoProvider = getDemoProvider(),
+): OpenAdWagmiConfig {
+  const connectors = connectorsForWallets(
+    [{ groupName: 'Demo', wallets: [demoWallet(provider)] }],
+    {
+      appName: 'OpenAd (demo)',
+      projectId: 'openad-demo-no-walletconnect',
+    },
+  );
   const config = createConfig({
     chains: [foundry],
     connectors,

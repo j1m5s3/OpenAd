@@ -3,11 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { DEMO_ABIS } from './abis.generated';
 
 // Every source file that names a contract function (feature write/read call sites + WalletRail).
-const sources = import.meta.glob(['../features/**/*.{ts,tsx}', '../components/**/*.{ts,tsx}', '!**/*.test.*'], {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>;
+const sources = import.meta.glob(
+  ['../features/**/*.{ts,tsx}', '../components/**/*.{ts,tsx}', '!**/*.test.*'],
+  {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  },
+) as Record<string, string>;
 
 /** Every string literal on a line mentioning `functionName` — catches `functionName: 'quote'`
  * and union types like `functionName: 'set_paused' | 'request_close'`. */

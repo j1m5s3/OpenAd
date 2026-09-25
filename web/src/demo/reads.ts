@@ -95,16 +95,25 @@ export function readCall(state: DemoState, call: DemoCall, now: number): unknown
       return DEMO_CONTRACTS.CreativeRegistry;
     case 'Marketplace.campaign_vault':
     case 'CampaignVault.MARKETPLACE':
-      return key.startsWith('Marketplace') ? DEMO_CONTRACTS.CampaignVault : DEMO_CONTRACTS.Marketplace;
+      return key.startsWith('Marketplace')
+        ? DEMO_CONTRACTS.CampaignVault
+        : DEMO_CONTRACTS.Marketplace;
 
     // --- AdSlot ---
     case 'AdSlot.ownerOf':
       return slotOwner(state, big(a[0]));
     case 'AdSlot.balanceOf':
-      return BigInt(state.slots.filter((s) => s.slot.owner.toLowerCase() === str(a[0]).toLowerCase()).length);
+      return BigInt(
+        state.slots.filter((s) => s.slot.owner.toLowerCase() === str(a[0]).toLowerCase()).length,
+      );
     case 'AdSlot.spec_of': {
       const slot = findSlot(state, big(a[0]))?.slot;
-      return { width: slot?.width ?? 0, height: slot?.height ?? 0, kind: slot?.kind ?? 0, domain: slot?.domain ?? '' };
+      return {
+        width: slot?.width ?? 0,
+        height: slot?.height ?? 0,
+        kind: slot?.kind ?? 0,
+        domain: slot?.domain ?? '',
+      };
     }
     case 'AdSlot.calendar_of': {
       const slot = findSlot(state, big(a[0]))?.slot;
@@ -135,7 +144,9 @@ export function readCall(state: DemoState, call: DemoCall, now: number): unknown
     case 'CampaignVault.campaign_count':
       return BigInt(Object.keys(state.campaigns).length);
     case 'CampaignVault.open_campaigns_of':
-      return BigInt(Object.values(state.campaigns).filter((c) => c.slotId === str(a[0]) && !c.closed).length);
+      return BigInt(
+        Object.values(state.campaigns).filter((c) => c.slotId === str(a[0]) && !c.closed).length,
+      );
     case 'CampaignVault.close_delay_seconds':
       return BigInt(DEMO_CLOSE_DELAY_SECONDS);
 

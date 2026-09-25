@@ -108,7 +108,12 @@ function paramsArray(params: Eip1193Request['params']): readonly unknown[] {
 
 function decodeCall(to: unknown, data: unknown): { call: DemoCall; abi: Abi } {
   const contract = typeof to === 'string' ? CONTRACT_BY_ADDRESS.get(to.toLowerCase()) : undefined;
-  if (!contract) throw new DemoProviderError(3, `execution reverted: demo: no contract at ${String(to)}`, revertData('demo: no contract'));
+  if (!contract)
+    throw new DemoProviderError(
+      3,
+      `execution reverted: demo: no contract at ${String(to)}`,
+      revertData('demo: no contract'),
+    );
   const abi = DEMO_ABIS[contract] as unknown as Abi;
   const decoded = decodeFunctionData({ abi, data: data as Hex });
   return { call: { contract, functionName: decoded.functionName, args: decoded.args ?? [] }, abi };
@@ -116,7 +121,8 @@ function decodeCall(to: unknown, data: unknown): { call: DemoCall; abi: Abi } {
 
 function toProviderError(err: unknown): DemoProviderError {
   if (err instanceof DemoProviderError) return err;
-  if (err instanceof DemoRevert) return new DemoProviderError(3, err.message, revertData(err.reason));
+  if (err instanceof DemoRevert)
+    return new DemoProviderError(3, err.message, revertData(err.reason));
   const message = err instanceof Error ? err.message : String(err);
   return new DemoProviderError(3, `execution reverted: ${message}`, revertData(message));
 }
@@ -139,7 +145,8 @@ export function createDemoProvider(
   function requireSender(from: unknown): Address {
     if (!connected) throw new DemoProviderError(4100, 'Demo wallet is not connected');
     const sender = getAddress(String(from ?? account));
-    if (sender !== account) throw new DemoProviderError(4100, `Demo wallet does not control ${sender}`);
+    if (sender !== account)
+      throw new DemoProviderError(4100, `Demo wallet does not control ${sender}`);
     return sender;
   }
 
@@ -247,7 +254,8 @@ export function createDemoProvider(
         return numberToHex(blockNumberAt(demoNow()));
       case 'eth_getBlockByNumber': {
         const tag = p[0];
-        const n = typeof tag === 'string' && tag.startsWith('0x') ? BigInt(tag) : blockNumberAt(demoNow());
+        const n =
+          typeof tag === 'string' && tag.startsWith('0x') ? BigInt(tag) : blockNumberAt(demoNow());
         return block(n);
       }
       case 'eth_getBlockByHash':
@@ -278,7 +286,9 @@ export function createDemoProvider(
         try {
           const { call, abi } = decodeCall(tx.to, tx.data);
           const fn = abi.find((e) => e.type === 'function' && e.name === call.functionName);
-          const isView = fn?.type === 'function' && (fn.stateMutability === 'view' || fn.stateMutability === 'pure');
+          const isView =
+            fn?.type === 'function' &&
+            (fn.stateMutability === 'view' || fn.stateMutability === 'pure');
           const now = demoNow();
           // A write sent as eth_call is a simulation: run the reducer on a copy, discard the state.
           const result = isView
@@ -286,7 +296,11 @@ export function createDemoProvider(
             : applyCall(store.get(), call, getAddress(tx.from ?? account), now).result;
           const hasOutputs = fn?.type === 'function' && fn.outputs.length > 0;
           if (!hasOutputs) return '0x';
-          return encodeFunctionResult({ abi, functionName: call.functionName, result } as Parameters<typeof encodeFunctionResult>[0]);
+          return encodeFunctionResult({
+            abi,
+            functionName: call.functionName,
+            result,
+          } as Parameters<typeof encodeFunctionResult>[0]);
         } catch (err) {
           throw toProviderError(err);
         }

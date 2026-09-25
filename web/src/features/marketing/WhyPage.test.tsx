@@ -18,7 +18,9 @@ describe('WhyPage', () => {
   it('shows the disclaimer', () => {
     renderPage();
     expect(
-      screen.getAllByText(/Illustrative\. Network take rates are approximate public ranges and vary\./).length,
+      screen.getAllByText(
+        /Illustrative\. Network take rates are approximate public ranges and vary\./,
+      ).length,
     ).toBeGreaterThan(0);
   });
 

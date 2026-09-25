@@ -39,12 +39,20 @@ describe('Marketplace.buy_with_permit', () => {
     const { fee, publisherAmount } = feeSplit(expected);
     const { state: next } = applyCall(
       state,
-      { contract: 'Marketplace', functionName: 'buy_with_permit', args: [4n, 4n, 3n, expected, DEADLINE, 27, R, S] },
+      {
+        contract: 'Marketplace',
+        functionName: 'buy_with_permit',
+        args: [4n, 4n, 3n, expected, DEADLINE, 27, R, S],
+      },
       ADV,
       NOW,
     );
 
-    expect(findSlot(next, '4')?.leases[4]).toEqual({ lessee: ADV, creativeId: '3', price: expected.toString() });
+    expect(findSlot(next, '4')?.leases[4]).toEqual({
+      lessee: ADV,
+      creativeId: '3',
+      price: expected.toString(),
+    });
     expect(publisherAmount + fee).toBe(expected);
     expect(balanceOf(next, ADV)).toBe(balanceOf(state, ADV) - expected);
     expect(balanceOf(next, PUB_EXPLORER)).toBe(balanceOf(state, PUB_EXPLORER) + publisherAmount);
@@ -74,7 +82,11 @@ describe('Marketplace.buy_with_permit', () => {
     const buy = (creativeId: bigint, max: bigint, sender: string) =>
       applyCall(
         state,
-        { contract: 'Marketplace', functionName: 'buy_with_permit', args: [4n, 4n, creativeId, max, DEADLINE, 27, R, S] },
+        {
+          contract: 'Marketplace',
+          functionName: 'buy_with_permit',
+          args: [4n, 4n, creativeId, max, DEADLINE, 27, R, S],
+        },
         sender,
         NOW,
       );
@@ -109,7 +121,11 @@ describe('CampaignVault', () => {
 
     const toppedUp = applyCall(
       opened.state,
-      { contract: 'CampaignVault', functionName: 'top_up_with_permit', args: [BigInt(id), 5_000_000n, DEADLINE, 27, R, S] },
+      {
+        contract: 'CampaignVault',
+        functionName: 'top_up_with_permit',
+        args: [BigInt(id), 5_000_000n, DEADLINE, 27, R, S],
+      },
       ADV,
       NOW,
     );
@@ -137,7 +153,11 @@ describe('AdSlot and CreativeRegistry', () => {
     const state = seedDemoState(NOW);
     const { state: next, result } = applyCall(
       state,
-      { contract: 'AdSlot', functionName: 'mint_slot', args: [{ width: 300, height: 250, kind: 0, domain: 'new.example' }] },
+      {
+        contract: 'AdSlot',
+        functionName: 'mint_slot',
+        args: [{ width: 300, height: 250, kind: 0, domain: 'new.example' }],
+      },
       PUB_NEWSLETTER,
       NOW,
     );
