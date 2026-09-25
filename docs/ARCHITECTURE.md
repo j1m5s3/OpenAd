@@ -148,7 +148,10 @@ Public reads:
 - `GET /v1/health` — liveness; includes indexer lag in blocks.
 - `GET /v1/slots?domain=&kind=&verified=` — list slots with terms, next open periods, indicative prices.
 - `GET /v1/slots/{slot_id}` — slot detail; also serves as ERC-721 `tokenURI` metadata JSON when `Accept: application/json` (this is what `AdSlot.base_uri` points at).
-- `GET /v1/slots/{slot_id}/periods?from=&to=` — period calendar with lease status and quote inputs.
+- `GET /v1/slots/{slot_id}/periods?from=&to=` — period calendar with lease status and quote
+  inputs. Capped at 60 periods per request (`to − from + 1 ≤ 60`); a wider window gets a
+  house-style 422 `invalid_window` (threat model T19). Leases in the window are read with one
+  query, not one per period index.
 - `GET /v1/creatives/{creative_id}` — creative + verification status.
 - `GET /v1/publishers/{address}/…`, `GET /v1/advertisers/{address}/…` — dashboards' read models.
 - `GET /v1/analytics/slots/{slot_id}`, `GET /v1/analytics/advertisers/{address}` — CTR/eCPM/

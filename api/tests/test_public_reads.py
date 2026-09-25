@@ -52,3 +52,18 @@ async def test_slot_periods_and_creative(client: AsyncClient, session: AsyncSess
     adv = await client.get(f"/v1/advertisers/{ADVERTISER}")
     assert adv.status_code == 200
     assert adv.json()["leaseCount"] == 1
+
+
+async def test_slot_periods_range_is_capped_at_60(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    session.add_all([make_slot(), make_terms()])
+    await session.commit()
+
+    exactly_60 = await client.get("/v1/slots/1/periods?from=0&to=59")
+    assert exactly_60.status_code == 200
+    assert len(exactly_60.json()["items"]) == 60
+
+    too_wide = await client.get("/v1/slots/1/periods?from=0&to=60")
+    assert too_wide.status_code == 422
+    assert too_wide.json()["error"] == "invalid_window"
