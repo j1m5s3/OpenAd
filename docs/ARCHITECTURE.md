@@ -90,6 +90,8 @@ api/src/openad/
   main.py            FastAPI app factory `create_app()`; mounts routers; lifespan opens DB
   config.py          `Settings` (pydantic-settings). All env vars are prefixed OPENAD_.
   logging.py         structlog configuration (JSON in prod, console in dev)
+  siwe.py            Strict EIP-4361 parser + origin binding for sign-in (ADR-0009 amendment)
+  ratelimit.py       Opt-in per-process rate limit for POST /v1/auth/nonce and /verify
   db/
     base.py          SQLAlchemy `Base`
     session.py       async engine + session factory + `get_session` dependency
@@ -134,7 +136,7 @@ Off-chain only:
 | `creative_verifications`  | `(creative_id, status, checked_at, cached_path, resolved_image_url, error)`. See § 3.5.                                                       |
 | `serve_events`            | Append-only: `(slot_id, lease key or campaign_id or null, served_kind, origin_ok, at, gsp_cpc?)`. No IPs, no user agents, no cookies. |
 | `click_events`            | Token hash, campaign_id, payable flag, IVT reason, GSP, optional settle batch. No raw IPs. |
-| `auth_nonces`, `sessions` | SIWE login state.                                                                                                                             |
+| `auth_nonces`, `sessions` | SIWE login state. Used or expired nonces and expired sessions are pruned from `POST /v1/auth/nonce`, at most once a minute per process (§ 3.3). |
 
 Migrations: Alembic, one revision per PR that touches models. Postgres in dev/prod, SQLite in
 unit tests.
@@ -166,6 +168,39 @@ Authenticated (SIWE session; wallet must match the acting address):
 - `POST /v1/creatives/{creative_id}/verify` — request (re)verification of media.
 
 No endpoint ever accepts a private key or signs a chain transaction.
+
+Sign-in rules (ADR-0009 and its 2026-09-25 amendment; threat model T15, T16):
+
+- **Strict EIP-4361 message** (`openad/siwe.py`). The parser accepts only EIP-4361's layout
+  (`address LF LF [statement LF] LF "URI: "…`) with an EIP-55 address, and the field order.
+  Unknown, duplicate or reordered lines, CR characters and trailing text get 401 "malformed
+  SIWE message". The web app and the sim build the message with viem's `createSiweMessage`.
+  The body's `message` is capped at 4096 characters; a longer one, like any invalid body on
+  `/v1/auth/*`, gets a house-style 422 `{"error":"invalid_request",…}`.
+- **Origin binding.** The message's `domain` must be the authority (`host:port`) of an
+  allowed web origin, and its `URI` must have that same origin. Otherwise the API answers 401
+  "domain not allowed".
+  - Allowed origins: `OPENAD_SIWE_ALLOWED_ORIGINS` (comma-separated), falling back to
+    `OPENAD_CORS_ORIGINS`.
+  - The web app signs with `window.location.host` and `window.location.origin`. The sim
+    signs as `OPENAD_SIM_WEB_ORIGIN`. Neither ever signs as the API's own URL.
+- **Checks in order:** parse, bind, chain id (`OPENAD_CHAIN_ID`), time, signature.
+  - `Issued At` must be within `[now − 10 min − 5 min, now + 5 min]` (5 minutes of skew).
+  - `Expiration Time` and `Not Before` are honoured, with 5 minutes of skew for `Not Before`.
+- **Nonce.** Only after all the checks pass is the nonce consumed, by one conditional
+  `UPDATE` that must hit exactly one row. The session row is created in the same
+  transaction. A rejected message leaves its nonce unused.
+- **Pruning.** `POST /v1/auth/nonce` deletes used or expired nonces and expired sessions, at
+  most once every 60 s per process. The prune is best-effort and never blocks issuance. The
+  expiry DELETEs use the `created_at` and `expires_at` indexes (migration `0005`); used
+  nonces go in a separate DELETE that runs after them.
+- **Rate limit (opt-in, per instance).** `OPENAD_AUTH_RATE_LIMIT_PER_MINUTE` (default `0`,
+  off) puts a token bucket per client on `POST /v1/auth/nonce` and `/verify` only. Over the
+  limit, the API answers 429 `{"error":"rate_limited",…}` with `Retry-After`. At most
+  10 000 client keys are kept, in an LRU.
+  - The client key is the TCP peer when `OPENAD_TRUSTED_PROXY_HOPS=0`. Otherwise it is the
+    N-th `X-Forwarded-For` entry from the right, so spoofed left-hand entries do not matter.
+  - For a global limit, use Cloud Armor on a load balancer (`docs/deploy-gcp.md`).
 
 ### 3.4 Serve contract (shared with `embed`)
 
@@ -482,8 +517,9 @@ web/src/
 
 Local loop (canonical on Windows: `.\scripts\setup.cmd`, `.\scripts\dev-up.cmd`, `.\scripts\dev-down.cmd`;
 `npm run stack:*` is the same if PowerShell can load `npm.ps1`; bash twins on Linux/macOS/WSL
-per the ADR-0007 amendment). CI is `.github/workflows/ci.yml` (contracts, api, web/embed,
-Playwright, `check:sh`). Production hosting is GCP Cloud Run (ADR-0017, `docs/deploy-gcp.md`);
+per the ADR-0007 amendment). CI is `.github/workflows/ci.yml` (contracts; api, whose pytest
+also runs against a Postgres 16 service with `OPENAD_TEST_PG_URL`; web/embed; Playwright;
+`check:sh`). Production hosting is GCP Cloud Run (ADR-0017, `docs/deploy-gcp.md`);
 CI's deploy job (step 27+28) is gated on GCP secrets and never broadcasts to Base mainnet.
 
 ```text
@@ -521,5 +557,7 @@ docker compose -f docker-compose.yml -f docker-compose.stack.yml up --build
 - Serving never reads the chain and never proxies to advertiser URLs at request time.
 - Visitors are never exposed to advertisers: media is served from the verified cache; no third-party requests from the embed.
 - No cookies, IPs, or user agents are stored by the serving edge.
+- The opt-in auth rate limiter (§ 3.3) keeps at most 10 000 client keys (IP addresses) in
+  process memory only. It writes none to the database or the logs.
 - Creatives are raster images only in v1; no advertiser HTML/JS ever executes on a publisher page.
 - Publisher takedown (`set_approval(false)` / `revoke_approval`) and moderator takedown propagate within one indexer cycle plus `ttl`.

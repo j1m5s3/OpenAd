@@ -19,6 +19,8 @@ src/openad/
   main.py          create_app(); DomainError → HTTP; routers mounted under /v1
   config.py        Settings (OPENAD_*), the only place env vars are read
   logging.py       structlog
+  siwe.py          strict EIP-4361 parser + origin binding for sign-in (ADR-0009 amendment)
+  ratelimit.py     opt-in per-process rate limit for POST /v1/auth/nonce and /verify
   errors.py        DomainError, NotFoundError, ForbiddenError, ConflictError
   db/              Base + naming conventions, Database/session dependency, chain-safe column types
   models/          slots/terms/leases · creatives/approvals/allowlists · indexer cursor/protocol config · off-chain tables

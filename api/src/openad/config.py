@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     # --- auth (SIWE; ROADMAP 3.1)
     session_secret: str = "change-me-in-real-environments"  # noqa: S105 - documented placeholder
     session_ttl_seconds: int = 86400
+    # Origins a SIWE message may be bound to (ADR-0009 amendment), comma-separated. Unset or
+    # empty follows `cors_origins`. Only http(s) origins count; `*` allows nothing.
+    siwe_allowed_origins: str | None = None
+    # Best-effort, per-process limit on POST /v1/auth/nonce and /verify; 0 disables it.
+    auth_rate_limit_per_minute: int = Field(default=0, ge=0)
+    # Proxies in front of the api that append to X-Forwarded-For. 0 keys the limit by the TCP
+    # peer; N > 0 by the N-th X-Forwarded-For entry from the right.
+    trusted_proxy_hops: int = Field(default=0, ge=0)
 
     # --- CPC clicks (ADR-0014). Settler key is NOT here; see openad.settler.settings.
     click_hmac_secret: str = "change-me-click-hmac"  # noqa: S105 - documented placeholder
@@ -74,6 +82,13 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def siwe_origin_list(self) -> list[str]:
+        """Origins SIWE messages may be bound to: `siwe_allowed_origins`, else the CORS list."""
+        raw = self.siwe_allowed_origins or ""
+        origins = [o.strip() for o in raw.split(",") if o.strip()]
+        return origins or self.cors_origin_list
 
     @property
     def deployments_path(self) -> Path:

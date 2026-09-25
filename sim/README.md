@@ -19,6 +19,11 @@ reach that URL.
 
 Control API (localhost only): `http://127.0.0.1:8610/status`.
 
+For house ads and creative verification, personas sign in with SIWE as the **web app's**
+origin, `OPENAD_SIM_WEB_ORIGIN` (default `http://localhost:5173`), never as the API's URL. The
+API only accepts messages bound to one of its allowed origins (ADR-0009 amendment), so this
+must be one of them.
+
 MCP (Cursor, daemon must already be running): `npm run mcp -w sim`
 tools `sim_status`, `sim_list_personas`, `sim_nudge_action`, `sim_pause_loop`.
 

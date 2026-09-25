@@ -323,7 +323,8 @@ export function createDemoRequestHandler(store: Store): RequestHandler {
     // /v1/auth/*
     if (rest[0] === 'auth') {
       if (method === 'POST' && rest[1] === 'nonce') {
-        return json({ nonce: `demo-${pseudoHex('nonce', 16)}` });
+        // Alphanumeric only: EIP-4361's nonce grammar, which viem's createSiweMessage enforces.
+        return json({ nonce: `demo${pseudoHex('nonce', 16)}` });
       }
       if (method === 'POST' && rest[1] === 'verify') {
         const body = init?.body
