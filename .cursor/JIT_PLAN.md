@@ -249,6 +249,11 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
     (`223f979`) and merged main `a7f95f7` in (`ba94757`), cleanly. Round 4 edits only 43's part of
     `check-sh.sh` and its runbook hunks, and R3's `git merge-file` against main, 42 and #16 was
     conflict-free.
+  - **Amendment (2026-09-25 ~16:45 UTC; STEP_DONE 43).** 43 is **#23** (`ea72ce1`, R4 PASS), and
+    the orchestrator merges it once CI is green: the last of 42–45 (merge order step 1). R4's
+    `git merge-file` against launch-final `ca20f66` was clean. Hunk ownership ends when #23
+    merges; 47 edits only the lines its spec lists, now including `usage()` text in
+    `deploy-gcp.sh`.
 - **D15 — Fix rules: what 42–45 make true.**
   - **Images (42).**
     - The api image carries `contracts/deployments` at `/app/contracts/deployments`, with
@@ -308,6 +313,9 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
         keeps it (inferred);
       - check-sh kills each rule's mutants, including the api and web bindings, bind before
         smoke, and an `RPC_ORIGINS` default that is never `RPC_URL` (round 4).
+    - As shipped (#23, `ea72ce1`): all of the above, and `API_INGRESS` and `PUBLIC_INVOKER`
+      accept only their listed values. The runbook warns that switching to LB ingress before the
+      load balancer serves `API_URL` fails the api smoke (inferred). check-sh: 75 ok.
   - **Settler (44).**
     - The settler is a dedicated, gas-only EOA.
     - `deploy.py` requires `OPENAD_SETTLER_ADDRESS` off Anvil and pyevm, and refuses the deployer.
@@ -359,7 +367,7 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 | M Discover and slot-page period state (first-period anchoring) | `fix/discover-auction-state` (#19, merged `f50076d`) | noted under 6.7 by 36b | #14 merged; independent of L and N; merge before Final |
 | N Periods range cap (accepted) | `fix/periods-range-cap` (#18, merged `289bb72`) | noted under 6.9 by 36b | #14 merged; independent of L and M (T19 goes after T17; T18 restored on merge); merge before Final |
 | O Fix: the deploy images boot (api deployments, web WalletConnect/CSP/fonts, CI image boot checks) | `fix/deploy-images` (#20, merged `a7f95f7`) | 6.11 (47) | main `f50076d`; independent of P, Q and R (D14); merges before Final |
-| P Fix: Cloud Run wiring (VPC egress, SQL edition, invoker, WIF roles, deploy nits) | `fix/cloud-run-wiring` (`ba94757`, round 4; worktree `/home/claude/OpenAd-43`) | 6.12 (47) | main `f50076d`; independent of O, Q and R; the last fix branch, with main `a7f95f7` merged in; merges before Final |
+| P Fix: Cloud Run wiring (VPC egress, SQL edition, invoker, WIF roles, deploy nits) | `fix/cloud-run-wiring` (#23, open; merges once CI is green) | 6.12 (47) | main `f50076d`; independent of O, Q and R; the last fix branch, with main `a7f95f7` merged in; merges before Final |
 | Q Fix: a dedicated settler key | `fix/settler-key` (#22, merged `5658fcb`) | 6.13 (47) | main `f50076d`; independent of O, P and R; merges before Final |
 | R Fix: CPC click integrity (no-store campaign serves, trusted burst key, origin enforcement) | `fix/cpc-click-integrity` (#21, merged `599368a`) | 6.14 (47) | main `f50076d`; independent of O, P and Q; merges before Final |
 | Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` (draft #16) | 6.3/6.6/6.7 ticks, 6.10, Phase 7; 6.11–6.14 and 7.19 (46, 47) | started after J and K merged; merges last, after L, M, N and O–R (36b and 46 done; 47 post-merge pass and targeted re-review, then CLOSE) |
@@ -438,25 +446,22 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
   Opus for round 3. **Risk: medium.** **(as-shipped record below)**
 
 ### Slice P — `fix/cloud-run-wiring` (slice-review fix; worktree `/home/claude/OpenAd-43` off `f50076d`; parallel)
-- [>] 43. P:
+- ✓ 43. P: Cloud Run wiring. DONE 2026-09-25, **PR #23** (open at 16:45; the orchestrator merges
+  it once CI on `ea72ce1` is green):
   - Direct VPC egress on api, indexer, settler and the migrate job, plus `--edition=ENTERPRISE`;
-  - an `allUsers` invoker binding on api, web and web-demo;
+  - an `allUsers` invoker binding on api, web and web-demo (or `PUBLIC_INVOKER=iam-disabled`);
   - the demo URL and its domain mapping;
   - `--only stack|all` refuses an unset `API_URL`/`WEB_URL`;
   - a per-project media bucket, and CSP RPC entries that are origins only;
-  - WIF roles for Cloud Build;
-  - smoke checks that pass on a fresh deploy;
-  - the infra README, ARCHITECTURE §7 and `usage()`.
-  - R1 FIX (L1: the runner-SA paragraph inside base L427-432; six L2s; seven L3s) → fix
-    round 1: guards before any side effect, `origin_of` → `scheme://host[:port]`, the builds
-    staging bucket, base L273 (D14 and D15 amendments) → R2 FIX (L2: the api smoke always uses
-    `status.url`, which fails behind a load balancer with closed ingress, main's §11; L2: the
-    new rules are untested; L3s) → round 3 with a new Opus coder (`223f979`), then main
-    `a7f95f7` merged in (`ba94757`, clean; check:sh 71 ok) → R3 FIX (the code stands; L2: 4 of
-    40 check-sh mutants survive; L3s: two runbook points, four untested rules) → round 4, tests
-    and docs only, the same Opus coder (REPLAN 16:05).
-  **Coder:** Sonnet for rounds 1–2, then a new Opus coder, with an Opus review. **Risk: medium.**
-  **(spec below)**
+  - WIF roles for Cloud Build, and the builds staging bucket;
+  - smoke checks that pass on a fresh deploy, the api's chosen by `API_INGRESS`;
+  - the infra README, ARCHITECTURE §7, the ADR-0017 amendment and `usage()`.
+  R1 FIX (L1: the runner-SA paragraph inside base L427-432; six L2s; seven L3s) → fix round 1 →
+  R2 FIX (L2: the api smoke against a closed ingress; L2: the new rules untested; L3s) → round 3,
+  a new Opus coder (`223f979`), then main `a7f95f7` merged in (`ba94757`) → R3 FIX (4 of 40
+  check-sh mutants survive; L3s) → round 4, tests and runbook (`ea72ce1`) → **R4 PASS**, plus two
+  pre-accepted L3 touch-ups. check-sh 75 ok. **Coder:** Sonnet for rounds 1–2, then Opus.
+  **Risk: medium.** **(as-shipped record below)**
 
 ### Slice Q — `fix/settler-key` (slice-review fix; worktree `/home/claude/OpenAd-44` off `f50076d`; parallel)
 - ✓ 44. Q: a dedicated, gas-only settler EOA. DONE 2026-09-25, **PR #22 merged `5658fcb`**:
@@ -516,12 +521,13 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
   `69e2aa9` + `911d363`, CI green on both. R1 FIX (L2: the "only takedown" claim; three L3s) →
   fix round 1 → **R2 PASS**. web 237, embed 5, sim 13 + 1 skipped; test:demo 15/15; capture
   byte-identical twice. **Risk: low.** **(as-shipped record below)**
-- ○ 47. Final: post-merge pass, once 43 has merged too (42, 44 and 45 have: #20, #22, #21).
+- ○ 47. Final: post-merge pass, once #23 (43) has merged; 42, 44 and 45 have (#20, #22, #21).
   - Merge main into #16 and resolve any conflicts.
   - ROADMAP 6.11–6.14 with the PR numbers.
   - The docs on #16's side that describe 42–45: the §3.3 heading, the §7 table and CI
     sentence, ADR-0014 L117-118, ADR-0016 item 9 and ADR-0017's CDN line, the runbook's §14
-    bucket line and two inferred markers, the launch-checklist user actions, README, the
+    bucket line, two inferred markers and one host-naming pass, the `API_INGRESS` sentence
+    (infra README, ADR-0017 and `usage()`), the launch-checklist user actions, README, the
     contracts and api READMEs, and `.gitignore`; plus the `/embed-demo` copy, the one
     product-code exception.
   - Re-run the gates; CI green on every check.
@@ -1016,325 +1022,107 @@ spec, with its ~12:00 UTC amendment and ~14:15 UTC R1 FIX block, is in git histo
 - `api.ts`'s `??` on `VITE_API_URL` (R1, and a reviewer's backlog note at STEP_DONE 42): by
   design, no change (D15; §8).
 
-### Step 43 — Cloud Run wiring (slice P, `fix/cloud-run-wiring`)
 
-_Specced 2026-09-25 10:05 UTC (REPLAN). Facts checked at `f50076d`; line numbers are main's._
+### Step 43 — Cloud Run wiring (slice P): DONE, as-shipped record
 
-**Amendment (2026-09-25 ~12:00 UTC; R1 FIX, now in fix round 1; the orchestrator's decisions,
-D14's and D15's amendments).**
-- **L1:** the new "service account that runs the build" paragraph sits inside base L427-432,
-  which #16 edits (L429). Move it into the L401-426 or L433-438 hunk.
-- **L2s:**
-  - The check-sh `SECRETKEY` test can't fail. Make it fail on the old code.
-  - `origin_of` cuts only at "/", so a query or fragment leaks into the CSP, a bare host is
-    mangled, and the refusal prints the credential. It returns `scheme://host[:port]` only, and
-    no refusal prints a credential.
-  - The origin checks run after Cloud Build, the migrate job and the replaces. Every guard runs
-    before the first side effect, above base L252 (L252-257 stay 42's).
-  - The runbook's `--only stack` example has no `API_URL`/`WEB_URL`, and the first-run smoke uses
-    custom domains that can't serve before §9. Set both in the example, and smoke each service's
-    `status.url` until §9.
-  - Item 7's bucket-scoped `roles/storage.admin` on `<PROJECT_ID>_cloudbuild` is likely
-    insufficient. Instead:
-    - §2 creates `gs://<PROJECT_ID>-openad-builds` with `--uniform-bucket-level-access`;
-    - §10 grants the deployer `roles/storage.admin` on that bucket only;
-    - `usage()` and the runbook document `BUILD_STAGING_BUCKET` (default
-      `<PROJECT_ID>-openad-builds`);
-    - the build's runner SA gets `roles/cloudbuild.builds.builder` and
-      `roles/artifactregistry.writer`;
-    - all of it marked "(inferred; verify before deploy)". 42 adds the
-      `--gcs-source-staging-dir` flag.
-  - Base L273 (§7's manual `envsubst`) omits `VPC_NETWORK` and `VPC_SUBNET`. 43 now owns L273.
-- **L3s:**
-  - an opt-in `PUBLIC_INVOKER=iam-disabled` deploys api, web and web-demo with
-    `--no-invoker-iam-check` instead of the `allUsers` binding (inferred);
-  - check-sh asserts that the indexer and settler never get `allUsers`;
-  - the new check-sh tests unset variables with `env -u`, so a caller's environment can't mask
-    them;
-  - §11's smoke block exits non-zero when a check fails;
-  - `API_ORIGIN` is documented in `usage()`, or is no longer an override;
-  - ADR-0017 L105-106 name the settler too;
-  - the §2 bucket uses `--uniform-bucket-level-access` (above).
+**Status:** R4 PASS. Branch `fix/cloud-run-wiring` (worktree `/home/claude/OpenAd-43`), off
+`f50076d`, with main `a7f95f7` merged in as `ba94757`. **PR #23** is open and ready; the
+orchestrator merges it (merge method) once CI's 5 checks on `ea72ce1` are green, and its merge
+commit is read from main at CLOSE. The full pre-implementation spec, with its ~12:00, ~14:15,
+~15:40 and ~16:05 UTC blocks, is in git history (`ca20f66`).
 
-**R2 FIX (2026-09-25 ~14:15 UTC; the work is still uncommitted; round 3 goes to a new Opus
-coder).**
-- **L2:** the api smoke check always uses `status.url`. Main's §11 (#21) tells an operator with a
-  load balancer to set the api's ingress to `internal-and-cloud-load-balancing`, and then the
-  `run.app` URL refuses outside requests, so `--only all` fails there and exits before web
-  deploys.
-  - Recommended (planner): decide from the ingress the script deploys. While it is `all`, smoke
-    `status.url`. Otherwise smoke `API_URL`, the load balancer's host, which §11 makes
-    `OPENAD_PUBLIC_URL`.
-  - To make the ingress an input rather than a repo edit, 43 may render `api.yaml`'s
-    service-level `run.googleapis.com/ingress` (L15) from a variable such as `API_INGRESS`
-    (default `all`; D14's ~14:15 amendment), documented in `usage()`, `deploy.yml`'s `vars` and
-    the infra README.
-  - Test both branches under `--dry-run`.
-- **L2:** the `[/?#]` cut in `origin_of`, the guard order (every guard before the first side
-  effect) and the live-URL smoke are untested, and mutations survive. Add check-sh tests that
-  fail on each mutation.
-- **L3:** userinfo with an unencoded `/`, `?` or `#` slips past `origin_of`. Accept only
-  `host[:digits]` after the scheme, and refuse anything else.
-- **L3:** with `PUBLIC_INVOKER=iam-disabled`, the next `services replace` probably drops the
-  `run.googleapis.com/invoker-iam-disabled` annotation, so the services go private again. Render
-  the annotation into the manifests instead (inferred; verify before deploy).
-- **L3, docs:**
-  - `usage()`'s `GUIDE_URL` semantics;
-  - 42's comma guard in the Guards list;
-  - `PUBLIC_INVOKER` in the ADR amendment, the infra README, `deploy.yml` and §10's `vars`;
-  - §11's snippet runs `exit 1` in the operator's shell: wrap it in a subshell.
-- **Round 3 starts** by committing the work in progress, then merging `origin/main` (`5658fcb`:
-  #21 and #22). D14 predicts no textual conflicts: main's §9 and §11 (45), and its §5 L218 and §8
-  settler paragraph (44), sit outside 43's hunks.
+**Commits:**
+- `223f979`: rounds 1–3, code and docs (13 files, +941/−53).
+- `ba94757`: main (`a7f95f7`: #20, #21 and #22) merged in, cleanly.
+- `ea72ce1`: round 4, tests and runbook, with the two pre-accepted touch-ups (2 files, +76/−49).
+- Against main: 13 files, +971/−56.
 
-**Main moved (2026-09-25 ~15:40 UTC; STEP_DONE 42).** Main is now `a7f95f7`: #20 (42) merged on
-top of #21 and #22.
-- Done: round 3 is committed as `223f979`, and `origin/main` (`a7f95f7`) is merged in as
-  `ba94757`, cleanly; check:sh passes 71 ok there.
-- 42's R3 merge-tested its head against 43's working copy: clean in all 9 files both change. The
-  merged `--only all` dry-run runs 43's guards, then 42's comma checks, then `builds submit`
-  with `--gcs-source-staging-dir=gs://p-openad-builds/source`.
-- 42's `check-sh.sh` block is one insertion after base L115. Base L110, the shared dry-run line,
-  is unchanged and stays 43's.
+**Files:**
+- `scripts/deploy-gcp.sh`, and `scripts/check-sh.sh` outside 42's block (byte-identical);
+- `.github/workflows/deploy.yml`;
+- `infra/gcp/services/{api,indexer,settler,web}.yaml` and `infra/gcp/jobs/migrate.yaml`;
+- `docs/deploy-gcp.md`, ADR-0017 (Database and an appended amendment), ARCHITECTURE §7,
+  `infra/gcp/README.md` and `.env.example`.
 
-**R3 FIX → round 4 (2026-09-25 ~16:05 UTC; REPLAN, narrowed; the orchestrator's approach).** The
-Opus R3 review found the code right, with every R2 finding resolved (the ingress-driven smoke,
-the `[/?#]` cut, the guard order, the live-URL smoke, userinfo, the iam-disabled annotation,
-docs). Its verify: `bash -n` and shellcheck clean; `envsubst` of all 6 manifests parses with both
-`API_INGRESS` values; a stubbed non-dry-run runs replace → bind → smoke; the combined
-main + 42 + 43 tree passes check-sh 71/71; `git merge-file` against main, 42 and #16 is
-conflict-free. Its answers: refusing `@` in `origin_of` breaks nothing legitimate (the only loss
-is `*.` wildcard hosts); the `unset` block at the top of `check-sh.sh` neither leaks nor weakens
-anything (redundant beside 42's `DEFAULT_OUT`; keep it); under LB ingress, smoking `API_URL` is
-right. What's left are test and doc gaps. **Round 4 changes no code:** the same Opus coder, on
-`ba94757` in `/home/claude/OpenAd-43`, edits only `scripts/check-sh.sh` (43's part, never 42's
-block) and 43's hunks of `docs/deploy-gcp.md` (never #16's §3 or base L427-432). If a new test
-exposes a code bug, it stops and reports.
-1. **L2:** 4 of 40 check-sh mutants survive, all on rules from earlier rounds. Add a `--only all`
-   test that kills each:
-   - removing `bind_public_invoker openad-api`;
-   - removing `bind_public_invoker openad-web`;
-   - binding the api after its smoke (the order must be replace → bind → smoke);
-   - `RPC_ORIGINS="${RPC_ORIGINS:-$RPC_URL}"`: the default is the public chain RPC's origin,
-     never `RPC_URL` (D15). For example, with a keyed private `RPC_URL`, the "Resolved web CSP
-     origins" line doesn't name its host.
-2. **L3, cheap tests:** the scheme-refusal message; an `API_URL` with a path reduces to its
-   origin; `render()`'s env prefix, including the `MEDIA_BUCKET` default
-   `openad-media-<project>-<env>`; the awk annotator (idempotent, top-level `metadata` only, as
-   the reviewer found by hand).
-3. **L3, runbook L325-333** (on `ba94757`): set `API_INGRESS=internal-and-cloud-load-balancing`
-   only once the load balancer serves `API_URL`; a first deploy keeps `all`.
-4. **L3, runbook §11:** its host naming matches §9's.
-5. **Planner's addition (optional):** §11's click-integrity bullet (L686-688 on `ba94757`) still
-   says to set the ingress through "the `run.googleapis.com/ingress` annotation in `api.yaml`,
-   `all` today". Name `API_INGRESS` instead. If round 4 leaves it, 47's item 4 does it.
+**As shipped:**
+- The database is reachable. `api.yaml`, `indexer.yaml`, `settler.yaml` and `jobs/migrate.yaml`
+  carry `run.googleapis.com/network-interfaces` (`VPC_NETWORK` and `VPC_SUBNET`, default
+  `default`) and `run.googleapis.com/vpc-access-egress: private-ranges-only`. The runbook
+  enables the APIs PSA and VPC egress need (§1), creates the instance with
+  `--edition=ENTERPRISE` and a verify-first note on the socket versus private-IP TCP form (§3),
+  and gives §8's commands `--network`, `--subnet` and `--vpc-egress` (all inferred).
+- The public services are public. After each `services replace` of `openad-api`,
+  `openad-web-demo` and `openad-web`, `bind_public_invoker` grants `allUsers`
+  `roles/run.invoker`, never on the indexer or settler. `PUBLIC_INVOKER=iam-disabled` instead
+  writes `run.googleapis.com/invoker-iam-disabled: "true"` into each public manifest's rendered
+  copy (an awk annotator: idempotent, top-level `metadata` only), so `services replace` keeps
+  it (inferred).
+- The api's ingress is `API_INGRESS` (`all` by default, or `internal-and-cloud-load-balancing`),
+  rendered into `api.yaml`. The api smoke follows it: the service's `status.url` while `all`,
+  else `API_URL`. Web and web-demo are smoked at their `status.url` (the demo at
+  `WEB_DEMO_URL` once it's set). The runbook (L333-338) says to switch only once the load
+  balancer serves `API_URL`: any earlier, the api smoke fails and the api is off the public
+  internet until the load balancer serves it (inferred). §11's click-integrity bullet names
+  `API_INGRESS`.
+- Guards run before the first side effect, and under `--dry-run` too. `--only stack|all`
+  refuses an unset or empty `API_URL` or `WEB_URL`; `API_INGRESS` and `PUBLIC_INVOKER` accept
+  only their listed values; 42's comma checks follow.
+- `origin_of` reduces a URL to `scheme://host[:port]`. It refuses a URL with no http, https,
+  ws or wss scheme, any `@`, and anything but `host[:digits]` after the scheme, without
+  printing the value. `API_ORIGIN` is `origin_of "$API_URL"`. `RPC_ORIGINS` defaults to the
+  public chain RPC (`https://sepolia.base.org` for staging, `https://mainnet.base.org` for
+  prod), never `RPC_URL`, and each entry is reduced the same way.
+- `MEDIA_BUCKET` defaults to `openad-media-<project>-<env>`; `render()` passes it with the VPC
+  and ingress variables.
+- The demo: an unset `WEB_DEMO_URL` means the service's `status.url`. Runbook §9 maps
+  `demo.<domain>`; then set `WEB_DEMO_URL` and `DEMO_URL` to it.
+- Cloud Build: runbook §2 pre-creates `gs://<PROJECT_ID>-openad-builds` with uniform access
+  (`BUILD_STAGING_BUCKET` overrides the name). §10 grants the WIF deployer
+  `roles/cloudbuild.builds.editor`, `roles/serviceusage.serviceUsageConsumer`,
+  `roles/logging.viewer`, and `roles/storage.admin` on that bucket only; the build's runner SA
+  gets `roles/cloudbuild.builds.builder` and `roles/artifactregistry.writer` (inferred).
+- `deploy.yml` passes the `staging` environment's `vars`: `API_URL`, `WEB_URL`, `WEB_DEMO_URL`,
+  `MEDIA_BUCKET`, `BUILD_STAGING_BUCKET`, `VPC_NETWORK`, `VPC_SUBNET`, `PUBLIC_INVOKER`,
+  `API_INGRESS`, `WALLETCONNECT_PROJECT_ID`, `GUIDE_URL` and `DEMO_URL`.
+- Runbook §11's smoke block runs in a subshell with `set -e`: `/v1/health` must be 200, and
+  `/v1/serve/1` 200 or 404 with a JSON body.
+- `usage()` documents every input and guard; the infra README's placeholder table and notes;
+  ARCHITECTURE §7's manual block (the settler; a one-shot migrate); `.env.example`'s bucket
+  comment.
+- `check-sh.sh`: 75 ok. It pins the invoker bindings and the replace → bind → smoke order, the
+  guards and their order, `origin_of` (the `[/?#]` cut, userinfo, a bare host, the scheme
+  refusal), that no output leaks `SECRETKEY` or `rpc.example`, the api smoke under both ingress
+  values, and one combined keyed and pathed `--only all` run.
 
-**Round 4 verify:**
-- each of the 4 mutants, and one mutant per new L3 test, fails `check:sh` in a scratch copy of
-  the tree, never in the worktree;
-- `bash -n` and shellcheck on `scripts/check-sh.sh`; `npm run check:sh` passes (71 plus the new
-  checks);
-- `git diff ba94757 --stat` lists only `scripts/check-sh.sh` and `docs/deploy-gcp.md`.
+**Reviews:**
+- R1 FIX (~12:00; L1: the runner-SA paragraph inside base L427-432; six L2s; seven L3s) → fix
+  round 1: guards before any side effect, `origin_of` → `scheme://host[:port]`, the builds
+  staging bucket, base L273.
+- R2 FIX (~14:15; L2: the api smoke always used `status.url`, which fails once ingress is
+  closed; L2: the new rules untested; L3s: userinfo, the iam-disabled annotation, docs) →
+  round 3, a new Opus coder, then main merged in.
+- R3 (Opus) FIX (~16:05): the code right and every R2 finding resolved. L2: 4 of 40 check-sh
+  mutants survived (the api and web bindings, the api bound after its smoke, `RPC_ORIGINS`
+  defaulting to `RPC_URL`); L3s: two runbook points and four untested rules → round 4, tests
+  and docs only.
+- R4 (Opus) PASS: check-sh 74 ok; 41 of 45 reviewer mutants killed (32 of 45 on `ba94757`),
+  including all 4 R3 survivors and the coder's M5-M7; the docs sit in 43's lines plus the
+  granted L686-688. Two L3 touch-ups, pre-accepted with no further round: a bare-host
+  `rpc.example` case in the schemeless loop (kills M46, `*)` → `*/*)`), with its no-leak grep
+  widened to `-e SECRETKEY -e 'rpc\.example'`; and runbook L333-338 reworded.
 
-Then R4 (Opus). On PASS the orchestrator pushes `fix/cloud-run-wiring` and opens the PR; its
-number replaces `#<43>` in 47 and CLOSE.
+**Checks:** `bash -n` ok and `shellcheck -x` clean; check-sh 75 ok (rc 0); `envsubst` of all 6
+manifests parses with both `API_INGRESS` values; `git merge-file` against main, 42 and #16, and
+at R4 against launch-final `ca20f66`, is clean.
 
-**When and where:**
-- Worktree `/home/claude/OpenAd-43`, branch `fix/cloud-run-wiring` off `f50076d`. It runs in
-  parallel with 42, 44, 45 and 46.
-- Sonnet coder, Opus review. **Risk: medium.** It is deploy-time only, with no product code, but
-  most GCP facts can't be checked here.
-- No WebFetch or WebSearch (D14). Mark every GCP fact the repo can't prove "(inferred; verify
-  before deploy)".
-- Postgres DB `openad_test_43`, only if you run the api suite (43 changes no api code).
-- Commit on the branch (`fix(infra): …`). The orchestrator opens the PR. Don't touch
-  `docs/ROADMAP.md` or README: 47 records this step as 6.12.
+**Follow-ups:**
+- → 47: ROADMAP 6.12 cites #23 (and 7.13's placeholder part); one runbook host-naming pass; the
+  `API_INGRESS` "only once the load balancer serves `API_URL`" sentence in the infra README,
+  the ADR-0017 amendment and `usage()`; the launch checklist's #23 row and user actions.
+- → 47, Phase 7 (7.20+): `host_of`'s refusal can print a URL's username; the 4 surviving
+  mutants M33, M36, M37 and M40 (§8).
+- The spec's Verify export list lacked `API_INGRESS` (the planner's slip; moot now).
 
-**Evidence:**
-- **L1: no service can reach the database.**
-  - §3 creates the instance with `--no-assign-ip` (L60), a private IP only.
-  - No manifest configures VPC egress, so Cloud Run has no route to that IP.
-  - The `db-custom-1-3840` tier (L59) is given without `--edition=ENTERPRISE`. New PG16
-    instances default to Enterprise Plus, which doesn't offer `db-custom-*` tiers (inferred;
-    verify before deploy).
-- **L1: the scripted deploy leaves the public services private.**
-  - `gcloud run services replace` applies no IAM. The manual path's `--allow-unauthenticated`
-    (§8) has no counterpart in `deploy-gcp.sh`.
-  - `WEB_DEMO_URL` is an undocumented placeholder (`deploy-gcp.sh:221`), used by the web-demo
-    smoke check (L298-299).
-- **L1: the WIF deployer can't run `gcloud builds submit`.** §10 grants only `run.admin`,
-  `iam.serviceAccountUser` and `artifactregistry.writer` (L420-426).
-- **L3s:**
-  - §11's `curl -sf …/v1/serve/1` fails on a fresh deploy, since there's no slot 1 yet; its
-    `/demo/` path doesn't exist, because the demo is its own service.
-  - `openad-media-<ENV>` is a global bucket name that someone else may already own.
-  - `RPC_ORIGINS="${RPC_ORIGINS:-$RPC_URL}"` (`deploy-gcp.sh:223`) puts a keyed RPC URL into
-    the public CSP header, although the web app never uses `RPC_URL` at all (`wagmi.ts`'s
-    `http()` is viem's public chain RPC).
-  - ROADMAP 7.13's placeholders do more than pass the same-site guard: `API_URL` and `WEB_URL`
-    default to `example.com` (L219-221), and those defaults reach `OPENAD_PUBLIC_URL` and
-    `OPENAD_CORS_ORIGINS` (`api.yaml` L51-54) and the web build's `VITE_API_URL`
-    (`_API_URL`).
-  - `infra/gcp/README.md` L3-5 still says "once `scripts/deploy-gcp.sh` exists".
-  - ARCHITECTURE §7's manual list (L590-602) has no settler, and says "(migrations on API
-    start)".
-
-**Items**
-1. **The private IP is reachable, through Direct VPC egress.**
-   - Manifests: add two annotations to the template annotations of `api.yaml`, `indexer.yaml` and
-     `settler.yaml` (next to `cloudsql-instances`), and to the execution-template annotations of
-     `jobs/migrate.yaml`:
-     - `run.googleapis.com/network-interfaces: '[{"network":"${VPC_NETWORK}","subnetwork":"${VPC_SUBNET}"}]'`;
-     - `run.googleapis.com/vpc-access-egress: private-ranges-only`.
-     Both are inferred; verify before deploy. Private ranges only, so RPC and GCS traffic keep
-     Cloud Run's normal internet egress, and no Cloud NAT is needed. Each manifest header's
-     "Required env vars" names `VPC_NETWORK` and `VPC_SUBNET`.
-   - `deploy-gcp.sh`:
-     - `VPC_NETWORK="${VPC_NETWORK:-default}"` and `VPC_SUBNET="${VPC_SUBNET:-default}"` in the
-       defaults block;
-     - `render()` passes them, and `MEDIA_BUCKET`.
-   - Runbook:
-     - §1: enable `compute.googleapis.com` and `servicenetworking.googleapis.com`, which PSA and
-       VPC egress need (inferred).
-     - §3, a paragraph after the PSA block (after L53): Cloud Run reaches the private IP only
-       through Direct VPC egress (the annotations above). The subnet (`default` in `<REGION>`)
-       needs free addresses (inferred).
-     - §3, `gcloud sql instances create` (L58-61): add `--edition=ENTERPRISE`, with the reason.
-     - §3, a verify-first note, in that same inserted paragraph (don't edit L62-73: #16
-       rewrote the password and connection-string text there, and 47 points it at this note).
-       The migrate job (§7) opens the first connection. If the
-       `/cloudsql/…` socket can't reach a private-IP-only instance, store the TCP form
-       `…@<PRIVATE_IP>:5432/openad` in the secret instead
-       (`gcloud sql instances describe openad-<ENV> --format='value(ipAddresses[0].ipAddress)'`;
-       inferred; verify before deploy).
-     - §8, the api, indexer and settler commands (L298-329): `--network=<VPC_NETWORK>
-       --subnet=<VPC_SUBNET> --vpc-egress=private-ranges-only` (inferred), and `<MEDIA_BUCKET>`.
-   - ADR-0017:
-     - "Database" (L103-111): Direct VPC egress and the Enterprise edition.
-     - Append "Amendment (2026-09-25, slice-review fixes)": VPC egress, the edition, the invoker
-       binding, the WIF roles, and the placeholder guard. 43 is the only step that appends to this
-       ADR.
-2. **The public services are public.**
-   - `deploy-gcp.sh`: after each `services replace` of `openad-api`, `openad-web-demo` and
-     `openad-web`, run `gcloud run services add-iam-policy-binding <svc> --member=allUsers
-     --role=roles/run.invoker --project … --region …`. It is idempotent. Never for the indexer or
-     the settler.
-   - Runbook:
-     - §6-8 intro (L234-255): say that the script does this, and why (`services replace` applies
-       no IAM).
-     - If an org policy (domain-restricted sharing) refuses `allUsers`, give the alternative:
-       `run.googleapis.com/invoker-iam-disabled` / `--no-invoker-iam-check` (inferred; verify
-       before deploy).
-3. **The demo's URL.**
-   - An unset `WEB_DEMO_URL` means "ask Cloud Run". After deploying `openad-web-demo`, read
-     `gcloud run services describe openad-web-demo --format='value(status.url)'` and smoke that.
-     Under `--dry-run`, print a placeholder.
-   - Runbook §9 (L359-365): a third mapping, `gcloud run domain-mappings create
-     --service=openad-web-demo --domain=demo.<domain>`. Then set both `WEB_DEMO_URL` and `DEMO_URL`
-     (42's input for the web build's "Try the demo" link) to that URL.
-4. **No placeholders in a real deploy.**
-   - `deploy-gcp.sh`: `--only stack|all` refuses when `API_URL` or `WEB_URL` is unset or empty.
-     - Check before the defaults are applied; don't pattern-match `example.com`, because
-       `check-sh.sh`'s accept cases use `example.com` hosts.
-     - The guard runs under `--dry-run` too, like the others. `--only demo` needs neither URL.
-   - `.github/workflows/deploy.yml` (43 owns it): pass these from the `staging` environment's
-     `vars`: `API_URL`, `WEB_URL`, `WEB_DEMO_URL`, `MEDIA_BUCKET`, `VPC_NETWORK`, `VPC_SUBNET`,
-     `WALLETCONNECT_PROJECT_ID`, `GUIDE_URL` and `DEMO_URL`. An unset var arrives as an empty
-     string; the guard and the defaults treat that as unset.
-   - This closes 7.13's placeholder part; 47 notes it in the ROADMAP.
-5. **The bucket name is per project.**
-   - `MEDIA_BUCKET="${MEDIA_BUCKET:-openad-media-${PROJECT}-${ENV}}"`, because bucket names are
-     global.
-   - `api.yaml` L46 and `indexer.yaml` L35 use `${MEDIA_BUCKET}`.
-   - The runbook's §4 (L183, L191, L198) and §8 use `<MEDIA_BUCKET>`, with that suggested value.
-   - The `.env.example` L41 comment, and ADR-0017 L118 (`openad-media-<env>`).
-   - #16 rewrote §14 (Teardown), so its bucket line is 47's.
-6. **CSP entries are origins.**
-   - `RPC_ORIGINS` defaults to the public RPC the web app actually uses: `https://sepolia.base.org`
-     for staging, `https://mainnet.base.org` for prod. Never `RPC_URL`.
-   - A new `origin_of` helper, next to `host_of`, reduces each caller-set `RPC_ORIGINS` entry to
-     `scheme://host[:port]` and refuses an entry with userinfo. `API_ORIGIN` is
-     `origin_of "$API_URL"`.
-   - `web.yaml`'s header comment (L5-7) says so.
-7. **WIF roles for `gcloud builds submit`.**
-   - Runbook §10, the roles loop (L420-426) adds:
-     - `roles/cloudbuild.builds.editor`;
-     - `roles/serviceusage.serviceUsageConsumer`;
-     - `roles/logging.viewer`: gcloud streams `CLOUD_LOGGING_ONLY` build logs, and exits
-       non-zero without it;
-     - `roles/storage.admin` on the bucket `gs://<PROJECT_ID>_cloudbuild`, for the source upload.
-   - §2 pre-creates that bucket, since the deployer SA can't create buckets.
-   - The service account that runs the build needs `roles/artifactregistry.writer`: new projects
-     may run builds as the Compute Engine default SA.
-   - Mark all of this "(inferred; verify before deploy)". Keep the "never owner or editor" rule.
-   - §10's secrets paragraph (L433-438) lists item 4's environment `vars`. Don't touch L427-432
-     (#16 edits L429).
-8. **Smoke checks pass on a fresh deploy.** Runbook §11 (L440-446):
-   - `/v1/health` must return 200;
-   - `/v1/serve/1` may be a 404 with a JSON body on a fresh deploy, so check for 200-or-404 and
-     JSON, not `-f`;
-   - the demo is checked at its own host's `/healthz`, not `/demo/`.
-   The script already smokes only `/v1/health` and `/healthz`.
-9. **Stale docs.**
-   - `infra/gcp/README.md` (L1-5 and L20-52; L9-11 is 42's):
-     - fix L3-5;
-     - the placeholder table gains `MEDIA_BUCKET`, `VPC_NETWORK`, `VPC_SUBNET` and
-       `WEB_DEMO_URL`;
-     - note the invoker binding and the placeholder guard.
-   - ARCHITECTURE §7's manual-equivalent block (L590-602 only):
-     - add `cd api && uv run python -m openad.settler` (needs `OPENAD_SETTLER_KEY`);
-     - "(migrations on API start)" becomes "api/indexer/settler as containers; a one-shot
-       `migrate` service runs first".
-10. **`usage()`** (43 owns it). Document every environment input the script reads:
-    - `API_URL` and `WEB_URL` (required for stack and all);
-    - `WEB_DEMO_URL`, `MEDIA_BUCKET`, `VPC_NETWORK`, `VPC_SUBNET`, `RPC_URL` and `RPC_ORIGINS`;
-    - 42's `WALLETCONNECT_PROJECT_ID`, `GUIDE_URL` and `DEMO_URL` (empty means the feature is
-      hidden).
-    Add the new guard to the Guards list.
-11. **`check-sh.sh`** (43 owns it, except 42's block between L115 and L116). Insert the new
-    dry-run tests after L120 and after L184:
-    - `--only demo` prints an `add-iam-policy-binding` line naming `openad-web-demo` and
-      `allUsers`, and a `services describe openad-web-demo` line;
-    - `--only stack` with `API_URL`/`WEB_URL` unset, and with them empty, is refused by the new
-      guard's own message;
-    - with `RPC_URL=https://rpc.example/v2/SECRETKEY`, no output line contains `SECRETKEY`.
-    The existing tests keep passing unchanged.
-
-**Owns** the hunks above; see D14.
-
-**Must not touch:**
-- `deploy-gcp.sh` L252-257 (42's block and the Cloud Build call);
-- `cloudbuild.yaml`, `ci.yml`, both Dockerfiles, the nginx template, `web-demo.yaml`, and
-  `web.yaml` L29-33;
-- `api.yaml` after L69 (45 appends there);
-- the runbook's §3 L62-178, §5, §8 L291-296, L331-333 and L341-344, §9 L396-399, §10 L427-432,
-  and any new §11 subsection;
-- ADR-0017 L51-54, L138-139, L152-154 and L186-187;
-- ARCHITECTURE outside L590-602; ROADMAP; README; `docs/threat-model.md`.
-
-**Verify:**
-```bash
-cd /home/claude/OpenAd-43
-npm run check:sh
-bash -n scripts/deploy-gcp.sh; command -v shellcheck && shellcheck -x scripts/*.sh
-for f in infra/gcp/services/*.yaml infra/gcp/jobs/migrate.yaml infra/gcp/cloudbuild.yaml .github/workflows/deploy.yml; do
-  python3 -c "import sys,yaml; yaml.safe_load(open(sys.argv[1]))" "$f" || echo "FAIL $f"; done
-# Render every manifest the way render() does; each must parse, and no ${...} may be left over:
-export PROJECT_ID=p REGION=r ENV=staging IMAGE_TAG=t CHAIN_ID=84532 RPC_URL=https://sepolia.base.org \
-  API_URL=https://api.x.com WEB_URL=https://app.x.com API_ORIGIN=https://api.x.com \
-  RPC_ORIGINS=https://sepolia.base.org MEDIA_BUCKET=b VPC_NETWORK=default VPC_SUBNET=default
-for f in infra/gcp/services/*.yaml infra/gcp/jobs/migrate.yaml; do
-  envsubst <"$f" | python3 -c "import sys,yaml; yaml.safe_load(sys.stdin)" && envsubst <"$f" | grep -n '\${' && echo "LEFTOVER in $f"; done
-grep -c "inferred; verify before deploy" docs/deploy-gcp.md    # every new GCP fact is marked
-git diff --stat origin/main...HEAD                               # owned files only
-```
-
-**Done when:**
-- `check:sh` passes, with the new tests.
-- Every manifest renders to valid YAML with no placeholder left over.
-- Each L1 above has a concrete script or runbook change, and every GCP fact the repo can't prove
-  is marked.
-- No file outside the owned hunks changed, and the Opus review passes.
 
 ### Step 44 — A dedicated settler key (slice Q): DONE, as-shipped record
 
@@ -1571,13 +1359,14 @@ notes from 43's and 45's R1 decisions (D14 and D15 amendments). Amended again at
 and 45 (~14:15 UTC): the PR numbers known so far (42 is #20, 44 is #22, 45 is #21), and the
 follow-ups from 42's, 44's and 45's reviews. Amended at STEP_DONE 42 (~15:40 UTC): #20 merged
 as `a7f95f7`, ADR-0016 item 9 made precise, and the `api.ts` candidate dropped (by design, D15).
-43's PR number isn't known yet: the orchestrator gives it when it launches 47, and it replaces
-`#<43>` below._
+Amended at STEP_DONE 43 (~16:45 UTC): 43 is #23; item 4 loses the ingress bullet (43 did it)
+and gains a host-naming pass and the `API_INGRESS` sentence (with ADR-0017 and `usage()`); item 2
+gains two 7.20+ candidates._
 
 **When and where:**
 - Primary tree `/home/claude/OpenAd`, `chore/launch-final` (#16). It starts after 42–45 have all
   merged into main: 42 (#20 `a7f95f7`), 44 (#22 `5658fcb`) and 45 (#21 `599368a`) have, and 43
-  is the last. 46 passed its review at `911d363`.
+  (#23) merges once its CI is green. 46 passed its review at `911d363`.
 - Sonnet coder, Opus review. **Risk: low**: a merge, plus docs.
 - The orchestrator pushes. `.cursor/` stays unstaged, because it's the planner's.
 
@@ -1605,7 +1394,7 @@ as `a7f95f7`, ADR-0016 item 9 made precise, and the `api.ts` candidate dropped (
    Pointers and Acceptance. Write each from what its PR shipped (its diff and its as-shipped
    record in §5):
    - 6.11: the deploy images boot (#20);
-   - 6.12: Cloud Run wiring (#<43>);
+   - 6.12: Cloud Run wiring (#23);
    - 6.13: a dedicated settler key (#22), with T20;
    - 6.14: CPC click integrity (#21), with T13 amended.
 
@@ -1614,7 +1403,7 @@ as `a7f95f7`, ADR-0016 item 9 made precise, and the `api.ts` candidate dropped (
      - the settler is a dedicated, gas-only EOA (6.13);
      - the staging environment's `vars` are set (6.12);
      - every "(inferred; verify before deploy)" fact in the runbook has been checked.
-   - 7.13: its `deploy.yml` placeholder part is done in 6.12 (#<43>): `--only stack|all` refuses
+   - 7.13: its `deploy.yml` placeholder part is done in 6.12 (#23): `--only stack|all` refuses
      unset URLs, and `deploy.yml` passes the environment's `vars`. The PSL-aware guard, the
      prod-mode IP-literal test and the macOS `host_of` check stay open.
    - 7.20 and up, only for the follow-ups that 42–45's handbacks or reviews deferred. Known so
@@ -1624,7 +1413,12 @@ as `a7f95f7`, ADR-0016 item 9 made precise, and the `api.ts` candidate dropped (
      - the settler's startup check also compares its key with the owners of `AdSlot`,
        `Marketplace` and `CreativeRegistry`, not only the vault's;
      - generate the runbook's §8 manual commands from the manifests;
-     - optionally, `gcloud builds submit --async`, to drop `roles/logging.viewer`.
+     - optionally, `gcloud builds submit --async`, to drop `roles/logging.viewer`;
+     - `host_of`'s refusal message can print a URL's username (43's note);
+     - check-sh gaps from 43's R4 mutation run: a whitespace-only `RPC_ORIGINS` (M33), the
+       `MEDIA_BUCKET` default (M36), a static check that `render()`'s env prefix names every
+       `${VAR}` in `services/*.yaml` and `jobs/*.yaml` (M37, about 8 lines), and the awk invoker
+       annotator, extracted with sed, run on the three public manifests (M40).
    - 7.7's note gains `contracts/script/deploy.py` L226 (`_seed_demo`), which runs over 100
      columns.
 3. **ARCHITECTURE and the ADRs, after the merge:**
@@ -1647,6 +1441,9 @@ as `a7f95f7`, ADR-0016 item 9 made precise, and the `api.ts` candidate dropped (
      Reword it: no build loads Google Fonts since 6.11 (the CSS stack falls back to system
      fonts), and the plugin only adds the empty inline favicon. Keep the item's last sentence
      (the `injected` connector over the simulator).
+   - ADR-0017's amendment (≈L301 on `ea72ce1`, its `API_INGRESS` line): add one sentence, "Set
+     `API_INGRESS=internal-and-cloud-load-balancing` only once the load balancer already serves
+     `API_URL`."
 4. **Runbook `docs/deploy-gcp.md`, after the merge:**
    - §14: the bucket line uses `<MEDIA_BUCKET>` (43's per-project name).
    - §8's manual api command: add `OPENAD_SERVE_ENFORCE_ORIGIN=true` to `--set-env-vars`, as in
@@ -1656,14 +1453,21 @@ as `a7f95f7`, ADR-0016 item 9 made precise, and the `api.ts` candidate dropped (
    - Two "(inferred; verify before deploy)" markers from 45's R3 review: §9's "The load balancer
      adds `X-Forwarded-For` entries" (main L413-414 at `5658fcb`) and §11's "adds its own
      `X-Forwarded-For` entry, so the hop count usually becomes `2`" (main L510-511).
-   - 43 renders the api's ingress from `API_INGRESS`. Unless 43's round 4 already did it, §11's
-     ingress bullet names `API_INGRESS` instead of "the `run.googleapis.com/ingress` annotation
-     in `api.yaml`, `all` today".
+   - One host-naming pass. §9 and §11's smoke block write `api.<domain>`, `app.<domain>` and
+     `demo.<domain>`, but `*.<ENV>.example.com` and `api.staging.example.com` hosts remain (on
+     `ea72ce1`: ≈L346 in §6, ≈L423 and ≈L454 in §8's api and web commands, ≈L662 and ≈L675 in
+     §11's click-integrity checks, ≈L742 in §11's auth-rate-limit steps). Use the `<domain>`
+     form throughout, and leave ≈L608's prose about the `example.com` defaults. Re-find the lines
+     after the merge.
+   - The same `API_INGRESS` sentence as item 3's, in `infra/gcp/README.md` (≈L64) and in
+     `scripts/deploy-gcp.sh`'s `usage()` (≈L87). The `usage()` edit is text only, 47's one
+     script exception, allowed because every parallel branch has merged; `bash -n`,
+     `shellcheck -x` and `check:sh` must still pass.
 5. **Launch checklist** (`docs/business/launch-checklist.md`).
    - Done:
      - L12 becomes "Docker images build and boot-check in CI (`api`, `web`, `web-demo`)",
        citing #20;
-     - add one row each for #<43>, #22 and #21.
+     - add one row each for #23, #22 and #21.
    - User actions:
      - set the `staging` environment's `vars` in GitHub (the list in 43's `deploy.yml`);
      - grant the WIF deployer the Cloud Build roles; pre-create the builds staging bucket
@@ -1682,13 +1486,14 @@ as `a7f95f7`, ADR-0016 item 9 made precise, and the `api.ts` candidate dropped (
      - map `demo.<domain>`, and set `WEB_DEMO_URL` and `DEMO_URL` (§9);
      - the XFF row (L35): verifying the chain and setting `OPENAD_TRUSTED_PROXY_HOPS` also turns
        on the CPC click burst rule (6.14). If a load balancer fronts the api, every api
-       request must take the same proxies: api ingress `internal-and-cloud-load-balancing`,
-       and `OPENAD_PUBLIC_URL` is the LB host (runbook §11, click integrity);
-     - only if 43 shipped `PUBLIC_INVOKER`: where the org's domain-restricted sharing refuses
-       `allUsers`, deploy with `PUBLIC_INVOKER=iam-disabled` (§6-8);
+       request must take the same proxies: `API_INGRESS=internal-and-cloud-load-balancing`,
+       set only once the load balancer serves `API_URL`, and `OPENAD_PUBLIC_URL` is the LB host
+       (runbook §11, click integrity);
+     - where the org's domain-restricted sharing refuses `allUsers`, deploy with
+       `PUBLIC_INVOKER=iam-disabled` (§6-8);
      - verify the runbook's "(inferred; verify before deploy)" facts in staging.
 6. **READMEs, the deck and `.gitignore`.**
-   - README "What's in the box": one bullet for the launch fixes (#20, #21, #22 and #<43>):
+   - README "What's in the box": one bullet for the launch fixes (#20, #21, #22 and #23):
      - images that boot on Cloud Run;
      - private database networking, and public services that anyone can reach;
      - a dedicated settler key;
@@ -1724,8 +1529,9 @@ as `a7f95f7`, ADR-0016 item 9 made precise, and the `api.ts` candidate dropped (
    - A FIX sends the planner a REPLAN; a PASS leads to CLOSE.
 
 **Must not touch:** product code, which arrived with 42–45's merge, except item 7's copy in
-`EmbedDemoPage.tsx` (and its optional test); `.cursor/`; and any line not listed above, except
-to resolve a merge conflict.
+`EmbedDemoPage.tsx` (and its optional test); scripts, except item 4's `usage()` text in
+`scripts/deploy-gcp.sh`; `.cursor/`; and any line not listed above, except to resolve a merge
+conflict.
 
 **Verify:**
 ```bash
@@ -1742,6 +1548,10 @@ grep -n "_cloudbuild" docs/business/launch-checklist.md && echo "FAIL builds buc
 grep -n "openad-builds\|internal-and-cloud-load-balancing" docs/business/launch-checklist.md
 grep -n "drops the Google Fonts" docs/adr/0016-web-demo-mode.md && echo "FAIL adr-0016" || echo ok
 grep -c "settler.py\|identity.py" contracts/README.md api/README.md   # each file > 0
+grep -n "example\.com" docs/deploy-gcp.md               # only the prose about the defaults
+grep -c "only once the load balancer" infra/gcp/README.md docs/adr/0017-gcp-deployment.md \
+  scripts/deploy-gcp.sh                                   # each file > 0
+bash -n scripts/deploy-gcp.sh && shellcheck -x scripts/deploy-gcp.sh
 git check-ignore -q contracts/.deployments.db && echo ok || echo "FAIL ignore"
 (cd contracts && uv run mox compile && uv run pytest -q)
 (cd api && uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy src && uv run pytest -q)
@@ -1761,6 +1571,8 @@ git diff --stat origin/main...HEAD                        # #16's files only (pl
   the builds staging bucket and the load-balancer rule.
 - The contracts and api READMEs and `.gitignore` cover 44's scripts, and ADR-0016's font item
   is true.
+- The runbook names its hosts one way, and the infra README, ADR-0017 and `usage()` say when to
+  set `API_INGRESS=internal-and-cloud-load-balancing`.
 - All gates pass locally, and CI is green on #16.
 - The Opus review passes, and then the orchestrator's targeted re-review passes.
 
@@ -1778,11 +1590,11 @@ git diff --stat origin/main...HEAD                        # #16's files only (pl
     - #4 `801440e`, #5 `8887adb`, #6 `e8a34b8`, #7 `866d7fe`, #8 `591e576`, #9 `07eeece`,
       #10 `eba40cd`, #11 `c3f39dc`, #12 `d5d46a0`, #13 `abb2b81`, #14 `5f27fb8`, #15 `2c4101b`,
       #17 `3605473`, #18 `289bb72`, #19 `f50076d`;
-    - then #21 `599368a` (45), #22 `5658fcb` (44) and #20 `a7f95f7` (42), plus 43's PR, whose
+    - then #21 `599368a` (45), #22 `5658fcb` (44), #20 `a7f95f7` (42) and #23 (43), whose
       merge commit is read from `git log --merges` at CLOSE;
     - #16 "merges last" (its commit doesn't exist yet at CLOSE).
   - A **step → PR map**: 36b's table (in git history at `486ab0b`), plus:
-    - 42 → #20, 43 → #<43>, 44 → #22, 45 → #21;
+    - 42 → #20, 43 → #23, 44 → #22, 45 → #21;
     - 36, 36b, 46 and 47 → #16.
     - Steps 2, 17+18 and 32+33 were folded into other steps.
   - The demo and deck links, which stay private until the owner shares them.
@@ -1793,8 +1605,9 @@ git diff --stat origin/main...HEAD                        # #16's files only (pl
     - plus: the staging environment's `vars`; the WIF Cloud Build roles, the builds staging
       bucket and the runner SA's roles; the dedicated settler EOA; an optional WalletConnect
       id; the demo's domain mapping; `PUBLIC_INVOKER=iam-disabled` where domain-restricted
-      sharing refuses `allUsers` (if 43 shipped it); the load-balancer rule, if one fronts the
-      api; and verifying the inferred GCP facts.
+      sharing refuses `allUsers`; the load-balancer rule, if one fronts the api
+      (`API_INGRESS=internal-and-cloud-load-balancing` once it serves `API_URL`); and verifying
+      the inferred GCP facts.
   - The residual risks:
     - 36b's list: not audited; the per-instance limiter is off until XFF is verified; DNS
       rebinding (T17); T18's per-address verify limit and concurrency; DNS TXT doesn't work; the
@@ -1875,6 +1688,7 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - 2026-09-25 14:15 UTC — STEP_DONE 44 and 45 (both merged), plus 42's R1 and 43's R2. **45 DONE**: PR #21 (`90d523d`, 15 files, +777/−74) merged as `599368a`, CI 5/5. R1 FIX (as recorded at ~12:00) → fix round 1 (`origin_allowed`: loopback, now with `::1`, only in dev and test; an `Origin` naming no host is a mismatch unless the `Referer` names a matching host, an accepted deviation from literal `null`; neither header is a match; a malformed header no longer 500s; the burst test covers slot 2; the §11 LB bullet) → R2 FIX (L2: §9 and ADR-0017 still let non-media traffic reach Cloud Run directly, contradicting §11; L3: §11 over-claimed "fail closed"; L3: `allow_local` unpinned) → fix round 2 (the LB fronts every api path on the `API_URL` host; Cloud CDN only for `/v1/serve/*/media`, through a path-scoped backend, never `FORCE_CACHE_ALL`; "closing ingress is the fix"; a prod loopback test) → R3 PASS. pytest 336/6, PG 341/1; mutations 24/24, then 18/20 (one equivalent). **44 DONE**: PR #22 (`406b996`, 15 files, +1494/−29) merged as `5658fcb`, cleanly on top of #21; CI 5/5. R1 FIX (L2: after ownership moved to a Safe, `set_settler` let the deployer become the settler, reproduced on base and base-sepolia; L3s: refuse the artifact deployer at startup, export-only Sepolia advice because Moccasin loads `../.env` for every network, two surviving mutants, PROTOCOL wording) → fix round 1 (`resolve_settler(forbidden=…)`, `LoadedVault(vault, deployer)`, a rotation that refuses `owner()` and the deployer and really sends from the checked sender, `settler.key_is_deployer`) → R2 PASS, plus a test that kills the last mutant. Contracts 130, api PG 313/1 (the orchestrator, locally). §5's specs for 44 and 45 are replaced by as-shipped records (the full text is at `c9cf63f`). **42** (draft #20, `a2a9738`, CI green): R1 FIX (L1: runbook §6 lacks the staging flag, and its `--tag` example is invalid; L2: the boot check passes at first paint; L2: the CI fixture would clobber a committed `84532.json`; six L3s) → fix round 1 with the coder. **43** (uncommitted): R2 FIX (L2: the api smoke always uses `status.url`, which fails once the api's ingress is `internal-and-cloud-load-balancing` per #21's §11, so `--only all` stops before web; L2: the `[/?#]` cut, the guard order and the live-URL smoke are untested; L3s: `host[:digits]` only, `PUBLIC_INVOKER=iam-disabled` against `services replace`, doc gaps) → round 3 with a new Opus coder, after committing and merging main. The planner recommends choosing the api smoke URL by the ingress the script deploys; 43 may render `api.yaml` L15 (D14, ~14:15 amendment). D15 corrected: the smoke rule, the no-host `Origin` rule, and "fails closed" (it stops no one; closing ingress is the fix); `VITE_API_URL` noted as the exception to "empty means unset". 47 gains the PR numbers #20, #21 and #22, two inferred markers (§9, §11), ADR-0016 item 9, `contracts/README.md` L21 and L38, `api/README.md`'s settler line, `contracts/.deployments.db` in `.gitignore`, current main line numbers, and more 7.20+ candidates. CLOSE gains the merge commits and two residual risks. Backlog: three notes.
 - 2026-09-25 15:40 UTC — STEP_DONE 42 (merged). **42 DONE**: PR #20 merged as `a7f95f7`, CI 5/5 on `e945590` (run 36138557635). R1 FIX (as recorded at ~14:15) → fix round 1 (`60c2af8`: the boot check re-checks `#root` and page errors after a settle window, and parses its flags in any order; the CI fixture writes, and later deletes, `84532.json` only when none is committed; runbook §6 shows one valid build command with the staging flag, plus a `docker build` and `docker push` form; the web build steps force BuildKit) → main merged in (`d09712a`) → R2 FIX (L2: the `check-sh.sh` unset reached base L110, 43's shared dry-run line; L3: the WalletConnect CSP advice; L3: `web/Dockerfile`'s header) → round 3 with an Opus coder (`e945590`: L110 restored, the default bucket checked from its own run with the override unset; extra wallet hosts go in `CSP_CONNECT_SRC` only) → R3 PASS: `check:sh` passes with `BUILD_STAGING_BUCKET` unset and exported, the check-sh diff is one hunk (`@@ -115,0 +116,36 @@`), and a merge test against 43's working copy is clean in all 9 shared files, with the merged `--only all` dry-run running 43's guards, then 42's, then `builds submit` with `gs://p-openad-builds/source`. §5's spec is replaced by an as-shipped record (the full text is at `a0d91a8`). D14: the as-merged record, and 43, the last fix branch, merges main (now with #20) in first; 43's spec gains a "Main moved" note. D15: 42's as-shipped rules; `VITE_API_URL`'s `??` judged by design (an empty value means same-origin, and `||` would bake `http://localhost:8000` into the bundle), so the §8 note is struck and 47's 7.20+ candidate is dropped. 47: 42, 44 and 45 merged, only 43 left; ADR-0016 item 9 made precise; the WalletConnect user action names runbook §6's extra CSP hosts; `#<43>` stays a placeholder, and 6.11 cites #20. CLOSE gains #20's merge commit. JIT_INDEX: an Image rule bullet (shipped) split from the Cloud Run rules (43). 43 stays [>] (R3 re-review).
 - 2026-09-25 16:05 UTC — REPLAN 43 (R3 FIX, narrowed). The orchestrator committed round 3 as `223f979` and merged main `a7f95f7` in as `ba94757` (clean; check:sh 71 ok). The Opus R3 review: FIX, but the code is right and every R2 finding is resolved; the gaps are tests and docs. L2: 4 of 40 check-sh mutants survive, all on earlier rules (the api and web invoker bindings, the api bound after its smoke, `RPC_ORIGINS` defaulting to `RPC_URL`). L3s: runbook L325-333 (`internal-and-cloud-load-balancing` only once the LB serves `API_URL`; a first deploy keeps `all`), §11's host naming against §9, and four untested rules (the scheme refusal, `API_URL` with a path, `render()`'s env prefix and the `MEDIA_BUCKET` default, the awk annotator). Reviewer answers: `@` refusal costs only `*.` wildcard hosts; the top `unset` block is harmless; smoking `API_URL` under LB ingress is right. Round 4 (the orchestrator's approach, which the planner keeps): the same Opus coder, tests and docs only, in 43's part of `check-sh.sh` and its runbook hunks, with each mutant shown failing in a scratch copy; then R4 and, on PASS, the PR. The planner adds one optional item: §11's ingress bullet names `API_INGRESS` (else 47 item 4). 43's spec gains the R3 FIX and round-4 block; D14 and D15 amended (`API_INGRESS`, `host[:digits]`, the rendered iam-disabled annotation); JIT_INDEX updated.
+- 2026-09-25 16:45 UTC — STEP_DONE 43 (PR #23 open; the orchestrator merges it once CI on `ea72ce1` is green). **43 DONE**: round 4 (`ea72ce1`, tests and runbook, the same Opus coder) → R4 PASS: check-sh 74 ok; 41 of 45 reviewer mutants killed (32 on `ba94757`), including all 4 R3 survivors and the coder's M5-M7; the combined keyed and pathed `--only all` run keeps what the old keyed and default tests covered; the docs sit in 43's lines plus the granted L686-688 (§11's ingress bullet names `API_INGRESS`); 42's check-sh block is byte-identical; `merge-file` against launch-final `ca20f66` is clean. Two pre-accepted L3 touch-ups, no further round: a bare-host `rpc.example` case in the schemeless loop (kills M46; the no-leak grep widened to `-e SECRETKEY -e 'rpc\.example'`) and runbook L333-338 reworded (switching to LB ingress early fails the api smoke; inferred); bash -n ok, shellcheck -x clean, check-sh 75 ok. Commits `223f979`, `ba94757`, `ea72ce1`, pushed; PR #23 ready, CI running. §5's spec is replaced by an as-shipped record (the full text is at `ca20f66`). 47 (Sonnet, Opus review, risk low): `#<43>` → #23 in ROADMAP 6.12 (43's number per D14, not 6.14), 7.13, the launch checklist, README and CLOSE; item 4's ingress bullet dropped (43 did it); a runbook host-naming pass; the `API_INGRESS` "only once the load balancer already serves `API_URL`" sentence in the infra README, the ADR-0017 amendment and `usage()` (a text-only script exception, since every parallel branch will have merged); two 7.20+ candidates (`host_of`'s refusal can print a URL username; check-sh gaps M33, M36, M37 and M40); the launch-checklist actions drop "if 43 shipped". The spec's Verify export list lacked `API_INGRESS` (the planner's slip; moot now). D14: #23 is the last of 42–45, and hunk ownership ends at its merge. D15: #23 as shipped. Backlog: two notes.
 
 ## 8. Backlog (found during the run; not scheduled)
 
@@ -1931,3 +1745,5 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - ~~`web/src/lib/api.ts` reads `VITE_API_URL` with `??`, so an empty value means same-origin, not unset (the rule D15 states for `VITE_*` inputs). Use `||` → a 7.20+ candidate for 47 (from 42's R1 review; Cloud Build always passes `_API_URL`, and 43 refuses an unset `API_URL`, so it is latent).~~ → judged not needed (15:40): same-origin is what an empty `VITE_API_URL` is meant to mean (D15, and `web/Dockerfile`'s header since #20), and `||` would bake the dev default `http://localhost:8000` into a bundle built with an empty value.
 - The settler's startup check compares its key with the vault's `owner()` and the artifact's `deployer` only: a key that owns `AdSlot`, `Marketplace` or `CreativeRegistry` but not the vault isn't caught → a 7.20+ candidate for 47 (from 44's review).
 - `contracts/script/deploy.py` L226 (`_seed_demo`) runs over 100 columns (pre-existing) → a 7.7 note for 47.
+- `host_of`'s refusal message in `deploy-gcp.sh` can print a URL's username (43's note; D15 says a refusal never prints a credential) → a 7.20+ candidate for 47.
+- check-sh gaps from 43's R4 mutation run (41 of 45 killed): a whitespace-only `RPC_ORIGINS` (M33), the `MEDIA_BUCKET` default (M36), a static check that `render()`'s env prefix names every `${VAR}` in `services/*.yaml` and `jobs/*.yaml` (M37, about 8 lines), and the awk invoker annotator, extracted with sed, run on the three public manifests (M40) → one 7.20+ candidate for 47.
