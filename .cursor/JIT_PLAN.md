@@ -245,6 +245,10 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
       `builds submit`).
     - `check-sh.sh`: 42's hunk is one insertion after base L115 (`@@ -115,0 +116,36 @@`). The
       shared dry-run line, base L110, stays 43's (42's R2 L2).
+  - **Amendment (2026-09-25 ~16:05 UTC; 43's R3 FIX, REPLAN).** 43 committed round 3
+    (`223f979`) and merged main `a7f95f7` in (`ba94757`), cleanly. Round 4 edits only 43's part of
+    `check-sh.sh` and its runbook hunks, and R3's `git merge-file` against main, 42 and #16 was
+    conflict-free.
 - **D15 — Fix rules: what 42–45 make true.**
   - **Images (42).**
     - The api image carries `contracts/deployments` at `/app/contracts/deployments`, with
@@ -293,6 +297,17 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
       - the indexer and settler never get `allUsers` (a check-sh assertion). An opt-in
         `PUBLIC_INVOKER=iam-disabled` (`--no-invoker-iam-check`) replaces the binding where
         domain-restricted sharing refuses `allUsers` (an L3; inferred).
+    - **Amended (~16:05 UTC, 43's R2 and R3):**
+      - the api's ingress is rendered from `API_INGRESS` (`all` by default). Set
+        `internal-and-cloud-load-balancing` only once the load balancer serves `API_URL`, and the
+        api smoke follows it: `status.url` while `all`, `API_URL` otherwise;
+      - `origin_of` accepts only `host[:digits]` after an http, https, ws or wss scheme, so
+        userinfo (`@`) and `*.` wildcard hosts are refused;
+      - `PUBLIC_INVOKER=iam-disabled` is written into the rendered manifests as the
+        `run.googleapis.com/invoker-iam-disabled` annotation, so a later `services replace`
+        keeps it (inferred);
+      - check-sh kills each rule's mutants, including the api and web bindings, bind before
+        smoke, and an `RPC_ORIGINS` default that is never `RPC_URL` (round 4).
   - **Settler (44).**
     - The settler is a dedicated, gas-only EOA.
     - `deploy.py` requires `OPENAD_SETTLER_ADDRESS` off Anvil and pyevm, and refuses the deployer.
@@ -344,7 +359,7 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 | M Discover and slot-page period state (first-period anchoring) | `fix/discover-auction-state` (#19, merged `f50076d`) | noted under 6.7 by 36b | #14 merged; independent of L and N; merge before Final |
 | N Periods range cap (accepted) | `fix/periods-range-cap` (#18, merged `289bb72`) | noted under 6.9 by 36b | #14 merged; independent of L and M (T19 goes after T17; T18 restored on merge); merge before Final |
 | O Fix: the deploy images boot (api deployments, web WalletConnect/CSP/fonts, CI image boot checks) | `fix/deploy-images` (#20, merged `a7f95f7`) | 6.11 (47) | main `f50076d`; independent of P, Q and R (D14); merges before Final |
-| P Fix: Cloud Run wiring (VPC egress, SQL edition, invoker, WIF roles, deploy nits) | `fix/cloud-run-wiring` (worktree `/home/claude/OpenAd-43`) | 6.12 (47) | main `f50076d`; independent of O, Q and R; the last fix branch: merges main (now with #20) in first; merges before Final |
+| P Fix: Cloud Run wiring (VPC egress, SQL edition, invoker, WIF roles, deploy nits) | `fix/cloud-run-wiring` (`ba94757`, round 4; worktree `/home/claude/OpenAd-43`) | 6.12 (47) | main `f50076d`; independent of O, Q and R; the last fix branch, with main `a7f95f7` merged in; merges before Final |
 | Q Fix: a dedicated settler key | `fix/settler-key` (#22, merged `5658fcb`) | 6.13 (47) | main `f50076d`; independent of O, P and R; merges before Final |
 | R Fix: CPC click integrity (no-store campaign serves, trusted burst key, origin enforcement) | `fix/cpc-click-integrity` (#21, merged `599368a`) | 6.14 (47) | main `f50076d`; independent of O, P and Q; merges before Final |
 | Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` (draft #16) | 6.3/6.6/6.7 ticks, 6.10, Phase 7; 6.11–6.14 and 7.19 (46, 47) | started after J and K merged; merges last, after L, M, N and O–R (36b and 46 done; 47 post-merge pass and targeted re-review, then CLOSE) |
@@ -436,9 +451,10 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
     round 1: guards before any side effect, `origin_of` → `scheme://host[:port]`, the builds
     staging bucket, base L273 (D14 and D15 amendments) → R2 FIX (L2: the api smoke always uses
     `status.url`, which fails behind a load balancer with closed ingress, main's §11; L2: the
-    new rules are untested; L3s) → round 3 with a new Opus coder → R3 re-review (running at
-    15:40; the work is still uncommitted). Before its PR it commits and merges main, which now
-    holds #20 too: 42's R3 found 43's working copy merges with 42 cleanly.
+    new rules are untested; L3s) → round 3 with a new Opus coder (`223f979`), then main
+    `a7f95f7` merged in (`ba94757`, clean; check:sh 71 ok) → R3 FIX (the code stands; L2: 4 of
+    40 check-sh mutants survive; L3s: two runbook points, four untested rules) → round 4, tests
+    and docs only, the same Opus coder (REPLAN 16:05).
   **Coder:** Sonnet for rounds 1–2, then a new Opus coder, with an Opus review. **Risk: medium.**
   **(spec below)**
 
@@ -1073,12 +1089,55 @@ coder).**
 
 **Main moved (2026-09-25 ~15:40 UTC; STEP_DONE 42).** Main is now `a7f95f7`: #20 (42) merged on
 top of #21 and #22.
-- Before its PR, 43 commits and merges `origin/main` at `a7f95f7`, not `5658fcb`.
+- Done: round 3 is committed as `223f979`, and `origin/main` (`a7f95f7`) is merged in as
+  `ba94757`, cleanly; check:sh passes 71 ok there.
 - 42's R3 merge-tested its head against 43's working copy: clean in all 9 files both change. The
   merged `--only all` dry-run runs 43's guards, then 42's comma checks, then `builds submit`
   with `--gcs-source-staging-dir=gs://p-openad-builds/source`.
 - 42's `check-sh.sh` block is one insertion after base L115. Base L110, the shared dry-run line,
   is unchanged and stays 43's.
+
+**R3 FIX → round 4 (2026-09-25 ~16:05 UTC; REPLAN, narrowed; the orchestrator's approach).** The
+Opus R3 review found the code right, with every R2 finding resolved (the ingress-driven smoke,
+the `[/?#]` cut, the guard order, the live-URL smoke, userinfo, the iam-disabled annotation,
+docs). Its verify: `bash -n` and shellcheck clean; `envsubst` of all 6 manifests parses with both
+`API_INGRESS` values; a stubbed non-dry-run runs replace → bind → smoke; the combined
+main + 42 + 43 tree passes check-sh 71/71; `git merge-file` against main, 42 and #16 is
+conflict-free. Its answers: refusing `@` in `origin_of` breaks nothing legitimate (the only loss
+is `*.` wildcard hosts); the `unset` block at the top of `check-sh.sh` neither leaks nor weakens
+anything (redundant beside 42's `DEFAULT_OUT`; keep it); under LB ingress, smoking `API_URL` is
+right. What's left are test and doc gaps. **Round 4 changes no code:** the same Opus coder, on
+`ba94757` in `/home/claude/OpenAd-43`, edits only `scripts/check-sh.sh` (43's part, never 42's
+block) and 43's hunks of `docs/deploy-gcp.md` (never #16's §3 or base L427-432). If a new test
+exposes a code bug, it stops and reports.
+1. **L2:** 4 of 40 check-sh mutants survive, all on rules from earlier rounds. Add a `--only all`
+   test that kills each:
+   - removing `bind_public_invoker openad-api`;
+   - removing `bind_public_invoker openad-web`;
+   - binding the api after its smoke (the order must be replace → bind → smoke);
+   - `RPC_ORIGINS="${RPC_ORIGINS:-$RPC_URL}"`: the default is the public chain RPC's origin,
+     never `RPC_URL` (D15). For example, with a keyed private `RPC_URL`, the "Resolved web CSP
+     origins" line doesn't name its host.
+2. **L3, cheap tests:** the scheme-refusal message; an `API_URL` with a path reduces to its
+   origin; `render()`'s env prefix, including the `MEDIA_BUCKET` default
+   `openad-media-<project>-<env>`; the awk annotator (idempotent, top-level `metadata` only, as
+   the reviewer found by hand).
+3. **L3, runbook L325-333** (on `ba94757`): set `API_INGRESS=internal-and-cloud-load-balancing`
+   only once the load balancer serves `API_URL`; a first deploy keeps `all`.
+4. **L3, runbook §11:** its host naming matches §9's.
+5. **Planner's addition (optional):** §11's click-integrity bullet (L686-688 on `ba94757`) still
+   says to set the ingress through "the `run.googleapis.com/ingress` annotation in `api.yaml`,
+   `all` today". Name `API_INGRESS` instead. If round 4 leaves it, 47's item 4 does it.
+
+**Round 4 verify:**
+- each of the 4 mutants, and one mutant per new L3 test, fails `check:sh` in a scratch copy of
+  the tree, never in the worktree;
+- `bash -n` and shellcheck on `scripts/check-sh.sh`; `npm run check:sh` passes (71 plus the new
+  checks);
+- `git diff ba94757 --stat` lists only `scripts/check-sh.sh` and `docs/deploy-gcp.md`.
+
+Then R4 (Opus). On PASS the orchestrator pushes `fix/cloud-run-wiring` and opens the PR; its
+number replaces `#<43>` in 47 and CLOSE.
 
 **When and where:**
 - Worktree `/home/claude/OpenAd-43`, branch `fix/cloud-run-wiring` off `f50076d`. It runs in
@@ -1597,8 +1656,9 @@ as `a7f95f7`, ADR-0016 item 9 made precise, and the `api.ts` candidate dropped (
    - Two "(inferred; verify before deploy)" markers from 45's R3 review: §9's "The load balancer
      adds `X-Forwarded-For` entries" (main L413-414 at `5658fcb`) and §11's "adds its own
      `X-Forwarded-For` entry, so the hop count usually becomes `2`" (main L510-511).
-   - If 43 renders the api's ingress from a variable (its R2 L2), §11's ingress bullet names that
-     variable instead of "the `run.googleapis.com/ingress` annotation in `api.yaml`".
+   - 43 renders the api's ingress from `API_INGRESS`. Unless 43's round 4 already did it, §11's
+     ingress bullet names `API_INGRESS` instead of "the `run.googleapis.com/ingress` annotation
+     in `api.yaml`, `all` today".
 5. **Launch checklist** (`docs/business/launch-checklist.md`).
    - Done:
      - L12 becomes "Docker images build and boot-check in CI (`api`, `web`, `web-demo`)",
@@ -1814,6 +1874,7 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - 2026-09-25 12:00 UTC — STEP_DONE 46, plus the orchestrator's decisions from 43's and 45's R1 reviews. **46 DONE**: `69e2aa9` (14 files, +145/−53) + `911d363` (fix round 1, 4 files), CI green on both; R1 FIX (L2: the threat model called the moderator's revoke the only takedown, but the publisher's `set_approval(id, False)`/`revoke_approval(id)` block a creative on its own slots, even under WAIVED; L3s: pin the script's default max CPC and the payout caption, widen the glossary regex, note L159's glob) → R2 PASS (mutations prove each new test; one optional L3, L159 is 139 characters → 47). web 237, embed 5, sim 13 + 1 skipped; test:demo 15/15 with the new script test; capture byte-identical twice, only `why-calculator.png` changed (43,478 B); /why defaults to `network-30` (3,500.00 vs 4,875.00 USDC; uplift 1,375.00 a month, 16,500.00 a year). §5's spec is replaced by an as-shipped record (the full text is at `30ffdda`). **45 R1 FIX** (L2: `[::1]` never matched in dev and test, and `Origin: null` with no Referer counted as a match, so an opaque-origin page got a paid campaign with a live `/v1/c/` token): 45 now also owns `serve/origin.py` and `test_origin.py`; an explicit `null` without a usable Referer host is a mismatch, neither header is a match, and the docs and T13 say best effort. Its L3s: pin `slot_id` in the burst key; mark the `.env.example` Cloud Run peer claim inferred; a short XFF chain keeps failing closed, and 45's §11 documents the LB rule (api ingress `internal-and-cloud-load-balancing`, `OPENAD_PUBLIC_URL` = the LB host). **43 R1 FIX** (L1: the runner-SA paragraph sat inside base L427-432; L2s: a check-sh SECRETKEY test that couldn't fail, `origin_of` cut only at "/", origin checks after the first side effect, a `--only stack` example without URLs and a first-run smoke on unmapped domains, bucket-scoped `storage.admin` on `_cloudbuild` likely insufficient, base L273 without the VPC vars; seven L3s, including an opt-in `PUBLIC_INVOKER=iam-disabled`): 43 gains base L273, creates `gs://<PROJECT_ID>-openad-builds` (uniform access) in §2, grants the deployer `storage.admin` on it only in §10, and documents `BUILD_STAGING_BUCKET` and the runner SA's `cloudbuild.builds.builder` + `artifactregistry.writer`, all inferred. **42** adds `--gcs-source-staging-dir` to its Cloud Build call and runbook §6 in its review fix round. **Planner correction:** the flag must read `${PROJECT}`, not `${PROJECT_ID}`: `deploy-gcp.sh` runs under `set -euo pipefail` and sets `PROJECT_ID` only in `render()`'s env prefix, so every run with `BUILD_STAGING_BUCKET` unset would abort (reproduced). Folded into D14 and D15 (amendments), specs 42, 43 and 45 (amendment blocks), 47 (the 45 review's stale lines: the §3.3 heading, the §7 Media cache row, ADR-0014 L117-118 and ADR-0017 L169; the `/embed-demo` copy as the one product-code exception; the L159 rewrap; the builds-bucket, LB and `PUBLIC_INVOKER` launch-checklist notes; the 7.20+ candidates) and CLOSE (user actions; the best-effort origin and IPv6 residuals). Two backlog notes: IPv6 /64 keying and `workers/serve`. 42–45 stay [>]; next is 47, once 42–45 merge, then the targeted re-review and CLOSE.
 - 2026-09-25 14:15 UTC — STEP_DONE 44 and 45 (both merged), plus 42's R1 and 43's R2. **45 DONE**: PR #21 (`90d523d`, 15 files, +777/−74) merged as `599368a`, CI 5/5. R1 FIX (as recorded at ~12:00) → fix round 1 (`origin_allowed`: loopback, now with `::1`, only in dev and test; an `Origin` naming no host is a mismatch unless the `Referer` names a matching host, an accepted deviation from literal `null`; neither header is a match; a malformed header no longer 500s; the burst test covers slot 2; the §11 LB bullet) → R2 FIX (L2: §9 and ADR-0017 still let non-media traffic reach Cloud Run directly, contradicting §11; L3: §11 over-claimed "fail closed"; L3: `allow_local` unpinned) → fix round 2 (the LB fronts every api path on the `API_URL` host; Cloud CDN only for `/v1/serve/*/media`, through a path-scoped backend, never `FORCE_CACHE_ALL`; "closing ingress is the fix"; a prod loopback test) → R3 PASS. pytest 336/6, PG 341/1; mutations 24/24, then 18/20 (one equivalent). **44 DONE**: PR #22 (`406b996`, 15 files, +1494/−29) merged as `5658fcb`, cleanly on top of #21; CI 5/5. R1 FIX (L2: after ownership moved to a Safe, `set_settler` let the deployer become the settler, reproduced on base and base-sepolia; L3s: refuse the artifact deployer at startup, export-only Sepolia advice because Moccasin loads `../.env` for every network, two surviving mutants, PROTOCOL wording) → fix round 1 (`resolve_settler(forbidden=…)`, `LoadedVault(vault, deployer)`, a rotation that refuses `owner()` and the deployer and really sends from the checked sender, `settler.key_is_deployer`) → R2 PASS, plus a test that kills the last mutant. Contracts 130, api PG 313/1 (the orchestrator, locally). §5's specs for 44 and 45 are replaced by as-shipped records (the full text is at `c9cf63f`). **42** (draft #20, `a2a9738`, CI green): R1 FIX (L1: runbook §6 lacks the staging flag, and its `--tag` example is invalid; L2: the boot check passes at first paint; L2: the CI fixture would clobber a committed `84532.json`; six L3s) → fix round 1 with the coder. **43** (uncommitted): R2 FIX (L2: the api smoke always uses `status.url`, which fails once the api's ingress is `internal-and-cloud-load-balancing` per #21's §11, so `--only all` stops before web; L2: the `[/?#]` cut, the guard order and the live-URL smoke are untested; L3s: `host[:digits]` only, `PUBLIC_INVOKER=iam-disabled` against `services replace`, doc gaps) → round 3 with a new Opus coder, after committing and merging main. The planner recommends choosing the api smoke URL by the ingress the script deploys; 43 may render `api.yaml` L15 (D14, ~14:15 amendment). D15 corrected: the smoke rule, the no-host `Origin` rule, and "fails closed" (it stops no one; closing ingress is the fix); `VITE_API_URL` noted as the exception to "empty means unset". 47 gains the PR numbers #20, #21 and #22, two inferred markers (§9, §11), ADR-0016 item 9, `contracts/README.md` L21 and L38, `api/README.md`'s settler line, `contracts/.deployments.db` in `.gitignore`, current main line numbers, and more 7.20+ candidates. CLOSE gains the merge commits and two residual risks. Backlog: three notes.
 - 2026-09-25 15:40 UTC — STEP_DONE 42 (merged). **42 DONE**: PR #20 merged as `a7f95f7`, CI 5/5 on `e945590` (run 36138557635). R1 FIX (as recorded at ~14:15) → fix round 1 (`60c2af8`: the boot check re-checks `#root` and page errors after a settle window, and parses its flags in any order; the CI fixture writes, and later deletes, `84532.json` only when none is committed; runbook §6 shows one valid build command with the staging flag, plus a `docker build` and `docker push` form; the web build steps force BuildKit) → main merged in (`d09712a`) → R2 FIX (L2: the `check-sh.sh` unset reached base L110, 43's shared dry-run line; L3: the WalletConnect CSP advice; L3: `web/Dockerfile`'s header) → round 3 with an Opus coder (`e945590`: L110 restored, the default bucket checked from its own run with the override unset; extra wallet hosts go in `CSP_CONNECT_SRC` only) → R3 PASS: `check:sh` passes with `BUILD_STAGING_BUCKET` unset and exported, the check-sh diff is one hunk (`@@ -115,0 +116,36 @@`), and a merge test against 43's working copy is clean in all 9 shared files, with the merged `--only all` dry-run running 43's guards, then 42's, then `builds submit` with `gs://p-openad-builds/source`. §5's spec is replaced by an as-shipped record (the full text is at `a0d91a8`). D14: the as-merged record, and 43, the last fix branch, merges main (now with #20) in first; 43's spec gains a "Main moved" note. D15: 42's as-shipped rules; `VITE_API_URL`'s `??` judged by design (an empty value means same-origin, and `||` would bake `http://localhost:8000` into the bundle), so the §8 note is struck and 47's 7.20+ candidate is dropped. 47: 42, 44 and 45 merged, only 43 left; ADR-0016 item 9 made precise; the WalletConnect user action names runbook §6's extra CSP hosts; `#<43>` stays a placeholder, and 6.11 cites #20. CLOSE gains #20's merge commit. JIT_INDEX: an Image rule bullet (shipped) split from the Cloud Run rules (43). 43 stays [>] (R3 re-review).
+- 2026-09-25 16:05 UTC — REPLAN 43 (R3 FIX, narrowed). The orchestrator committed round 3 as `223f979` and merged main `a7f95f7` in as `ba94757` (clean; check:sh 71 ok). The Opus R3 review: FIX, but the code is right and every R2 finding is resolved; the gaps are tests and docs. L2: 4 of 40 check-sh mutants survive, all on earlier rules (the api and web invoker bindings, the api bound after its smoke, `RPC_ORIGINS` defaulting to `RPC_URL`). L3s: runbook L325-333 (`internal-and-cloud-load-balancing` only once the LB serves `API_URL`; a first deploy keeps `all`), §11's host naming against §9, and four untested rules (the scheme refusal, `API_URL` with a path, `render()`'s env prefix and the `MEDIA_BUCKET` default, the awk annotator). Reviewer answers: `@` refusal costs only `*.` wildcard hosts; the top `unset` block is harmless; smoking `API_URL` under LB ingress is right. Round 4 (the orchestrator's approach, which the planner keeps): the same Opus coder, tests and docs only, in 43's part of `check-sh.sh` and its runbook hunks, with each mutant shown failing in a scratch copy; then R4 and, on PASS, the PR. The planner adds one optional item: §11's ingress bullet names `API_INGRESS` (else 47 item 4). 43's spec gains the R3 FIX and round-4 block; D14 and D15 amended (`API_INGRESS`, `host[:digits]`, the rendered iam-disabled annotation); JIT_INDEX updated.
 
 ## 8. Backlog (found during the run; not scheduled)
 
