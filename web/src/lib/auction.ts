@@ -61,8 +61,12 @@ export type AuctionStateName =
 
 export interface AuctionStatus {
   state: AuctionStateName;
-  /** Index of the period containing `now` (PROTOCOL §4.1: `(now - firstPeriodStart) //
-   * periodSeconds`). Present only once the calendar has started (`now >= firstPeriodStart`). */
+  /** Index of the period containing `now` (`currentPeriodIndex`, PROTOCOL §4.1). Present only for
+   * `'upcoming'`/`'live'`/`'remainder'`/`'ended'`, once the calendar has started — never for
+   * `'no terms'`, `'cpc'`, `'paused'` or `'no calendar'`, even when the slot's calendar has in
+   * fact started, because those states return before it is checked. Call `currentPeriodIndex`
+   * directly when you need the calendar's current index regardless of sale state — as `SlotPage`
+   * does to page the period list. */
   current?: number;
   /** Index of the soonest period whose Dutch window can still open before `saleEnd` — `current +
    * 1`, or `0` before the calendar starts. Absent once no such period remains (the schedule is
@@ -79,6 +83,19 @@ export interface AuctionStatus {
   endsAt?: number;
 }
 
+/** Index of the period containing `now` (PROTOCOL §4.1: `(now - firstPeriodStart) //
+ * periodSeconds`) — the calendar's current index regardless of sale state (no terms, paused,
+ * cpc, …). Mirrors `models/slot.py`'s `current_period_index`. Unset before the calendar exists
+ * or starts (`now < firstPeriodStart`). */
+export function currentPeriodIndex(
+  slot: SlotOut,
+  now = Math.floor(Date.now() / 1000),
+): number | undefined {
+  const { calendarVersion, firstPeriodStart: s0, periodSeconds: p } = slot;
+  if (calendarVersion === 0 || s0 == null || p == null || now < s0) return undefined;
+  return Math.floor((now - s0) / p);
+}
+
 /** Calendar-aware auction status (PROTOCOL §4.1, §4.2). Period indices are unbounded upward —
  * the sale horizon is bounded only by `leadSeconds` and, if set, `saleEnd` — so, unlike looking
  * only at the first period, a slot never falsely reads `'ended'` just because its first period
@@ -91,8 +108,10 @@ export function auctionStatus(slot: SlotOut, now = Math.floor(Date.now() / 1000)
   const terms = slot.terms;
   const cpc = terms?.saleMode === SALE_CPC;
   if (!terms || (!cpc && terms.leadSeconds <= 0)) return { state: 'no terms' };
-  if (cpc) return { state: 'cpc' };
+  // Checked before `cpc`: PROTOCOL §11 — `paused` stops CPC serving and reverts
+  // `open_campaign`, so a paused CPC slot must read `'paused'`, not `'cpc'`.
   if (terms.paused) return { state: 'paused' };
+  if (cpc) return { state: 'cpc' };
 
   const { calendarVersion, firstPeriodStart: s0, periodSeconds: p } = slot;
   if (calendarVersion === 0 || s0 == null || p == null) return { state: 'no calendar' };
@@ -101,7 +120,7 @@ export function auctionStatus(slot: SlotOut, now = Math.floor(Date.now() / 1000)
   const saleEnd = terms.saleEnd;
   // Index of the last period whose end still fits at or before saleEnd (Infinity when unset).
   const kLast = saleEnd === 0 ? Infinity : Math.floor((saleEnd - s0) / p) - 1;
-  const cur = now >= s0 ? Math.floor((now - s0) / p) : -1;
+  const cur = currentPeriodIndex(slot, now) ?? -1;
   const next = cur + 1;
 
   // Adds `current`/`endsAt` to a status when the calendar has started — true regardless of which
@@ -135,4 +154,13 @@ export function auctionStatus(slot: SlotOut, now = Math.floor(Date.now() / 1000)
  * filter buttons and its featured-row heuristic). */
 export function auctionState(slot: SlotOut, now = Math.floor(Date.now() / 1000)): string {
   return auctionStatus(slot, now).state;
+}
+
+/** How many periods `SlotPage` should list starting at the current one (PLAN step 40, L3). Wide
+ * enough that open periods past a long `leadSeconds` (periods open for auction long before they
+ * start) aren't cut off by a fixed 15-row window, but capped under the `list_periods` API's
+ * 60-period range limit (step 41): `min(59, max(14, ceil(leadSeconds / periodSeconds)))`. */
+export function periodsWindowSize(leadSeconds: number, periodSeconds: number): number {
+  const leadPeriods = Math.ceil(leadSeconds / periodSeconds);
+  return Math.min(59, Math.max(14, leadPeriods));
 }

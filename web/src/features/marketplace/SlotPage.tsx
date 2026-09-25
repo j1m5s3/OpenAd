@@ -3,7 +3,7 @@ import { Link, useHref, useParams } from 'react-router';
 
 import { routes } from '../../app/paths';
 import { withDevWalletParam } from '../../lib/devWalletQuery';
-import { auctionStatus } from '../../lib/auction';
+import { currentPeriodIndex, periodsWindowSize } from '../../lib/auction';
 import { FieldHint, GuideLink } from '../../components/FieldHint';
 import { formatDuration, formatUnixSeconds, formatUsdc } from '../../lib/format';
 import { SALE_CPC, approvalModeLabel, saleModeLabel } from '../../lib/labels';
@@ -25,10 +25,21 @@ export function SlotPage() {
   const slot = useSlot(slotId);
   // The window follows the open-ended calendar (PLAN step 40): request the current period first
   // (`from = max(0, current)`), not always period 0 — a calendar older than 15 periods would
-  // otherwise list only closed periods and leave nothing buyable on the page.
+  // otherwise list only closed periods and leave nothing buyable on the page. `currentPeriodIndex`
+  // is calendar-only (PROTOCOL §4.1), so it pages correctly even for 'paused'/'no terms' slots,
+  // which `auctionStatus(...).current` leaves unset for. The query stays disabled until the slot
+  // itself has loaded, so the page never fires a wasted `from=0` request first.
   const now = Math.floor(Date.now() / 1000);
-  const current = slot.data ? auctionStatus(slot.data, now).current : undefined;
-  const periods = usePeriods(slotId, Math.max(0, current ?? -1));
+  const current = slot.data ? currentPeriodIndex(slot.data, now) : undefined;
+  const windowSize =
+    slot.data?.periodSeconds != null
+      ? periodsWindowSize(slot.data.terms?.leadSeconds ?? 0, slot.data.periodSeconds)
+      : 14;
+  const periods = usePeriods(slotId, {
+    from: Math.max(0, current ?? -1),
+    windowSize,
+    enabled: slot.data !== undefined,
+  });
   const [buy, setBuy] = useState<{ periodIndex: string; remainder: boolean } | null>(null);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'selected'>('idle');
   const linkInputRef = useRef<HTMLInputElement>(null);

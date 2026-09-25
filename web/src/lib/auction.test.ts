@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import type { SlotOut } from './api';
-import { auctionState, auctionStatus, dutchPrice, feeSplit, remainderPrice } from './auction';
+import type { AuctionStatus } from './auction';
+import {
+  auctionState,
+  auctionStatus,
+  dutchPrice,
+  feeSplit,
+  periodsWindowSize,
+  remainderPrice,
+} from './auction';
 
 function slot(over: Partial<SlotOut> = {}): SlotOut {
   return {
@@ -195,6 +203,14 @@ describe('auctionStatus: table', () => {
     expect(auctionStatus(s, S0).state).toBe('cpc');
   });
 
+  it('a paused CPC slot reads "paused", not "cpc" (round-2 L1: PROTOCOL §11 — paused stops CPC serving and reverts open_campaign)', () => {
+    const s = calSlot(
+      { saleMode: 1, leadSeconds: 0, floorCpc: '1000', paused: true },
+      { calendarVersion: 0, periodSeconds: null, firstPeriodStart: null },
+    );
+    expect(auctionStatus(s, S0).state).toBe('paused');
+  });
+
   it('no calendar yet, with otherwise-valid LEASE terms', () => {
     expect(auctionStatus(calSlot({}, { calendarVersion: 0 }), S0).state).toBe('no calendar');
     expect(auctionStatus(calSlot({}, { firstPeriodStart: null }), S0).state).toBe('no calendar');
@@ -215,34 +231,103 @@ describe('auctionStatus: brute-force cross-check against a per-period scan', () 
     };
   }
 
-  /** Mirrors `api/src/openad/services/periods.py` `dutch_price`'s per-period reason, minus the
-   * lease check — an independent re-derivation of "is this one period open", not a reuse of
-   * `auction.ts`'s own `kLast`/`cur`/`next` arithmetic. */
-  function periodReason(
+  interface PeriodFact {
+    k: number;
+    start: number;
+    end: number;
+    openAt: number;
+    fitsSaleEnd: boolean;
+  }
+
+  /** Independent, from-scratch re-derivation of the FULL expected AuctionStatus via a linear scan
+   * over periods `0..scanTo`. It never calls `auctionStatus` and never reuses its closed-form
+   * `kLast`/`cur`/`next` arithmetic — every fact (which period contains `now`, which period is
+   * soonest in its Dutch phase, which still-sellable period follows the current one) is found by
+   * scanning independently, so a bug shared between the two would have to be a bug in the
+   * period-calendar definition itself (PROTOCOL §4.1), not in either one's traversal of it.
+   * Callers must pick `scanTo` generously enough that every period index a trial can ever call
+   * "current", "next" or "the last sellable period" falls at or below it (round-2 L2: the old
+   * cross-check only checked `anyOpen`/`anyRemainder` booleans with no else-fail branch, so it
+   * could not tell "upcoming" from "ended" and checked none of the numeric fields). */
+  function expectedStatus(
     s0: number,
     p: number,
     lead: number,
     saleEnd: number,
-    k: number,
     now: number,
-  ): 'beyond sale end' | 'not open' | 'closed' | '' | 'remainder' {
-    const start = s0 + k * p;
-    const end = start + p;
-    if (saleEnd !== 0 && end > saleEnd) return 'beyond sale end';
-    const openAt = start > lead ? start - lead : 0;
-    if (now < openAt) return 'not open';
-    if (now >= end) return 'closed';
-    return now < start ? '' : 'remainder';
+    scanTo: number,
+  ): AuctionStatus {
+    const periods: PeriodFact[] = [];
+    for (let k = 0; k <= scanTo; k += 1) {
+      const start = s0 + k * p;
+      const end = start + p;
+      const openAt = start > lead ? start - lead : 0; // max(0, start - lead), computed separately
+      const fitsSaleEnd = saleEnd === 0 || end <= saleEnd;
+      periods.push({ k, start, end, openAt, fitsSaleEnd });
+    }
+    const sellable = periods.filter((period) => period.fitsSaleEnd);
+
+    // The period whose [start, end) contains `now`, found by scanning — pure calendar position,
+    // independent of whether that period is itself still sellable (PROTOCOL: a slot's "current"
+    // period is reported even once the sale horizon has passed it, in the 'ended' state).
+    let current: number | undefined;
+    for (const period of periods) {
+      if (now >= period.start && now < period.end) {
+        current = period.k;
+        break;
+      }
+    }
+
+    // The sale horizon has fully closed: either no period ever fit it, or the last one that did
+    // has itself already ended.
+    const ended =
+      saleEnd !== 0 && (sellable.length === 0 || now >= sellable[sellable.length - 1]!.end);
+    if (ended) {
+      return current === undefined
+        ? { state: 'ended' }
+        : { state: 'ended', current, endsAt: periods[current]!.end };
+    }
+
+    // Periods currently inside their own Dutch phase, still sellable, in ascending k order — the
+    // first one (if any) is always the soonest, since `openAt` is non-decreasing in k.
+    const open = periods.filter(
+      (period) => period.fitsSaleEnd && now >= period.openAt && now < period.start,
+    );
+    if (open.length > 0) {
+      const soonest = open[0]!;
+      const status: AuctionStatus = { state: 'live', next: soonest.k, startsAt: soonest.start };
+      return current === undefined ? status : { ...status, current, endsAt: periods[current]!.end };
+    }
+
+    if (current !== undefined) {
+      const currentIndex = current;
+      const nextPeriod = sellable.find((period) => period.k > currentIndex);
+      const status: AuctionStatus = {
+        state: 'remainder',
+        current: currentIndex,
+        endsAt: periods[currentIndex]!.end,
+      };
+      return nextPeriod === undefined
+        ? status
+        : { ...status, next: nextPeriod.k, opensAt: nextPeriod.openAt };
+    }
+
+    // `now < start(0)`: before the calendar has started at all, and no period is open yet. `ended`
+    // already ruled out `sellable` being empty, so period 0 (always the first sellable one, since
+    // "fits saleEnd" only gets harder as k grows) is guaranteed to exist.
+    const first = sellable[0]!;
+    return { state: 'upcoming', next: first.k, opensAt: first.openAt };
   }
 
-  it('agrees with an independent per-period scan across many random calendars', () => {
+  it('agrees with an independent per-period scan across many random calendars, field for field', () => {
     const rand = mulberry32(1337);
     const randInt = (min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
     // Bounds are expressed as multiples of `p` so `current`/`next`/`kLast` stay well inside the
     // fixed scan window below, however large `p` itself is.
     const SCAN_TO = 40;
+    const TRIALS = 5000;
 
-    for (let trial = 0; trial < 300; trial += 1) {
+    for (let trial = 0; trial < TRIALS; trial += 1) {
       const p = randInt(1, 100);
       const s0 = randInt(0, 50) * p;
       const lead = randInt(1, 3 * p);
@@ -250,31 +335,27 @@ describe('auctionStatus: brute-force cross-check against a per-period scan', () 
       const now = s0 + randInt(-3, 20) * p + randInt(0, p - 1);
 
       const s = calSlot({ leadSeconds: lead, saleEnd }, { firstPeriodStart: s0, periodSeconds: p });
-      const status = auctionStatus(s, now);
+      const actual = auctionStatus(s, now);
+      const expected = expectedStatus(s0, p, lead, saleEnd, now, SCAN_TO);
 
-      let anyOpen = false;
-      let anyRemainder = false;
-      for (let k = 0; k <= SCAN_TO; k += 1) {
-        const reason = periodReason(s0, p, lead, saleEnd, k, now);
-        if (reason === '') anyOpen = true;
-        if (reason === 'remainder') anyRemainder = true;
-      }
-
-      const label = `p=${p} s0=${s0} lead=${lead} saleEnd=${saleEnd} now=${now} state=${status.state}`;
-      if (status.state === 'live') {
-        expect(anyOpen, label).toBe(true);
-      } else if (status.state === 'remainder') {
-        expect(anyOpen, label).toBe(false);
-        expect(anyRemainder, label).toBe(true);
-      } else if (status.state === 'upcoming') {
-        expect(anyOpen, label).toBe(false);
-        expect(anyRemainder, label).toBe(false);
-        expect(now < s0, label).toBe(true);
-      } else if (status.state === 'ended') {
-        expect(anyOpen, label).toBe(false);
-        expect(anyRemainder, label).toBe(false);
-      }
+      const label = `p=${p} s0=${s0} lead=${lead} saleEnd=${saleEnd} now=${now}`;
+      expect(actual, label).toEqual(expected);
     }
+  });
+});
+
+describe('periodsWindowSize', () => {
+  it('defaults to 14 periods when leadSeconds spans less than 14 periods', () => {
+    expect(periodsWindowSize(600, 3600)).toBe(14); // ceil(600 / 3600) = 1 -> max(14, 1) = 14
+  });
+
+  it('widens past 14 when leadSeconds spans more periods than that (round-2 L3)', () => {
+    // A 1-day lead on an hourly calendar spans 24 periods: open periods up to cur+24 must list.
+    expect(periodsWindowSize(86_400, 3600)).toBe(24);
+  });
+
+  it('caps at 59, one under the list_periods API range limit (step 41)', () => {
+    expect(periodsWindowSize(1_000_000, 3600)).toBe(59);
   });
 });
 
