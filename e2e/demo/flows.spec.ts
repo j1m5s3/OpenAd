@@ -122,7 +122,9 @@ async function buyFirstPeriod(page: Page): Promise<{ price: bigint; periodIndex:
   const price = usdc((await dialog.locator('p.text-2xl').textContent()) ?? '');
   expect(price).toBeGreaterThan(0n);
   await dialog.getByRole('button', { name: 'Buy with permit' }).click();
-  await expect(dialog).toContainText('Confirmed on chain');
+  await expect(dialog).toContainText('Lease confirmed');
+  await expect(dialog).not.toContainText('Not sellable');
+  expect(usdc((await dialog.locator('p.text-2xl').textContent()) ?? '')).toBe(price);
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(row.getByRole('button', { name: 'Leased' })).toBeVisible();
   return { price, periodIndex };
@@ -143,10 +145,24 @@ test('advertiser: discover → slot → buy a Dutch period with permit → lease
 
   await expect(rail(page)).toContainText('Leases 2');
   const before = await walletBalance(page);
+
+  // Slot 0 is owned by the newsletter publisher (the switcher's other persona): read its balance
+  // before the buy, so the proceeds can be checked after (step 35 addendum — a stale wagmi
+  // `balanceOf` read after a persona switch would otherwise hide a real ledger bug).
+  await switchPersona(page, PUBLISHER);
+  const publisherBefore = await walletBalance(page);
+  await switchPersona(page, ADVERTISER);
+
   await openSlot(page, '0');
   const { price, periodIndex } = await buyFirstPeriod(page);
   await expect.poll(() => walletBalance(page)).toBe(before - price);
   await expect(rail(page)).toContainText('Leases 3');
+
+  // The publisher's proceeds land exactly: price minus the protocol fee, read fresh after
+  // switching personas (not a stale cached balance from before the buy).
+  await switchPersona(page, PUBLISHER);
+  await expect.poll(() => walletBalance(page)).toBe(publisherBefore + publisherShare(price));
+  await switchPersona(page, ADVERTISER);
 
   await nav(page, 'Campaigns');
   await expect(page.getByText(`Slot 0 period ${periodIndex}:`)).toBeVisible();
@@ -399,7 +415,8 @@ test('embed-demo: the real <open-ad> element renders a demo creative with no out
   await buyDialog.locator('select').selectOption('3');
   await buyDialog.getByRole('button', { name: 'Next' }).click();
   await buyDialog.getByRole('button', { name: 'Buy remainder' }).click();
-  await expect(buyDialog).toContainText('Confirmed on chain');
+  await expect(buyDialog).toContainText('Lease confirmed');
+  await expect(buyDialog).not.toContainText('Not sellable');
   await buyDialog.getByRole('button', { name: 'Close' }).click();
   await expect(period3Row.getByRole('button', { name: 'Leased' })).toBeVisible();
   await page.goBack();

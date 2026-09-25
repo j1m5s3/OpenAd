@@ -1,5 +1,6 @@
 import { getDefaultConfig, getDefaultWallets } from '@rainbow-me/rainbowkit';
 import { injectedWallet } from '@rainbow-me/rainbowkit/wallets';
+import type { Hex } from 'viem';
 import { http } from 'wagmi';
 import { base, baseSepolia, foundry } from 'wagmi/chains';
 
@@ -24,6 +25,16 @@ function resolveTargetChainId(): SupportedChainId {
 }
 
 export const targetChainId: SupportedChainId = resolveTargetChainId();
+
+/** A block-explorer link for a transaction, or `undefined` when the target chain has none
+ * configured (Anvil/31337) or the build is demo mode (ADR-0016: nothing there resolves to a real
+ * chain). Used by the buy receipt so it never links out from a chain with nothing to show. */
+export function explorerTxUrl(chainId: SupportedChainId, hash: Hex): string | undefined {
+  if (DEMO_MODE) return undefined;
+  const chain = supportedChains.find((c) => c.id === chainId);
+  const base = chain?.blockExplorers?.default?.url;
+  return base ? `${base}/tx/${hash}` : undefined;
+}
 
 const walletConnectProjectId =
   import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? '00000000000000000000000000000000';
