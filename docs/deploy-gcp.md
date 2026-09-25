@@ -123,40 +123,68 @@ Grant `roles/secretmanager.secretAccessor` on `openad-database-url-<ENV>`,
 `openad-migrate-<ENV>` service accounts (and `openad-indexer-<ENV>` for the database URL only —
 it never needs the session or click secrets).
 
-## 6. Build and push images
+## 6-8. Build, migrate, deploy — the primary path: `scripts/deploy-gcp.sh`
+
+Steps 1-5 above (APIs, Artifact Registry, Cloud SQL, the GCS bucket + service accounts, and
+the secrets) are one-time, per-environment setup and stay manual. Once they're done, building
+the images, running the migration job and deploying the services is one command
+(`infra/gcp/README.md` documents every file it renders):
 
 ```bash
 cd /path/to/OpenAd
-gcloud builds submit --tag <REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest \
-  -f api/Dockerfile --build-arg UV_EXTRAS=gcs .
-gcloud builds submit --tag <REGION>-docker.pkg.dev/<PROJECT_ID>/openad/web:latest \
-  -f web/Dockerfile .   # web/Dockerfile lands in step 27+28
+./scripts/deploy-gcp.sh --env staging --only demo  --project <PROJECT_ID> --region <REGION>
+./scripts/deploy-gcp.sh --env staging --only stack --project <PROJECT_ID> --region <REGION>
+# --only all does both plus the real (non-demo) web site. --dry-run prints every command
+# instead of running it. --env prod additionally requires
+# --i-understand-this-is-mainnet and is refused outright when CI=true.
+./scripts/deploy-gcp.sh --help
 ```
 
-`indexer` and `settler` reuse the `api` image with a different Cloud Run `command`
-(`python -m openad.indexer` / `python -m openad.settler`), so nothing extra to build there.
+This is exactly what `.github/workflows/deploy.yml` runs on `main` (staging only, gated on
+`GCP_WORKLOAD_IDENTITY_PROVIDER` being set — see step 10 below) — there is no difference
+between the CI path and running it yourself. The rest of this section (§6-§8) is the manual
+fallback: the individual `gcloud` commands the script above wraps, for debugging one step in
+isolation or if you'd rather not use the script.
 
-## 7. Run the migration job
+### 6. Build and push images (manual fallback)
 
 ```bash
-gcloud run jobs create openad-migrate \
-  --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest \
-  --region=<REGION> \
-  --service-account=openad-migrate-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com \
-  --set-cloudsql-instances=<PROJECT_ID>:<REGION>:openad-<ENV> \
-  --set-secrets=OPENAD_DATABASE_URL=openad-database-url-<ENV>:latest \
-  --command="uv,run,alembic,upgrade,head"
-
-gcloud run jobs execute openad-migrate --region=<REGION> --wait
+gcloud builds submit --config infra/gcp/cloudbuild.yaml --project <PROJECT_ID> \
+  --substitutions=_REGION=<REGION>,_REPO=openad,_ENV=<ENV>,_API_URL=https://api.<ENV>.example.com,_CHAIN_ID=<CHAIN_ID>
 ```
 
-Run this job **before** shifting traffic to a new `api` revision on every deploy (see ADR-0017
-"Migrations" — the api image itself no longer runs migrations on start once step 27+28 lands).
+Or build one image directly, e.g. `gcloud builds submit --tag
+<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest -f api/Dockerfile --build-arg
+UV_EXTRAS=gcs .` (and `-f web/Dockerfile`, with `--build-arg VITE_DEMO_MODE=1` for the demo
+variant). `indexer` and `settler` reuse the `api` image with a different Cloud Run `command`
+(`python -m openad.indexer` / `python -m openad.settler`), so nothing extra to build there.
 
-## 8. Deploy the services
+### 7. Run the migration job (manual fallback)
 
-Env vars below are the non-secret subset of `.env.example`; adjust per environment
-(`OPENAD_CHAIN_ID`, `OPENAD_RPC_URL`, `OPENAD_DEPLOYMENTS_DIR` point at the committed
+```bash
+envsubst <infra/gcp/jobs/migrate.yaml # with PROJECT_ID, REGION, ENV, IMAGE_TAG set
+gcloud run jobs replace <rendered-migrate.yaml> --project <PROJECT_ID> --region <REGION>
+gcloud run jobs execute openad-migrate --project <PROJECT_ID> --region <REGION> --wait
+```
+
+Run this job **before** shifting traffic to a new `api` revision on every deploy (ADR-0017
+"Migrations" — the `api` image's `CMD` no longer runs migrations on start).
+
+### 8. Deploy the services (manual fallback)
+
+```bash
+gcloud run services replace <rendered-api.yaml>      --project <PROJECT_ID> --region <REGION>
+gcloud run services replace <rendered-indexer.yaml>  --project <PROJECT_ID> --region <REGION>
+gcloud run services replace <rendered-settler.yaml>  --project <PROJECT_ID> --region <REGION>
+gcloud run services replace <rendered-web.yaml>      --project <PROJECT_ID> --region <REGION>
+gcloud run services replace <rendered-web-demo.yaml> --project <PROJECT_ID> --region <REGION>
+```
+
+Each `infra/gcp/services/*.yaml` is rendered from its `${VAR}` placeholders with `envsubst`
+first (`infra/gcp/README.md` lists every placeholder); `scripts/deploy-gcp.sh` does this
+rendering into a throwaway temp directory automatically. Env vars below are the non-secret
+subset of `.env.example`; adjust per environment (`OPENAD_CHAIN_ID`, `OPENAD_RPC_URL`,
+`OPENAD_DEPLOYMENTS_DIR` point at the committed
 `84532.json`/`8453.json` baked into the image, or an external RPC URL).
 
 ```bash
@@ -247,9 +275,11 @@ done
 access to those service accounts' secrets (it is `actAs`, not `secretAccessor`).
 
 Store the Workload Identity Provider resource name and the deployer service account email as
-GitHub repo/environment secrets (`GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SA`); the CI
-deploy job (step 27+28) is skipped entirely when those are absent, and it never broadcasts to
-Base mainnet regardless.
+GitHub repo/environment secrets `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT`,
+plus `GCP_PROJECT_ID` and `GCP_REGION` for `scripts/deploy-gcp.sh --project`/`--region`.
+`.github/workflows/deploy.yml`'s `gate` job checks `GCP_WORKLOAD_IDENTITY_PROVIDER` and skips
+the `deploy` job entirely when it is absent; the workflow only ever targets `staging` and never
+broadcasts to Base mainnet regardless of what secrets are configured.
 
 ## 11. Smoke checks
 

@@ -1,0 +1,15 @@
+# BuildKit-specific override: for `docker build -f web/Dockerfile .`, this file replaces the
+# root .dockerignore (which excludes web/embed/e2e entirely — needed here for npm workspace
+# resolution and the embed alias). Keeps the web build context lean without losing web/Dockerfile's
+# actual dependencies (contracts/deployments, api/src for sync:openapi, embed/src, web/, sim/).
+**/node_modules
+**/dist
+**/dist-demo
+**/.venv
+**/__pycache__
+.git
+.cursor
+contracts/out
+web/.cache
+api/.cache
+api/alembic

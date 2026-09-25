@@ -64,12 +64,16 @@ class Liveness:
 def _handler_for(liveness: Liveness) -> type[BaseHTTPRequestHandler]:
     class LivenessHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            """`GET /` or `GET /healthz` → `200 ok` while the loop has ticked recently,
+            `503 stale` once it hasn't; any other path → `404`. `is_alive()` is read exactly
+            once and reused for both the status line and the body, so they can't disagree."""
             if self.path not in ("/", "/healthz"):
                 self.send_response(404)
                 self.end_headers()
                 return
-            body = b"ok" if liveness.is_alive() else b"stale"
-            self.send_response(200 if liveness.is_alive() else 503)
+            alive = liveness.is_alive()
+            body = b"ok" if alive else b"stale"
+            self.send_response(200 if alive else 503)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

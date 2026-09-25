@@ -1,0 +1,79 @@
+# Cloud Build config: builds and pushes the api/web/web-demo images to Artifact Registry.
+# Run via `gcloud builds submit --config infra/gcp/cloudbuild.yaml` (scripts/deploy-gcp.sh
+# wraps this). Names, tags and repo layout match docs/adr/0017-gcp-deployment.md and
+# docs/deploy-gcp.md §2/§6. Never broadcasts to any chain: this only builds and pushes images.
+
+substitutions:
+  _REGION: us-central1
+  _REPO: openad
+  _ENV: staging
+  _API_URL: https://api.staging.example.com
+  _CHAIN_ID: "84532"
+  # $SHORT_SHA is a built-in substitution Cloud Build only populates for a *triggered* build
+  # (a push/PR trigger); a plain `gcloud builds submit` (what scripts/deploy-gcp.sh runs) leaves
+  # it empty, which would silently tag every image ":" with no tag. _TAG is set explicitly
+  # instead — scripts/deploy-gcp.sh always passes `_TAG=${TAG}` (default: the short git SHA it
+  # resolves itself) and renders the Cloud Run specs with that same value as IMAGE_TAG.
+  _TAG: latest
+
+steps:
+  # api image: also run, with a different Cloud Run `command`, for indexer/settler/migrate
+  # (ADR-0017 "Everything else"). UV_EXTRAS=gcs pulls in google-cloud-storage
+  # (OPENAD_MEDIA_BACKEND=gcs).
+  - id: build-api
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - api/Dockerfile
+      - --build-arg
+      - UV_EXTRAS=gcs
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:${_TAG}
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest-${_ENV}
+      - .
+
+  # web image: the normal (non-demo) build, pointed at this env's API and chain.
+  - id: build-web
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - web/Dockerfile
+      - --build-arg
+      - VITE_API_URL=${_API_URL}
+      - --build-arg
+      - VITE_CHAIN_ID=${_CHAIN_ID}
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web:${_TAG}
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web:latest-${_ENV}
+      - .
+
+  # web-demo image: VITE_DEMO_MODE=1 (ADR-0016). Deployed as its own Cloud Run service
+  # (openad-web-demo) so demo and real site promote/rollback independently.
+  - id: build-web-demo
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - web/Dockerfile
+      - --build-arg
+      - VITE_DEMO_MODE=1
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web-demo:${_TAG}
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web-demo:latest-${_ENV}
+      - .
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest-${_ENV}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web:latest-${_ENV}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web-demo:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web-demo:latest-${_ENV}
+
+options:
+  logging: CLOUD_LOGGING_ONLY

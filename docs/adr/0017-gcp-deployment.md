@@ -94,6 +94,12 @@ still `beta` when this ADR was written, so this step uses the stdlib listener on
 `gcloud run deploy` instead. Revisit once `worker-pools` is GA: dropping the listener is a
 one-line change (remove the `liveness` argument), not a rearchitecture.
 
+`openad-api` deliberately gets no `Liveness`/`health.py` listener of its own: uvicorn already
+binds `$PORT` and `GET /v1/health` already exists (`api/src/openad/routers/health.py`), so
+Cloud Run's own startup/liveness probe against that real endpoint is sufficient. `health.py`
+exists solely for `openad-indexer` and `openad-settler`, the two processes with nothing else
+listening on `$PORT`.
+
 ### Database: Cloud SQL Postgres 16
 
 Managed Postgres 16, matching local (`docker-compose.yml` also runs Postgres 16). `api`,

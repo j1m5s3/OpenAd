@@ -4,6 +4,21 @@
 # Not a GCP/Cloud Run deploy. Origin stays local.
 
 services:
+  # One-shot: applies migrations before api/indexer/settler start. Mirrors the Cloud Run Job
+  # `openad-migrate` (infra/gcp/jobs/migrate.yaml, ADR-0017 "Migrations"). The api image no
+  # longer migrates in its own CMD, so this replaces that step for the local stack too.
+  migrate:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+    environment:
+      OPENAD_ENV: dev
+      OPENAD_DATABASE_URL: postgresql+asyncpg://openad:openad@postgres:5432/openad
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build:
       context: .
@@ -37,6 +52,8 @@ services:
         condition: service_healthy
       anvil:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   indexer:
     build:
@@ -56,6 +73,8 @@ services:
         condition: service_healthy
       anvil:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       api:
         condition: service_healthy
 
@@ -78,5 +97,7 @@ services:
         condition: service_healthy
       anvil:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       api:
         condition: service_healthy
