@@ -72,3 +72,6 @@ spec:
               value: "4"
             - name: OPENAD_DB_MAX_OVERFLOW
               value: "2"
+            # Paid creatives serve only on the slot's domain or its subdomains (ARCHITECTURE §3.4).
+            - name: OPENAD_SERVE_ENFORCE_ORIGIN
+              value: "true"

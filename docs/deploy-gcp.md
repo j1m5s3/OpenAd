@@ -393,10 +393,23 @@ can wrongly *accept* a genuinely cross-site pair on domains shaped like these.
 false-accept gap — a domain on a multi-label public suffix should be checked by hand rather than
 trusted to this heuristic.
 
-Optional: put a global HTTPS load balancer + Cloud CDN in front of `openad-api` scoped to
-`/v1/serve/*` and `/v1/serve/*/media`, since those responses are already
-`Cache-Control: public, max-age=<ttl>` (ARCHITECTURE §3.4). Everything else can go straight
-through Cloud Run's own HTTPS endpoint.
+Optional: put a global HTTPS load balancer in front of `openad-api`, with Cloud CDN for serve
+media. The load balancer fronts **every** api path on the `API_URL` host, and nothing reaches
+the api around it. Click and media URLs share that host (`OPENAD_PUBLIC_URL`), and the click
+burst rule's key needs every request to pass the same proxies: § 11 ("Click integrity") has
+the ingress and `API_URL` steps. Cache only `/v1/serve/*/media`: verified bytes, already
+`Cache-Control: public, max-age=<ttl>`. Never let the CDN cache `/v1/serve/{slot_id}`. A
+campaign response there carries a one-time click token and is `private, no-store`, and every
+serve is counted as an impression, so a shared copy would 404 every click after the first and
+undercount impressions (ARCHITECTURE §3.4). Lease, house and empty responses are
+`public, max-age=<ttl>`, so a CDN that follows origin headers would cache them too: scope
+caching by path, not by headers. One way: two backend services on the same serverless NEG,
+only one with Cloud CDN enabled, and a URL-map route rule (a path template such as
+`/v1/serve/*/media`) that sends media to that one and every other path to the other. Never
+use the `FORCE_CACHE_ALL` cache mode on the backend that serves `/v1/serve/{slot_id}`: it
+caches responses whatever their `Cache-Control` says (all inferred; verify before deploy). The
+load balancer adds `X-Forwarded-For` entries: re-run § 11's hop check before you rely on
+`OPENAD_TRUSTED_PROXY_HOPS`.
 
 ## 10. Workload Identity Federation for GitHub Actions (no JSON keys)
 
@@ -453,6 +466,60 @@ only if its `domain` is the `host:port`, and its `URI` the origin, of an allowed
 is unset. Open the web app, connect a wallet and sign in. A 401 `domain not allowed` from
 `/v1/auth/verify` means the page's exact origin (scheme, host, port) is not in that list. If
 users reach the web app on more than one origin, list each one in both variables.
+
+### Click integrity
+
+Each check below is a real serve, so it records one impression.
+
+- **Campaign responses are never cached.** Once a CPC campaign is serving on a slot, read the
+  headers of a GET. (The serve route answers `HEAD` with `405`, so `curl -I` doesn't show
+  them.)
+
+  ```bash
+  curl -s -o /dev/null -D - "https://api.<ENV>.example.com/v1/serve/<CPC_SLOT_ID>" \
+    | grep -i '^cache-control'
+  ```
+
+  Expect `cache-control: private, no-store`. Lease, house and empty responses stay
+  `public, max-age=30` (`OPENAD_SERVE_TTL_SECONDS`).
+- **Browsers get paid creatives only on the slot's domain.** `api.yaml` sets
+  `OPENAD_SERVE_ENFORCE_ORIGIN=true`. Ask for a leased slot as another site would, then as an
+  opaque-origin page (a sandboxed iframe that sends no referrer):
+
+  ```bash
+  for ORIGIN in https://not-the-slot-domain.example null; do
+    curl -s -H "Origin: ${ORIGIN}" \
+      "https://api.<ENV>.example.com/v1/serve/<LEASED_SLOT_ID>" | grep -o '"status":"[a-z]*"'
+  done
+  ```
+
+  Expect `"status":"house"` or `"status":"empty"` twice, never `"lease"`. With the slot's own
+  domain as `Origin`, the same request gets `"lease"`, and so does one with no `Origin` and
+  no `Referer`: a script can send any header, so this check binds browsers only
+  (ARCHITECTURE §3.4).
+- **The click burst rule stays off until the hop count is verified.** It keys on the same
+  client key as the auth rate limit below. While `OPENAD_TRUSTED_PROXY_HOPS` is unset (`0`),
+  that key is the address of Google's front end, shared by every visitor (inferred; verify
+  before deploy), so the api skips the rule and logs `clicks.burst_rule_disabled` once at
+  startup. Once the next subsection's steps have verified the hop count and `api.yaml` sets
+  `OPENAD_TRUSTED_PROXY_HOPS`, the rule keys on that same entry and the warning stops. The
+  one-time token and the hourly per-campaign cap apply either way.
+- **Behind a load balancer, every api request must take the same proxies.** A load balancer
+  (§ 9) adds its own `X-Forwarded-For` entry, so the hop count usually becomes `2`. Close
+  every path around it:
+  - set the api service's ingress to `internal-and-cloud-load-balancing` (the
+    `run.googleapis.com/ingress` annotation in `api.yaml`, `all` today; inferred; verify
+    before deploy);
+  - make `API_URL` the load balancer's host. It becomes `OPENAD_PUBLIC_URL`, the host of every
+    click and media URL the api hands out, and the web build's `VITE_API_URL`.
+
+  Closing ingress is the fix. While the `run.app` URL is still open, a client that goes there
+  directly can add one forged `X-Forwarded-For` entry, and with hops `2` that entry becomes
+  its own burst key, so it can pick a new key for every click. A request there without a
+  forged entry has a chain shorter than the hop count, and its key falls back to the TCP
+  peer, which everyone on that path shares. That fallback stops no one. It only keeps a short
+  chain from switching the rule off unnoticed: honest visitors on that path share one bucket,
+  and their repeat clicks show up as `burst`.
 
 ### Auth rate limit: verify the X-Forwarded-For chain in staging, then enable
 

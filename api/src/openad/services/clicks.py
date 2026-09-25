@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+from collections import OrderedDict
 from dataclasses import dataclass
 
 from sqlalchemy import func, select
@@ -13,7 +14,55 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openad.models import Campaign, ClickEvent, Creative, ServeEvent
 
 TOKEN_TTL_SECONDS = 3600
-_BURST: dict[str, int] = {}
+BURST_WINDOW_SECONDS = 2
+BURST_MAX_KEYS = 10_000
+
+
+class BurstWindow:
+    """The burst rule's memory: a key that recorded a click less than ``window`` seconds ago
+    makes the next click on it a burst duplicate.
+
+    Keys are :func:`burst_key` HMACs, never raw addresses. The map holds at most ``max_keys``
+    entries, in the order their last click was recorded: when it is full, the least recently
+    recorded key (also the one closest to expiry) is evicted, and every recorded click first
+    drops the expired entries, so the map normally holds only the last ``window`` seconds.
+    Per process, in memory only: each api instance has its own, and a restart forgets it.
+    """
+
+    def __init__(
+        self, *, max_keys: int = BURST_MAX_KEYS, window: int = BURST_WINDOW_SECONDS
+    ) -> None:
+        if max_keys < 1 or window < 1:
+            raise ValueError("max_keys and window must be at least 1")
+        self.max_keys = max_keys
+        self.window = window
+        self._until: OrderedDict[str, int] = OrderedDict()  # key -> Unix second its window ends
+
+    def __len__(self) -> int:
+        return len(self._until)
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._until
+
+    def hit(self, key: str, now: int) -> bool:
+        """True if ``key`` is inside its window: a burst duplicate, which neither extends the
+        window nor refreshes the key. Otherwise record this click and return False."""
+        until = self._until.get(key)
+        if until is not None and now < until:
+            return True
+        self._until.pop(key, None)
+        while self._until:
+            oldest, oldest_until = next(iter(self._until.items()))
+            if now < oldest_until:
+                break
+            del self._until[oldest]
+        self._until[key] = now + self.window
+        while len(self._until) > self.max_keys:
+            self._until.popitem(last=False)  # the least recently recorded key
+        return False
+
+
+_BURST = BurstWindow()
 
 
 @dataclass(frozen=True)
@@ -71,19 +120,16 @@ def token_hash(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def burst_key(*, secret: str, ip: str, slot_id: int) -> str:
-    return hmac.new(secret.encode("utf-8"), f"{ip}:{slot_id}".encode(), hashlib.sha256).hexdigest()[
-        :32
-    ]
+def burst_key(*, secret: str, client: str, slot_id: int) -> str:
+    """HMAC of ``client:slot_id``, so the burst map never holds a raw address."""
+    return hmac.new(
+        secret.encode("utf-8"), f"{client}:{slot_id}".encode(), hashlib.sha256
+    ).hexdigest()[:32]
 
 
-def burst_blocked(key: str, now: int, *, window: int = 2) -> bool:
+def burst_blocked(key: str, now: int) -> bool:
     """In-process short-TTL discard. True means this click is a burst duplicate."""
-    until = _BURST.get(key, 0)
-    if now < until:
-        return True
-    _BURST[key] = now + window
-    return False
+    return _BURST.hit(key, now)
 
 
 async def hourly_payable_count(session: AsyncSession, campaign_id: int, now: int) -> int:
@@ -106,11 +152,15 @@ async def resolve_click(
     secret: str,
     raw_token: str,
     now: int,
-    ip: str,
-    ivt: bool,
+    client: str,
+    burst_rule: bool,
     max_per_hour: int,
 ) -> tuple[str | None, str | None]:
-    """Return (landing_url, ivt_reason). landing_url None → HTTP 404."""
+    """Return (landing_url, ivt_reason). landing_url None → HTTP 404.
+
+    ``client`` is the visitor's key (``openad.ratelimit.client_key``). ``burst_rule`` applies
+    the burst discard: ``OPENAD_CLICK_IVT`` is on and that key identifies the visitor
+    (``openad.routers.clicks.burst_rule_active``)."""
     parsed = parse_click_token(secret=secret, raw=raw_token, now=now)
     if parsed is None:
         return None, "invalid"
@@ -141,7 +191,9 @@ async def resolve_click(
         reason = "closed"
     elif gsp <= 0 or camp.remaining < gsp:
         reason = "budget"
-    elif ivt and burst_blocked(burst_key(secret=secret, ip=ip, slot_id=parsed.slot_id), now):
+    elif burst_rule and burst_blocked(
+        burst_key(secret=secret, client=client, slot_id=parsed.slot_id), now
+    ):
         reason = "burst"
     elif await hourly_payable_count(session, parsed.campaign_id, now) >= max_per_hour:
         reason = "rate"

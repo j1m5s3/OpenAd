@@ -149,9 +149,13 @@ itself, never an advertiser URL.
   instance, bucket and secrets. Promotion to `prod` is a manual approval step, matching
   `docs/deploy-mainnet.md`'s "do not broadcast until an explicit request" posture extended to
   deploys.
-- A load balancer / CDN sits in front of `openad-api` for `/v1/serve/*` and `/v1/serve/*/media`
-  specifically, since those responses are already `Cache-Control: public` and read-heavy;
-  everything else (writes-adjacent reads, health) can go straight to Cloud Run's own front end.
+- A global load balancer may front `openad-api`. If it does, it fronts every api path on the
+  `API_URL` host and nothing reaches the api around it (`docs/deploy-gcp.md` § 9 and § 11):
+  click and media URLs share `OPENAD_PUBLIC_URL`, and the click burst rule's key needs every
+  request to pass the same proxies. Cloud CDN on it caches `/v1/serve/*/media` only (verified
+  bytes, `Cache-Control: public`, read-heavy), never `/v1/serve/{slot_id}`: a campaign
+  response carries a one-time click token and is `private, no-store`, and every serve is an
+  impression (ARCHITECTURE §3.4).
 
 ## Alternatives considered
 
@@ -183,8 +187,9 @@ itself, never an advertiser URL.
   `read_cached`/`MediaStore` now has two code paths to keep in sync with any future third
   backend; a Cloud Run Job adds one more deploy-pipeline step versus "the container migrates
   itself."
-- **Must be revisited:** the CDN-in-front-of-serve piece is sized as "when serve traffic
-  justifies it," not day one — revisit once there's real publisher traffic. The `staging`/`prod`
+- **Must be revisited:** the CDN in front of serve media (`/v1/serve/*/media` only) is sized
+  as "when serve traffic justifies it," not day one — revisit once there's real publisher
+  traffic. The `staging`/`prod`
   project split (one project each vs. one project with two Cloud SQL instances) should be
   revisited once billing/ownership boundaries are clearer; this ADR does not mandate either.
 - Step 27+28 implements the `api/Dockerfile` `CMD` change, the `web/Dockerfile`, the Cloud Run
