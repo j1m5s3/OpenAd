@@ -229,15 +229,40 @@ Pydantic model: `api/src/openad/schemas/serve.py`.
 }
 ```
 
-Rules: `ttl` seconds is how long the embed may reuse the response; the API sets
-`Cache-Control: public, max-age=<ttl>`. `mediaUrl` is always same-origin to the API (verified
-cache), never the advertiser's URL. `status = "unknown"` → HTTP 404. `status = "campaign"`:
-`campaign` is set, `lease` is null, `clickUrl` is `{api}/v1/c/{token}`
-not the advertiser landing URL. House ads keep the publisher `clickUrl` and are never payable.
+Rules: `ttl` seconds is how long the embed may reuse the response before it asks again.
+`mediaUrl` is always same-origin to the API (verified cache), never the advertiser's URL.
+`status = "unknown"` → HTTP 404. `status = "campaign"`: `campaign` is set, `lease` is null,
+`clickUrl` is `{api}/v1/c/{token}` not the advertiser landing URL. House ads keep the
+publisher `clickUrl` and are never payable.
 
-Origin enforcement: when `OPENAD_SERVE_ENFORCE_ORIGIN=true`, requests whose `Origin`/`Referer`
-host does not match the slot's `domain` (or a subdomain of it) are answered with the house ad
-and logged with `origin_ok=false`. Disabled by default in local development.
+Caching:
+
+- `lease`, `house` and `empty` responses are `Cache-Control: public, max-age=<ttl>`, with
+  `Vary: Origin` and a weak `ETag`. The 404 for an unknown slot is `public, max-age=60`.
+- A `campaign` response is `Cache-Control: private, no-store`, with no `ETag`, so no shared
+  cache hands it to a second visitor. Its `clickUrl` carries a one-time click token: from a
+  shared copy, the first click would pay and every later one would 404 as used. Each response
+  is also an impression (a `serve_events` row), which a cached copy would never record.
+- A CDN may cache `/v1/serve/{slot_id}/media` only, never `/v1/serve/{slot_id}`
+  (`docs/deploy-gcp.md` § 9).
+
+Origin enforcement (`api/src/openad/serve/origin.py`): when `OPENAD_SERVE_ENFORCE_ORIGIN=true`,
+a paid (`lease` or `campaign`) request must come from a page on the slot's `domain`:
+
+- The page host is the one `Origin` names, else the one `Referer` names. It matches when it
+  is the slot's `domain` or a subdomain of it, or, in dev and test only, `localhost`,
+  `127.0.0.1` or `[::1]`.
+- An `Origin` that names no host, like `null` from an opaque-origin page (a sandboxed iframe,
+  a `data:` URL), is a mismatch unless `Referer` names a matching host.
+- No `Origin` header and no `Referer` host is a match. Browsers send `Origin` on the embed's
+  cross-origin fetch, so this is mostly a non-browser client, which could send any header.
+
+A mismatch gets the house ad, or `empty` when there is none, so no click token, and is
+recorded with `origin_ok=false`. Enforcement is on in `infra/gcp` (staging and prod, set in
+`infra/gcp/services/api.yaml`) and off by default for local development. It is best-effort: a
+browser can't forge `Origin` or `Referer`, but a script can, so it narrows third-party
+embedding of paid creatives and doesn't stop click farms; the click burst rule and the hourly
+per-campaign cap are the backstop.
 
 **Serve CORS.** `<open-ad>` runs on a publisher's own domain, so `GET /v1/serve/{slot_id}` and
 `/v1/serve/{slot_id}/media` must be readable cross-origin. `ServeCorsMiddleware`
@@ -376,15 +401,28 @@ All settings are environment variables with the `OPENAD_` prefix, loaded by `ope
 See `.env.example` at the repo root for the full list with defaults. Never read `os.environ`
 directly outside `config.py` (the settler process uses `openad.settler.settings` so
 `OPENAD_SETTLER_KEY` is never a field on HTTP `Settings`). Click vars:
-`OPENAD_CLICK_HMAC_SECRET`, `OPENAD_CLICK_IVT`, `OPENAD_CLICK_MAX_PER_CAMPAIGN_HOUR`
-(default 120), `OPENAD_SETTLER_POLL_SECONDS` (settler process).
+`OPENAD_CLICK_HMAC_SECRET`, `OPENAD_CLICK_IVT` (the 2-second burst rule),
+`OPENAD_CLICK_MAX_PER_CAMPAIGN_HOUR` (default 120), `OPENAD_SETTLER_POLL_SECONDS` (settler
+process). The burst rule keys on the auth rate limit's client key (`OPENAD_TRUSTED_PROXY_HOPS`,
+§ 3.3). With 0 hops outside `dev`/`test` that key is the proxy's address, shared by every
+visitor, so the rule is skipped and the api logs `clicks.burst_rule_disabled` once at startup.
 
 ### 3.9 Settler process (ADR-0014)
 
 Fourth process from package `openad`: `python -m openad.settler`. Reads payable `click_events`,
 signs `CampaignVault.settle_batch`. Must not run inside the HTTP API process. `web/` never
 loads this key. Indexer has no spending key. `OPENAD_SETTLER_KEY` is loaded only by
-`openad.settler.settings`.
+`openad.settler.settings`. That key belongs to a dedicated EOA that holds gas only, and it is
+never the contracts' owner: off Anvil, `contracts/script/deploy.py` requires
+`OPENAD_SETTLER_ADDRESS` and refuses the deployer (PROTOCOL.md § 10). At startup, before its
+liveness listener, the process reads the RPC's chain id, the vault's `owner()`, `settler()` and
+`treasury()`, and the artifact's `deployer` (`openad.settler.identity`). It exits if that read
+fails, or if the RPC's chain id isn't `OPENAD_CHAIN_ID` (`settler.chain_mismatch`). Off chain
+31337 it also exits if its key is the owner (`settler.key_is_owner`) or the deployer
+(`settler.key_is_deployer`, which still holds after the vault's ownership moves to a Safe); on
+31337, where the deploy makes Anvil #0 both, it only warns. It warns, too, if its key isn't
+`settler()` (a rotation in progress: batches revert with "not settler" and are retried) or is the
+treasury (fees would sit on a hot key).
 
 ### 3.10 Analytics read model (ROADMAP 6.4)
 
@@ -605,11 +643,13 @@ docker compose -f docker-compose.yml -f docker-compose.stack.yml up --build
 
 ## 8. Security and privacy posture
 
-- No custodial keys. The deploy key exists only in the contracts environment (Moccasin encrypted wallet).
+- No custodial keys. The owner (deploy) key never leaves the contracts environment (Moccasin encrypted wallet, or the Safe on Base). The settler holds a separate, gas-only key that can only call `settle_batch` (§ 3.9).
 - Serving never reads the chain and never proxies to advertiser URLs at request time.
 - Visitors are never exposed to advertisers: media is served from the verified cache; no third-party requests from the embed.
 - No cookies, IPs, or user agents are stored by the serving edge.
 - The opt-in auth rate limiter (§ 3.3) keeps at most 10 000 client keys (IP addresses) in
   process memory only. It writes none to the database or the logs.
+- The click burst rule (§ 3.8) keeps at most 10 000 keys in process memory only, each an HMAC
+  of the client key and the slot id, never a raw address; a key blocks repeats for 2 seconds.
 - Creatives are raster images only in v1; no advertiser HTML/JS ever executes on a publisher page.
 - Publisher takedown (`set_approval(false)` / `revoke_approval`) and moderator takedown propagate within one indexer cycle plus `ttl`.

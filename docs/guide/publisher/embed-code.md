@@ -48,10 +48,14 @@ prospective advertisers.
 ## Troubleshooting
 
 - **The house ad shows instead of a paid creative.** Either the slot has no
-  active lease or winning CPC campaign right now, or [domain
-  verification](terms.md) hasn't matched your page's origin — the embed's
-  `slot-id` must be placed on a page whose domain matches the slot's
-  registered domain.
+  active lease or winning CPC campaign right now, or the page isn't on the
+  slot's registered domain. OpenAd's hosted API (staging and production)
+  shows paid creatives only on pages whose host is that domain or a subdomain
+  of it: `blog.example.com` counts for `example.com`, `example.net` doesn't.
+  A page the browser won't name, such as one inside a sandboxed iframe that
+  sends no referrer, gets the house ad too. This check is separate from the
+  [verified domain](../marketplace/faq.md) badge, which never changes what
+  serves.
 - **Nothing shows at all.** Check that the script URL in your snippet loads
   (open it directly in a new tab — it should return JavaScript, not a 404),
   and check your site's Content-Security-Policy: it must allow
