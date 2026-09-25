@@ -3,28 +3,11 @@
 from __future__ import annotations
 
 from eth_account import Account
-from eth_account.datastructures import SignedMessage
-from eth_account.messages import encode_defunct
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.conftest import make_slot
-
-
-def _sig_hex(signed: SignedMessage) -> str:
-    return "0x" + bytes(signed.signature).hex()
-
-
-def _siwe(address: str, nonce: str, chain_id: int = 31337) -> str:
-    return (
-        f"localhost wants you to sign in with your Ethereum account:\n"
-        f"{address}\n\n"
-        f"URI: http://localhost:5173\n"
-        f"Version: 1\n"
-        f"Chain ID: {chain_id}\n"
-        f"Nonce: {nonce}\n"
-        f"Issued At: 2026-09-11T00:00:00Z"
-    )
+from tests.siwe_helpers import new_nonce, siwe_message, verify
 
 
 async def test_siwe_roundtrip_and_house_ad(client: AsyncClient, session: AsyncSession) -> None:
@@ -33,16 +16,9 @@ async def test_siwe_roundtrip_and_house_ad(client: AsyncClient, session: AsyncSe
     session.add(slot)
     await session.commit()
 
-    nonce_res = await client.post("/v1/auth/nonce")
-    assert nonce_res.status_code == 200
-    nonce = nonce_res.json()["nonce"]
-    message = _siwe(acct.address, nonce)
-    signed = acct.sign_message(encode_defunct(text=message))
-    verify = await client.post(
-        "/v1/auth/verify", json={"message": message, "signature": _sig_hex(signed)}
-    )
-    assert verify.status_code == 200
-    assert verify.json()["address"] == acct.address.lower()
+    res = await verify(client, acct, siwe_message(acct.address, await new_nonce(client)))
+    assert res.status_code == 200
+    assert res.json()["address"] == acct.address.lower()
 
     put = await client.put(
         "/v1/slots/1/house-ad",
@@ -62,9 +38,6 @@ async def test_siwe_roundtrip_and_house_ad(client: AsyncClient, session: AsyncSe
 
 async def test_siwe_bad_nonce(client: AsyncClient) -> None:
     acct = Account.create()
-    message = _siwe(acct.address, "not-issued")
-    signed = acct.sign_message(encode_defunct(text=message))
-    res = await client.post(
-        "/v1/auth/verify", json={"message": message, "signature": _sig_hex(signed)}
-    )
+    res = await verify(client, acct, siwe_message(acct.address, "notissued"))
     assert res.status_code == 401
+    assert res.json() == {"error": "unauthorized", "message": "invalid nonce"}

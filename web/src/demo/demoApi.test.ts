@@ -68,7 +68,7 @@ describe('createDemoRequestHandler', () => {
     expect(advertiserAnalytics.address).toBe(DEMO_PERSONAS.advertiserWallet.address.toLowerCase());
 
     const nonce = await api.authNonce();
-    expect(nonce.nonce.length).toBeGreaterThan(0);
+    expect(nonce.nonce).toMatch(/^[A-Za-z0-9]{8,64}$/); // EIP-4361, so buildSiweMessage accepts it
 
     const newsletter = DEMO_PERSONAS.publisherNewsletter.address;
     const verified = await api.authVerify(`sign in as ${newsletter}`, '0xdeadbeef');

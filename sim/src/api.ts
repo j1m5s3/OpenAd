@@ -1,7 +1,7 @@
 import type { Address, Hex } from 'viem';
 
 import { SIM_CHAIN_ID } from './accounts.js';
-import { buildSiweMessage, siweLooksValid } from './siwe.js';
+import { DEFAULT_WEB_ORIGIN, buildSiweMessage, siweLooksValid, siweOrigin } from './siwe.js';
 
 export type SlotJson = {
   slotId: string;
@@ -86,6 +86,8 @@ export class ApiClient {
   constructor(
     readonly baseUrl: string,
     private readonly fetchImpl: FetchFn = fetch,
+    /** Origin the personas sign in as (the web app's, never `baseUrl`): see `SimConfig.webOrigin`. */
+    readonly webOrigin: string = DEFAULT_WEB_ORIGIN,
   ) {}
 
   private async request<T>(path: string, init: RequestInit = {}, cookieKey?: string): Promise<T> {
@@ -136,13 +138,12 @@ export class ApiClient {
     const key = account.address.toLowerCase();
     const nonceBody = await this.request<{ nonce: string }>('/v1/auth/nonce', { method: 'POST' });
     const message = buildSiweMessage({
-      domain: 'localhost',
+      ...siweOrigin(this.webOrigin),
       address: account.address,
-      uri: this.baseUrl,
       chainId: SIM_CHAIN_ID,
       nonce: nonceBody.nonce,
     });
-    if (!siweLooksValid(message, SIM_CHAIN_ID)) {
+    if (!siweLooksValid(message, SIM_CHAIN_ID, this.webOrigin)) {
       throw new Error('sim built a SIWE message the API would reject');
     }
     const signature = await account.signMessage({ message });

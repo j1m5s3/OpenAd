@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from pydantic import Field
+
 from openad.schemas.common import ApiModel
+from openad.siwe import MAX_MESSAGE_LENGTH
 
 
 class PublisherOut(ApiModel):
@@ -63,5 +66,6 @@ class NonceOut(ApiModel):
 
 
 class SiweIn(ApiModel):
-    message: str
+    # A longer message gets the auth routes' house-style 422 (``main.py``) before parsing.
+    message: str = Field(max_length=MAX_MESSAGE_LENGTH)
     signature: str

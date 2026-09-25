@@ -1,4 +1,5 @@
 import type { Address, Hex } from 'viem';
+import { createSiweMessage } from 'viem/siwe';
 
 import { formatUsdc } from './format';
 
@@ -39,6 +40,12 @@ export function quoteFeeCopy(price: bigint, fee: bigint): { net: bigint; line: s
   };
 }
 
+/**
+ * The EIP-4361 sign-in message, built by viem's `createSiweMessage`: the exact layout the API
+ * parses (`address LF LF [statement LF] LF "URI: "…`), with the address EIP-55 checksummed
+ * (ADR-0009 amendment). viem throws on a field EIP-4361 does not allow, such as a nonce that is
+ * not 8+ alphanumerics.
+ */
 export function buildSiweMessage(params: {
   domain: string;
   address: Address;
@@ -47,15 +54,13 @@ export function buildSiweMessage(params: {
   nonce: string;
   issuedAt?: string;
 }): string {
-  const issuedAt = params.issuedAt ?? new Date().toISOString();
-  return [
-    `${params.domain} wants you to sign in with your Ethereum account:`,
-    params.address,
-    '',
-    'URI: ' + params.uri,
-    'Version: 1',
-    `Chain ID: ${params.chainId}`,
-    `Nonce: ${params.nonce}`,
-    `Issued At: ${issuedAt}`,
-  ].join('\n');
+  return createSiweMessage({
+    domain: params.domain,
+    address: params.address,
+    uri: params.uri,
+    chainId: params.chainId,
+    nonce: params.nonce,
+    version: '1',
+    issuedAt: params.issuedAt === undefined ? new Date() : new Date(params.issuedAt),
+  });
 }

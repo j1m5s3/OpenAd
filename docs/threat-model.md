@@ -52,6 +52,8 @@ serve path, and the Vite web app. Specified (not implemented): `CampaignVault` +
 | T12 | CampaignVault holds USDC | Balance = sum(`remaining`); tests; finalize refunds leftover |
 | T13 | Click token replay / publisher self-click | One-time HMAC token; TTL; optional IP+slot burst HMAC; house clicks never payable |
 | T14 | Serve CORS wildcard misused | `Access-Control-Allow-Origin: *` on `/v1/serve/*` only, with no `Access-Control-Allow-Credentials`, so a malicious page can read only the same public, cookie-free JSON/media any visitor could fetch directly; every other route keeps the credentialed allowlist |
+| T15 | SIWE message relayed from another domain (a phishing page has the victim sign a message for its own domain, then posts it to our `/v1/auth/verify`) | Strict EIP-4361 parser (the exact ABNF layout, EIP-55 address); `domain` and `URI` bound to an allowed web origin (`OPENAD_SIWE_ALLOWED_ORIGINS`, else `OPENAD_CORS_ORIGINS`); single-use nonce with a 10-minute TTL, consumed atomically only after the signature checks out, so a rejected message never burns it; chain id; `Issued At` window with 5 minutes of skew (ADR-0009 amendment) |
+| T16 | Auth table growth / nonce flooding | Used or expired nonces and expired sessions pruned from `POST /v1/auth/nonce` at most once a minute per process (the expiry DELETEs use migration `0005`'s indexes; used nonces go in a separate, unindexed DELETE over the nonces younger than the TTL); opt-in per-instance token bucket on nonce and verify (`OPENAD_AUTH_RATE_LIMIT_PER_MINUTE`, keyed by `OPENAD_TRUSTED_PROXY_HOPS`); Cloud Armor rate limiting on a load balancer recommended for a global limit (`docs/deploy-gcp.md`) |
 
 ## Residual risk
 
@@ -59,6 +61,14 @@ serve path, and the Vite web app. Specified (not implemented): `CampaignVault` +
 - Settler can over-report payable clicks up to caps (intended residual until Merkle challenge).
 - Indexer lag can serve a just-revoked creative for up to `ttl` + poll interval.
 - Domain verification is a UI badge, not a protocol rule.
+- The SIWE binding (T15) refuses a message signed for another domain. A phishing page can
+  still ask the victim to sign a message that names **our** web origin; only the wallet's
+  EIP-4361 domain check catches that, and a wallet can only apply it to a message it parses
+  as EIP-4361: one outside that grammar may be shown as plain text with no domain check. So
+  the web app and the sim emit the exact layout (viem's `createSiweMessage`). A wallet
+  without the check, or a user who ignores its warning, remains exposed.
+- The auth rate limit is per instance, forgotten on restart, and off on Cloud Run until the
+  `X-Forwarded-For` chain is verified in staging (T16).
 
 ## Review artifacts
 

@@ -28,8 +28,11 @@ export function useSiwe() {
       setError(null);
       try {
         const { nonce } = await api.authNonce();
+        // EIP-4361 `domain` is the RFC 3986 authority: host *and* port. The API only accepts a
+        // message whose domain and URI match one of its allowed web origins (ADR-0009
+        // amendment), so `hostname` (no port) would be rejected on any non-default port.
         const message = buildSiweMessage({
-          domain: window.location.hostname,
+          domain: window.location.host,
           address: next,
           uri: window.location.origin,
           chainId: targetChainId,

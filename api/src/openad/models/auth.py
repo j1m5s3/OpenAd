@@ -13,7 +13,8 @@ class AuthNonce(Base):
     __tablename__ = "auth_nonces"
 
     nonce: Mapped[str] = mapped_column(String(64), primary_key=True)
-    created_at: Mapped[int] = mapped_column(BigInteger)
+    # Indexed for pruning (migration 0005).
+    created_at: Mapped[int] = mapped_column(BigInteger, index=True)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
@@ -22,4 +23,5 @@ class Session(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     address: Mapped[str] = mapped_column(Address, index=True)
-    expires_at: Mapped[int] = mapped_column(BigInteger)
+    # Indexed for pruning (migration 0005).
+    expires_at: Mapped[int] = mapped_column(BigInteger, index=True)

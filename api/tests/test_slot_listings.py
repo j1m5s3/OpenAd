@@ -7,42 +7,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from eth_account import Account
-from eth_account.datastructures import SignedMessage
-from eth_account.messages import encode_defunct
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openad.models import SlotListing
 from openad.services.offchain import _looks_like_url
 from tests.conftest import make_slot
-
-
-def _sig_hex(signed: SignedMessage) -> str:
-    return "0x" + bytes(signed.signature).hex()
-
-
-def _siwe(address: str, nonce: str, chain_id: int = 31337) -> str:
-    return (
-        f"localhost wants you to sign in with your Ethereum account:\n"
-        f"{address}\n\n"
-        f"URI: http://localhost:5173\n"
-        f"Version: 1\n"
-        f"Chain ID: {chain_id}\n"
-        f"Nonce: {nonce}\n"
-        f"Issued At: 2026-09-25T00:00:00Z"
-    )
-
-
-async def _sign_in_account(client: AsyncClient, acct: Account) -> None:
-    nonce_res = await client.post("/v1/auth/nonce")
-    assert nonce_res.status_code == 200
-    nonce = nonce_res.json()["nonce"]
-    message = _siwe(acct.address, nonce)
-    signed = acct.sign_message(encode_defunct(text=message))
-    verify = await client.post(
-        "/v1/auth/verify", json={"message": message, "signature": _sig_hex(signed)}
-    )
-    assert verify.status_code == 200
+from tests.siwe_helpers import sign_in
 
 
 async def _seed_slot(session: AsyncSession, *, owner: str, slot_id: int = 1) -> None:
@@ -63,7 +34,7 @@ async def test_put_forbidden_for_non_owner(client: AsyncClient, session: AsyncSe
     owner = Account.create()
     other = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, other)
+    await sign_in(client, other)
     res = await client.put(
         "/v1/slots/1/listing",
         json={"summary": "Weekly crypto digest", "audience": "Solidity devs", "categories": []},
@@ -74,7 +45,7 @@ async def test_put_forbidden_for_non_owner(client: AsyncClient, session: AsyncSe
 async def test_put_round_trips_through_get_slot(client: AsyncClient, session: AsyncSession) -> None:
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     put = await client.put(
         "/v1/slots/1/listing",
         json={
@@ -100,7 +71,7 @@ async def test_put_round_trips_through_get_slot(client: AsyncClient, session: As
 async def test_put_collapses_whitespace(client: AsyncClient, session: AsyncSession) -> None:
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     put = await client.put(
         "/v1/slots/1/listing",
         json={"summary": "  Weekly   digest\n\tfor devs  ", "audience": "devs", "categories": []},
@@ -112,7 +83,7 @@ async def test_put_collapses_whitespace(client: AsyncClient, session: AsyncSessi
 async def test_put_rejects_unknown_category(client: AsyncClient, session: AsyncSession) -> None:
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     res = await client.put(
         "/v1/slots/1/listing",
         json={"summary": "x", "audience": "y", "categories": ["not-a-real-category"]},
@@ -126,7 +97,7 @@ async def test_put_rejects_more_than_three_categories(
 ) -> None:
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     res = await client.put(
         "/v1/slots/1/listing",
         json={
@@ -146,7 +117,7 @@ async def test_put_dedupes_categories_before_checking_the_cap(
     many": the cap applies after de-duplication, not before."""
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     res = await client.put(
         "/v1/slots/1/listing",
         json={"summary": "x", "audience": "y", "categories": ["defi", "defi", "DeFi", "security"]},
@@ -158,7 +129,7 @@ async def test_put_dedupes_categories_before_checking_the_cap(
 async def test_put_rejects_overlong_summary(client: AsyncClient, session: AsyncSession) -> None:
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     res = await client.put(
         "/v1/slots/1/listing",
         json={"summary": "x" * 141, "audience": "y", "categories": []},
@@ -170,7 +141,7 @@ async def test_put_rejects_overlong_summary(client: AsyncClient, session: AsyncS
 async def test_put_rejects_overlong_audience(client: AsyncClient, session: AsyncSession) -> None:
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     res = await client.put(
         "/v1/slots/1/listing",
         json={"summary": "x", "audience": "y" * 601, "categories": []},
@@ -182,7 +153,7 @@ async def test_put_rejects_overlong_audience(client: AsyncClient, session: Async
 async def test_put_rejects_url_in_summary(client: AsyncClient, session: AsyncSession) -> None:
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     for summary in ["Visit https://example.com for more", "Deals at example.com this week"]:
         res = await client.put(
             "/v1/slots/1/listing",
@@ -203,7 +174,7 @@ async def test_put_rejects_url_with_fullwidth_or_ideographic_dot(
     ):
         owner = Account.create()
         await _seed_slot(session, owner=owner.address.lower(), slot_id=slot_id)
-        await _sign_in_account(client, owner)
+        await sign_in(client, owner)
         res = await client.put(
             f"/v1/slots/{slot_id}/listing",
             json={"summary": summary, "audience": "y", "categories": []},
@@ -219,7 +190,7 @@ async def test_put_allows_common_tech_tokens_in_summary(
     """These read as a bare "domain" (label + dot + short suffix) but are not links."""
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     for summary in [
         "Node.js devs read our newsletter",
         "ethers.js users, mostly",
@@ -239,7 +210,7 @@ async def test_put_rejects_zwj_split_and_non_allowlisted_cctld_hosts(
     ccTLDs that look like file extensions (`.rs` Serbia, `.py` Paraguay) are not allowlisted."""
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     for summary in [
         "Deals at evil\u200d.com",
         "Deals at evil.\u200dcom",
@@ -269,7 +240,7 @@ def test_looks_like_url_zwj_and_suffix_allowlist() -> None:
 async def test_put_rejects_control_characters(client: AsyncClient, session: AsyncSession) -> None:
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     res = await client.put(
         "/v1/slots/1/listing",
         json={"summary": "hi\x00there", "audience": "y", "categories": []},
@@ -287,7 +258,7 @@ async def test_put_rejects_hidden_unicode_control_and_format_characters(
     before any check ran."""
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     for bad_char in ["‮", "​", "\u009b", "\u001c"]:
         res = await client.put(
             "/v1/slots/1/listing",
@@ -306,7 +277,7 @@ async def test_category_filter_hits_and_misses(client: AsyncClient, session: Asy
         ]
     )
     await session.commit()
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     await client.put(
         "/v1/slots/1/listing",
         json={"summary": "s1", "audience": "a1", "categories": ["defi"]},
@@ -358,7 +329,7 @@ async def test_category_filter_prefix_trap(client: AsyncClient, session: AsyncSe
 async def test_delete_clears_the_listing(client: AsyncClient, session: AsyncSession) -> None:
     owner = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     await client.put(
         "/v1/slots/1/listing",
         json={"summary": "s", "audience": "a", "categories": ["defi"]},
@@ -373,12 +344,12 @@ async def test_delete_requires_owner(client: AsyncClient, session: AsyncSession)
     owner = Account.create()
     other = Account.create()
     await _seed_slot(session, owner=owner.address.lower())
-    await _sign_in_account(client, owner)
+    await sign_in(client, owner)
     await client.put(
         "/v1/slots/1/listing",
         json={"summary": "s", "audience": "a", "categories": []},
     )
     await client.post("/v1/auth/logout")
-    await _sign_in_account(client, other)
+    await sign_in(client, other)
     delete = await client.delete("/v1/slots/1/listing")
     assert delete.status_code == 403
