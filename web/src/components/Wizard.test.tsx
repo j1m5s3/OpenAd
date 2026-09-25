@@ -37,4 +37,20 @@ describe('Wizard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(onSelect).toHaveBeenCalledWith('calendar');
   });
+
+  it('remounts step content on step change, so uncontrolled inputs never carry over', () => {
+    const step = (id: string, name: string, value: string) => ({
+      id,
+      title: id,
+      description: '',
+      whatNext: '',
+      status: 'todo' as const,
+      content: <input aria-label={name} defaultValue={value} />,
+    });
+    const steps = [step('mint', 'Width', '300'), step('calendar', 'Period length', '86400')];
+    const { rerender } = render(<Wizard activeId="mint" onSelect={() => {}} steps={steps} />);
+    expect(screen.getByLabelText('Width')).toHaveValue('300');
+    rerender(<Wizard activeId="calendar" onSelect={() => {}} steps={steps} />);
+    expect(screen.getByLabelText('Period length')).toHaveValue('86400');
+  });
 });

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="728" height="90" viewBox="0 0 728 90">
+  <rect width="728" height="90" fill="#1d4ed8"/>
+  <circle cx="52" cy="45" r="26" fill="#93c5fd"/>
+  <path d="M40 50c4-14 24-14 24 0" stroke="#1d4ed8" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <text x="96" y="40" font-family="sans-serif" font-size="26" font-weight="700" fill="#ffffff">Nimbus Wallet</text>
+  <text x="96" y="66" font-family="sans-serif" font-size="15" fill="#dbeafe">Self-custody on Base, in one tap</text>
+</svg>

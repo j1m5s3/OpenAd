@@ -1,0 +1,100 @@
+name: deploy
+
+# Staging-only, WIF-only, skipped entirely without GCP secrets configured. There is no prod
+# path in this workflow (ADR-0017 Consequences; prod is always a human running
+# scripts/deploy-gcp.sh --env prod --i-understand-this-is-mainnet themselves).
+on:
+  workflow_run:
+    workflows: [ci]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "What to deploy"
+        type: choice
+        options: [demo, stack]
+        default: demo
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency: deploy-staging
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    # `environment: staging` on this job too (not just `deploy`): the environment's protection
+    # rules and secret scoping apply as soon as anything in this run can read staging secrets,
+    # and `check` below reads GCP_WORKLOAD_IDENTITY_PROVIDER.
+    environment: staging
+    # workflow_run: only deploy a CI run that (a) actually succeeded, (b) ran because of a
+    # `push` (not e.g. a `pull_request_target` or a re-run of someone else's event — `push` is
+    # the only trigger ci.yml's own `on:` declares for `branches: [main]`), and (c) built the
+    # head of THIS repo, not a fork's — workflow_run fires for fork PRs' CI runs too, and a
+    # fork's `head_repository` differs from `github.repository`. workflow_dispatch is always a
+    # deliberate manual trigger on this repo, so it has no such run to check.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Check GCP secrets are configured
+        id: check
+        env:
+          WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        run: |
+          if [ -n "$WIF_PROVIDER" ]; then
+            echo "enabled=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >>"$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: [gate]
+    if: needs.gate.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      # workflow_run does not check out the triggering commit by default (it checks out
+      # deploy.yml's own ref on the default branch); pin explicitly to the CI run's head SHA.
+      # workflow_dispatch has no workflow_run event, so fall back to the ref it was run on.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Pick --only
+        id: only
+        env:
+          DISPATCH_ONLY: ${{ github.event.inputs.only }}
+        run: |
+          if [ -n "$DISPATCH_ONLY" ]; then
+            echo "value=${DISPATCH_ONLY}" >>"$GITHUB_OUTPUT"
+          elif [ -f contracts/deployments/84532.json ]; then
+            echo "value=stack" >>"$GITHUB_OUTPUT"
+          else
+            echo "value=demo" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy to staging
+        env:
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+        run: |
+          scripts/deploy-gcp.sh \
+            --env staging \
+            --only "${{ steps.only.outputs.value }}" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION"

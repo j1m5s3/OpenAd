@@ -214,7 +214,17 @@ Triggered by the indexer on `CreativeRegistered` and re-run on a schedule
    dimensions, else `failed:dimensions`.
 4. `click_url` must be `https://` and not on the phishing blocklist (`OPENAD_SAFE_BROWSING_KEY`,
    optional in dev).
-5. Store bytes at `cached_path` (local disk in dev, object storage in prod). Mark `verified`.
+5. Store bytes at `cached_path` via `services/media_store.py`'s `MediaStore` (local disk in dev,
+   GCS in prod behind `OPENAD_MEDIA_BACKEND`, ADR-0017). Mark `verified`.
+
+**Storage backends (ADR-0017).** `media_store.py` defines a `MediaStore` protocol with `put`
+and `get`. `OPENAD_MEDIA_BACKEND=local` (default) keeps today's disk cache under
+`OPENAD_MEDIA_CACHE_DIR`; `cached_path` is the absolute path. `OPENAD_MEDIA_BACKEND=gcs`
+(`OPENAD_MEDIA_GCS_BUCKET` required) stores objects at `gs://<bucket>/<prefix>/<key>` and
+`cached_path` is that ref. Reads dispatch on the ref's scheme, so switching backends does not
+require migrating already-written rows. This exists because on Cloud Run the indexer (writer)
+and the api (reader) are separate containers with no shared disk — local-only storage would
+silently break serve media in that topology.
 
 `NFT_REF`:
 
@@ -412,6 +422,15 @@ web/src/
 - **Dev wallet injector (ADR-0013).** `?devwallet=pub-3` (sim `#3–#9` only in critique
   sessions) installs `window.ethereum` as a JSON-RPC forwarder to Vite `/anvil` → Anvil.
   Addresses only in `web/`; Anvil unlocked accounts sign. Production builds omit the module.
+- **Demo mode (ADR-0016).** `VITE_DEMO_MODE=1` builds boot `web/src/demo/install.ts` instead of
+  the real providers: in-memory seeded fixtures answer reads (`lib/api.ts` request resolver,
+  6.2 in progress), a wagmi `mock` connector + in-memory EIP-1193 simulator answers writes (6.2
+  in progress), a network guard rejects/throws on `fetch`, `XMLHttpRequest`, `WebSocket`,
+  `EventSource` and `navigator.sendBeacon` for any URL that is not a same-origin static asset
+  (same-origin `/v1` and `/anvil` paths and the configured `VITE_API_URL` origin are denied
+  too), and a persistent `DemoBanner` renders. Never opens an RPC connection, never calls the
+  API, never signs with a real wallet. Tree-shaken out of normal builds; `npm run build:demo`
+  (6.2, in progress) will produce static `web/dist-demo` (SPA fallback).
 - **QA loop.** Headed SME/UX critique lives in `docs/qa/` and `.cursor/skills/sandbox-*-critique/`.
   Playwright MCP is configured in `.cursor/mcp.json` beside `openad-sim`. Scripted YAML stays in `e2e/`.
 
@@ -437,18 +456,21 @@ web/src/
 
 ## 7. Environments
 
-|             | Anvil (local)                                         | Base Sepolia (staging)   | Base (production)       |
-| ----------- | ----------------------------------------------------- | ------------------------ | ----------------------- |
-| Chain       | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC               | public RPC              |
-| USDC        | `MockUSDC`                                            | Circle testnet USDC      | native USDC             |
-| DB          | `docker compose up postgres`                          | managed Postgres         | managed Postgres        |
-| Media cache | local `./.cache/media`                                | object storage           | object storage + CDN    |
-| Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` (committed) | `8453.json` (committed) |
+|             | Anvil (local)                                         | Base Sepolia (staging)   | Base (production)       | Demo (static)             |
+| ----------- | ----------------------------------------------------- | ------------------------ | ----------------------- | -------------------------- |
+| Chain       | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC               | public RPC              | none (in-memory simulator) |
+| USDC        | `MockUSDC`                                            | Circle testnet USDC      | native USDC             | none (fixture math only)   |
+| DB          | `docker compose up postgres`                          | managed Postgres         | managed Postgres        | none (in-memory fixtures)  |
+| Media cache | local `./.cache/media`                                | GCS (`OPENAD_MEDIA_BACKEND=gcs`) | GCS + CDN in front of serve | none (bundled assets) |
+| Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` (committed) | `8453.json` (committed) | none (not read)            |
+| Build       | `npm run dev:web`                                     | `npm run build -w web`   | `npm run build -w web`  | `npm run build:demo` → `web/dist-demo` (hash router, relative base, no server fallback needed; ADR-0016) |
+| Production (GCP, ADR-0017) | n/a (Compose is the local target) | Cloud Run (`api`/`indexer`/`settler`/`web`) + Cloud SQL, one GCP project | same topology, separate project/instance, manual promotion | any static host, or the `web-demo` image |
 
 Local loop (canonical on Windows: `.\scripts\setup.cmd`, `.\scripts\dev-up.cmd`, `.\scripts\dev-down.cmd`;
 `npm run stack:*` is the same if PowerShell can load `npm.ps1`; bash twins on Linux/macOS/WSL
 per the ADR-0007 amendment). CI is `.github/workflows/ci.yml` (contracts, api, web/embed,
-Playwright, `check:sh`). Live GCP and Base mainnet are out of scope.
+Playwright, `check:sh`). Production hosting is GCP Cloud Run (ADR-0017, `docs/deploy-gcp.md`);
+CI's deploy job (step 27+28) is gated on GCP secrets and never broadcasts to Base mainnet.
 
 ```text
 .\scripts\setup.cmd                      # .env, docker, protocol deploy, alembic upgrade, npm install

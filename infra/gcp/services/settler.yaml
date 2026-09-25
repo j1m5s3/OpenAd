@@ -1,0 +1,46 @@
+# Cloud Run service spec for `openad-settler` (ADR-0017 / ADR-0014). Same shape as
+# indexer.yaml: no ingress, one always-on instance, no CPU throttling.
+#
+# This is the ONLY file in infra/gcp referencing openad-settler-key-<ENV>: only this service's
+# account may hold OPENAD_SETTLER_KEY, and per ADR-0014 this process may only call
+# `CampaignVault.settle_batch`. AGENTS.md: api and web never hold spending keys.
+#
+# Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG, CHAIN_ID, RPC_URL.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: openad-settler
+  labels:
+    env: ${ENV}
+  annotations:
+    run.googleapis.com/ingress: internal
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "1"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:${REGION}:openad-${ENV}
+    spec:
+      serviceAccountName: openad-settler-${ENV}@${PROJECT_ID}.iam.gserviceaccount.com
+      containers:
+        - image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/openad/api:${IMAGE_TAG}
+          command: ["uv", "run", "python", "-m", "openad.settler"]
+          env:
+            - name: OPENAD_ENV
+              value: "${ENV}"
+            - name: OPENAD_CHAIN_ID
+              value: "${CHAIN_ID}"
+            - name: OPENAD_RPC_URL
+              value: "${RPC_URL}"
+            - name: OPENAD_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openad-database-url-${ENV}
+                  key: latest
+            - name: OPENAD_SETTLER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openad-settler-key-${ENV}
+                  key: latest

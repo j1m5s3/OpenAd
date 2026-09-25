@@ -1,0 +1,148 @@
+# ADR-0016: Web demo mode
+
+- **Status:** Accepted
+- **Date:** 2026-09-24
+- **Scope:** web
+
+## Context
+
+Market-fit blocker #1 (`docs/business/market-fit.md`): nobody can see OpenAd work without
+running Anvil + Postgres + a wallet. There is no zero-backend way to show a publisher earning
+and an advertiser buying in one transaction. The build must stay static-hostable, must not add
+a runtime dependency or a service worker, and must never touch a real chain, a real wallet, or
+the API — the marketplace fee math and glossary vocabulary must still be real so the demo is not
+misleading.
+
+## Decision
+
+1. **Flag.** `VITE_DEMO_MODE=1` (string compare `=== '1'`), read once in
+   `web/src/demo/flag.ts`: `export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === '1'`.
+2. **Boot.** `web/src/main.tsx` does
+   `if (DEMO_MODE) { const { installDemo } = await import('./demo/install'); installDemo(); }`
+   before importing `App`, mirroring the existing ADR-0013 `installDevWallet` pattern so Rollup
+   drops the whole `demo/` chunk from normal builds (the guard is a static `false`).
+3. **Reads.** `web/src/lib/api.ts` gets a pluggable request resolver
+   (`setRequestHandler(fn)`); the default is the current `fetch` path. Demo mode installs a
+   fixture-backed handler (ROADMAP 6.2 step 6). Feature `api.ts` modules are unchanged.
+4. **Writes.** A wagmi `injected` connector (RainbowKit wallet "OpenAd Demo Wallet") whose
+   target is an in-memory EIP-1193 simulator (`web/src/demo/demoChain.ts`), plus a `custom`
+   transport over the same simulator (ROADMAP 6.2 step 7); `injected` rather than `mock` because
+   `mock` answers some methods itself instead of asking the provider. `lib/wagmi.ts` exports
+   `createRealConfig()`; `main.tsx` builds either it or `demo/wagmiDemo.ts`'s config. Feature
+   write code is unchanged. No `http()` transport is constructed in demo mode, and EIP-6963
+   discovery is off so a real browser wallet is never offered. The demo registers a synthetic
+   chain-31337 deployment (fake addresses + committed `web/src/demo/abis.generated.ts`, from
+   `web/scripts/gen-demo-abis.mjs`), since static/CI builds have no deployments artifact.
+5. **Network guard.** `installDemo()` wraps `fetch`, `XMLHttpRequest.open`, `WebSocket`,
+   `EventSource` and `navigator.sendBeacon` so any request whose URL is not an allowed
+   same-origin static asset is blocked: `fetch` logs and rejects with `DemoNetworkError` (it
+   never throws synchronously for a bad URL), the others log and throw it synchronously. Denied
+   even when same-origin: the `/v1` API paths and the `/anvil` dev RPC proxy path, plus the
+   configured `VITE_API_URL` origin outright — a leak fails loudly instead of silently reaching
+   a real API or RPC endpoint.
+6. **UX.** A persistent `DemoBanner` ("Demo — simulated data, no real funds or chain") renders
+   whenever `DEMO_MODE` is on. It hosts the persona switcher (`web/src/demo/PersonaSwitcher.tsx`,
+   a labelled "Viewing as" select: the advertiser Nimbus Wallet or the publisher Basecamp
+   Weekly, both fictional). Switching only calls the simulator's `setAccount` (which emits
+   `accountsChanged`) and invalidates queries; the in-memory store is shared, so a lease or
+   approval made as one persona shows for the other. The demo SIWE round trip (fake
+   `personal_sign` + demo `authVerify`, no signature check) runs on each switch, and the switcher
+   shows "Signed in" once the session belongs to the selected persona. The demo API enforces the
+   real session + slot-owner checks on house ad, domain verification and pricing suggestion.
+7. **Invariants.** In a `VITE_DEMO_MODE=1` build the app never opens an RPC connection, never
+   calls the API, never signs or requests a signature from a real wallet, and always shows the
+   banner. Demo code is tree-shaken out of normal builds. Demo fixtures use glossary vocabulary
+   and real fee math (`lib/auction.ts`, 250 bps default fee) so the numbers shown are honest.
+
+8. **No persistence, by design.** The demo store and the simulated wallet live in memory only:
+   a full page reload re-seeds the fixtures and disconnects the wallet. There is nothing to
+   persist and nothing to leak. Navigate with in-app links to keep a session's state.
+9. **Font-offline.** The demo build makes no outside request, fonts included: a
+   `transformIndexHtml` plugin in `web/vite.config.ts` drops the Google Fonts `preconnect` and
+   stylesheet links when `VITE_DEMO_MODE=1` (the CSS stack falls back to system fonts) and adds an
+   empty inline favicon so the browser's `/favicon.ico` probe cannot 404. Normal builds keep
+   `index.html` unchanged. The wallet connector is `injected` over the simulator (item 4).
+10. **Verification.** `npm run test:demo -w e2e` (`e2e/demo/`) builds the demo, serves it with
+    `vite preview`, drives both personas end to end (buy with permit, CPC campaign open/top
+    up/pause, mint + calendar + terms, approval, house ad, domain verification, pricing
+    suggestion, persona switch), and fails on any request off the preview origin, any
+    WebSocket, console error, page error or network-guard block.
+
+## Alternatives considered
+
+- **MSW (Mock Service Worker)** — adds a runtime dependency and a service worker for what is
+  meant to be a plain static site; rejected.
+- **Separate demo app package** — would duplicate UI and drift from the real app; rejected.
+- **Hitting a public testnet** — needs RPC access and a faucet, so it is not zero-backend;
+  rejected.
+
+## Consequences
+
+- ROADMAP 6.2 (done). `web/src/demo/` holds the flag, installer, network guard, banner, fixtures,
+  fixture API adapter, and in-memory chain simulator behind the demo wallet's `injected` connector.
+- `npm run build:demo` produces a static `web/dist-demo` bundle — hash router, relative base, **no
+  server-side fallback needed** (see the hosting amendment below) — with no RPC URL or real API
+  base baked in; CI builds and checks it (`check-demo-bundle.mjs`) to guard the tree-shaking
+  invariant.
+- Demo mode is additive: it changes bootstrapping (`main.tsx`), the request resolver seam in
+  `lib/api.ts`, and the wagmi config factory, but no feature-folder business logic.
+
+## Amendment (2026-09-25): Hosting — static build for any sub-path, no server fallback
+
+ROADMAP 6.2 step 12+13. The orchestrator publishes `web/dist-demo` as a **multi-file static site
+on a host with no SPA fallback, served from an unknown sub-path** (a claude.ai Artifact today; the
+`web-demo` nginx image, slice F, later). Three things would otherwise break there:
+`createBrowserRouter` 404s a deep link with no server rewrite; Vite's default absolute `base: '/'`
+makes every asset URL wrong under a sub-path; and the fixture creative URIs were absolute
+(`/demo/creatives/*.svg`), which breaks the same way for both the React `<img>`s and the
+`<open-ad>` shadow-DOM image.
+
+1. **`npm run build:demo`** (`web/scripts/build-demo.mjs`) runs the same sync + type-check steps
+   as `npm run build`, then `vite build --outDir dist-demo` with three env vars set in the child
+   process only: `VITE_DEMO_MODE=1`, `VITE_ROUTER=hash`, `VITE_BASE=./`. It also sets
+   `VITE_API_URL=http://demo.invalid` so `lib/api.ts`'s real-API fallback string never bakes into
+   the demo bundle at all (an unreachable, obviously-fake host — the same convention
+   `demo/demoApi.ts` already uses as its internal URL-parsing base). Output: `web/dist-demo`,
+   gitignored, never the same directory as the normal build's `web/dist`.
+2. **Router.** `web/src/app/routes.tsx` picks `createHashRouter` when
+   `import.meta.env.VITE_ROUTER === 'hash'`, else `createBrowserRouter` — one route table either
+   way. A hash router needs no server-side rewrite: every route lives in the fragment, which the
+   server never sees.
+3. **Base path.** `web/vite.config.ts` sets `base: process.env.VITE_BASE ?? '/'`; the normal build
+   is unchanged (`'/'`). `publicDir` is `public-demo` only when `VITE_DEMO_MODE=1`, else `public`
+   (`web/public` no longer exists — it held only the demo creative SVGs, moved to
+   `web/public-demo/demo/`), so the demo assets never ship in the normal `dist`.
+4. **Base-relative media.** Fixture creative `uri`s (`fixtures.ts`) are base-relative
+   (`demo/creatives/x.svg`, no leading slash). `demo/assetUrl.ts` resolves one to an absolute URL
+   at read time (`new URL(uri, document.baseURI).href`), used by `demoServe.ts` when it builds a
+   `ServeCreative`. `EmbedDemoPage.tsx` sets the embed's `api` attribute the same way
+   (`new URL('.', document.baseURI)`), so `GET {api}/v1/serve/{id}` lands on the page's own
+   sub-path.
+5. **Network guard, sub-path aware.** `isServeRoute` (`demo/install.ts`) matches
+   `.../v1/serve/{id}` from the end of the pathname, not the start, so it still matches under a
+   sub-path. `isAllowedDemoUrl`'s same-origin denial (`networkGuard.ts`) was already wrong here —
+   it matched `/v1`/`/anvil` only as a *leading* prefix, which would have let a sub-path request
+   like `/openad-demo/v1/slots` straight through to a real (missing) static file instead of
+   denying it — fixed to match them as a path *segment* anywhere in the pathname.
+6. **`web/scripts/check-demo-bundle.mjs`** (CI and local) checks: `dist-demo` bakes in no real
+   API/RPC host, except two inert literals matched by exact surrounding substring — the viem
+   `foundry` chain definition's own RPC URLs, and `@openad/embed`'s own `DEFAULT_API` fallback
+   (used only when an `<open-ad>` has no `api` attribute, never true here); `dist-demo/index.html`'s
+   asset URLs are all relative; and the normal `dist` carries no demo marker or `demo/creatives/*`
+   asset.
+7. **Playwright, static sub-path mode.** `e2e/demo/demo.config.ts` builds `dist-demo` and serves it
+   with a ~30-line static file server (`e2e/demo/static-server.mjs`, no SPA fallback) under
+   `/openad-demo/`. A `demoPath(route)` helper maps a route to its `#/route` URL under that mount.
+   A dedicated test loads `.../openad-demo/#/embed-demo` cold (no prior page) and asserts the
+   embed's image resolves under `/openad-demo/demo/creatives/`.
+8. **The nginx image variant (slice F) is unaffected.** `VITE_DEMO_MODE=1 npm run build -w web`
+   (no `VITE_ROUTER`/`VITE_BASE`) still outputs `dist` with the browser router and an absolute
+   base, which is fine behind nginx's `try_files $uri /index.html` fallback; only the standalone
+   static-Artifact path needs `build:demo`. The demo variant's CSP (`connect-src 'self'`, slice F)
+   holds regardless: demo mode never opens an outside connection either way.
+
+## References
+
+- ADR-0013 (dev Anvil wallet injector — the dynamic-import-before-boot pattern this reuses).
+- `docs/business/market-fit.md` (blocker #1).
+- ROADMAP 6.2.

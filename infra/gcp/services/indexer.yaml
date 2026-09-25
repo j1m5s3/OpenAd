@@ -1,0 +1,44 @@
+# Cloud Run service spec for `openad-indexer` (ADR-0017): no ingress, one always-on instance,
+# no CPU throttling (a poll loop must not stall between requests). Reuses the api image with a
+# different `command`. Never reachable from the internet.
+#
+# Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG, CHAIN_ID, RPC_URL.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: openad-indexer
+  labels:
+    env: ${ENV}
+  annotations:
+    run.googleapis.com/ingress: internal
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "1"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:${REGION}:openad-${ENV}
+    spec:
+      serviceAccountName: openad-indexer-${ENV}@${PROJECT_ID}.iam.gserviceaccount.com
+      containers:
+        - image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/openad/api:${IMAGE_TAG}
+          command: ["uv", "run", "python", "-m", "openad.indexer"]
+          # No `ports:` override needed: Cloud Run always injects $PORT regardless of
+          # ingress, and openad.health's liveness listener (ADR-0017) binds whatever it finds.
+          env:
+            - name: OPENAD_ENV
+              value: "${ENV}"
+            - name: OPENAD_MEDIA_BACKEND
+              value: "gcs"
+            - name: OPENAD_MEDIA_GCS_BUCKET
+              value: "openad-media-${ENV}"
+            - name: OPENAD_CHAIN_ID
+              value: "${CHAIN_ID}"
+            - name: OPENAD_RPC_URL
+              value: "${RPC_URL}"
+            - name: OPENAD_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openad-database-url-${ENV}
+                  key: latest

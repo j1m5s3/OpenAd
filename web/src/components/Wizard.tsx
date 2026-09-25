@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 export type WizardStepStatus = 'done' | 'active' | 'todo';
 
@@ -58,7 +58,10 @@ export function Wizard({
         <h2 className="font-medium">{active.title}</h2>
         <p className="mt-1 text-sm text-muted">{active.description}</p>
       </div>
-      {active.content}
+      {/* Keyed by step: each step is its own (uncontrolled) form, so switching steps must remount
+          it — otherwise React reuses the previous step's inputs and keeps their typed values
+          (e.g. "Width 300" became the calendar's "Period length"). */}
+      <Fragment key={active.id}>{active.content}</Fragment>
       <p className="rounded-xl bg-canvas px-3 py-2 text-sm text-muted">
         What happens next: {active.whatNext}
       </p>

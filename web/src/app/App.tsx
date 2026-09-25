@@ -1,15 +1,12 @@
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from 'react-router';
 import { WagmiProvider } from 'wagmi';
 
 import { DevWalletAutoConnect } from '../dev/autoConnect';
-import { wagmiConfig } from '../lib/wagmi';
+import type { OpenAdWagmiConfig } from '../lib/wagmi';
+import { queryClient } from './queryClient';
 import { router } from './routes';
-
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 10_000, retry: 1, refetchOnWindowFocus: false } },
-});
 
 const rkTheme = darkTheme({
   accentColor: '#c8f542',
@@ -18,9 +15,10 @@ const rkTheme = darkTheme({
   overlayBlur: 'small',
 });
 
-export function App() {
+/** `config` is built in `main.tsx`: the real config, or the demo simulator's (ADR-0016). */
+export function App({ config }: { config: OpenAdWagmiConfig }) {
   return (
-    <WagmiProvider config={wagmiConfig}>
+    <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={rkTheme}>
           <DevWalletAutoConnect />

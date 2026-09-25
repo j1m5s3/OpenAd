@@ -115,7 +115,7 @@ async def serve_media(
     )
     if verification is None or not verification.cached_path:
         return missing
-    data = await media_service.read_cached(verification.cached_path)
+    data = await media_service.read_cached(verification.cached_path, settings=settings)
     if data is None:
         return missing
 

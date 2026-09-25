@@ -140,12 +140,16 @@ protocol contract changes in this phase (anything that would need one is recorde
       `market-fit.md` maps to a 6.x task below; no fabricated customers/traction/quotes;
       glossary vocabulary only (never "sell a slot").
       _Done 2026-09-24._
-- [ ] **6.2 Demo mode + static showcase (ADR-0016).**
+- [x] **6.2 Demo mode + static showcase (ADR-0016).**
       Pointers: ADR-0016 (new) · `web/src/demo/` · `ARCHITECTURE.md` §7.
       Acceptance: `VITE_DEMO_MODE=1` build uses in-memory seeded fixtures and a simulated
       wallet; never opens an RPC connection, never calls the API, never signs or requests a
       real wallet signature; persistent "Demo — simulated data, no real funds" banner; demo
-      code tree-shaken out of normal builds; `web/dist-demo` static-hostable with SPA fallback.
+      code tree-shaken out of normal builds; `npm run build:demo` produces a static
+      `web/dist-demo` that runs from any sub-path with **no server-side fallback** (hash router
+      + relative base, ADR-0016 hosting amendment), proven by `npm run test:demo -w e2e`
+      (`e2e/demo/`, served with no SPA fallback) including a cold deep link.
+      _Done 2026-09-25._
 - [ ] **6.3 Publisher growth (embed code, share page, off-chain profile).**
       Pointers: `web/src/features/publisher/` · `docs/guide/publisher/`.
       Acceptance: copy-paste embed snippet generator with CMS instructions; public `/slot/:id`
@@ -175,6 +179,13 @@ protocol contract changes in this phase (anything that would need one is recorde
       `deploy` job gated on GCP secret presence, demo-site deploy only, no mainnet broadcast.
       Prerequisite done: `alembic upgrade head` works on a fresh database (`0001_baseline`
       frozen to explicit DDL; guarded by `api/tests/test_migrations.py`).
+      _Progress (step 27+28): `web/Dockerfile` (+ nginx template, per-variant CSP),
+      `infra/gcp/{cloudbuild.yaml,services/*.yaml,jobs/migrate.yaml}`,
+      `scripts/deploy-gcp.sh` (staging/prod, demo/stack/all, dry-run, mainnet-in-CI refusal),
+      `.github/workflows/deploy.yml` (WIF, gated on secrets, staging-only, no prod path) and a
+      CI `docker` job all done. `api/Dockerfile`'s CMD no longer migrates (a Cloud Run Job /
+      compose `migrate` service does, before traffic shifts). Remaining: the actual `gcloud`
+      deploy is user-run (step 29 records the outcome); this environment has no `gcloud`._
 - [ ] **6.7 Docs polish and launch readiness.**
       Pointers: `README.md` · `docs/business/demo-script.md` (new) · `docs/qa/scorecard.md`.
       Acceptance: README rewritten with value proposition, demo link, bash+PowerShell

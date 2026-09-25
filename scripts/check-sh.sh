@@ -50,7 +50,7 @@ run_fake() {
 
 echo ""
 echo "==> --help on every runnable script"
-for f in setup.sh dev-up.sh dev-down.sh stack-docker.sh; do
+for f in setup.sh dev-up.sh dev-down.sh stack-docker.sh deploy-gcp.sh; do
     if ! bash "${SCRIPT_DIR}/${f}" --help >/dev/null; then
         fail "${f} --help exited non-zero"
     else
@@ -103,6 +103,36 @@ if ! grep -q 'docker compose down -v' <<<"$DOWN_OUT"; then
     fail "dev-down.sh --dry-run --reset --yes missing 'docker compose down -v'"
 else
     echo "  ok: contains 'docker compose down -v'"
+fi
+
+echo ""
+echo "==> deploy-gcp.sh --dry-run --only demo (fake repo root; no gcloud/envsubst needed)"
+DEPLOY_OUT="$(run_fake deploy-gcp.sh --dry-run --env staging --only demo --project p --region r --tag faketag)"
+if ! grep -q 'builds submit' <<<"$DEPLOY_OUT"; then
+    fail "deploy-gcp.sh --dry-run missing 'builds submit'"
+else
+    echo "  ok: contains 'builds submit'"
+fi
+if ! grep -q 'run services replace' <<<"$DEPLOY_OUT"; then
+    fail "deploy-gcp.sh --dry-run missing 'run services replace'"
+else
+    echo "  ok: contains 'run services replace'"
+fi
+
+echo ""
+echo "==> deploy-gcp.sh --only stack refuses without a deployments artifact (fake repo root)"
+if run_fake deploy-gcp.sh --dry-run --env staging --only stack --project p --region r --tag faketag >/dev/null 2>&1; then
+    fail "deploy-gcp.sh --only stack should refuse without contracts/deployments/84532.json"
+else
+    echo "  ok: refused without 84532.json"
+fi
+
+echo ""
+echo "==> deploy-gcp.sh --env prod refuses under CI=true (fake repo root)"
+if CI=true run_fake deploy-gcp.sh --dry-run --env prod --project p --region r --i-understand-this-is-mainnet --tag faketag >/dev/null 2>&1; then
+    fail "deploy-gcp.sh --env prod should refuse when CI=true"
+else
+    echo "  ok: refused under CI=true"
 fi
 
 echo ""

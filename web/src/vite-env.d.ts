@@ -7,4 +7,9 @@ interface ImportMetaEnv {
   readonly VITE_TURNKEY_ORGANIZATION_ID?: string;
   readonly VITE_TURNKEY_AUTH_PROXY_CONFIG_ID?: string;
   readonly VITE_GUIDE_URL?: string;
+  readonly VITE_DEMO_MODE?: string;
+  readonly VITE_DEMO_URL?: string;
+  /** `'hash'` picks `createHashRouter` (static hosting with no server-side SPA fallback); any
+   * other value (including unset) keeps `createBrowserRouter` (ADR-0016 hosting amendment). */
+  readonly VITE_ROUTER?: string;
 }
