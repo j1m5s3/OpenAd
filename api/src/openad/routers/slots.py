@@ -98,7 +98,9 @@ async def domain_verification(
     rec = await auth_service.get_session(session, request.cookies.get(auth_service.COOKIE_NAME))
     await auth_service.require_slot_owner(session, slot_id, rec.address)
     if check:
-        row = await offchain_service.check_domain_verification(session, slot_id)
+        row = await offchain_service.check_domain_verification(
+            session, slot_id, request.app.state.settings
+        )
     else:
         row = await offchain_service.start_domain_verification(session, slot_id, method=method)
     return {
