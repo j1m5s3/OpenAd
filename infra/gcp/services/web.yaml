@@ -4,7 +4,11 @@
 #
 # Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG, API_ORIGIN (e.g.
 # https://api.staging.example.com), RPC_ORIGINS (space- or comma-free single CSP fragment,
-# e.g. "https://sepolia.base.org https://mainnet.base.org").
+# e.g. "https://sepolia.base.org https://mainnet.base.org"). Both must be bare origins
+# (scheme://host[:port], no path/userinfo) — scripts/deploy-gcp.sh's `origin_of` enforces this
+# and refuses a userinfo-bearing value; RPC_ORIGINS defaults to the public chain RPC the web
+# app actually uses, never to `RPC_URL` (api/indexer/settler's own, possibly-keyed, backend
+# RPC), which must never reach this CSP header.
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:

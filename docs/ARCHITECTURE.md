@@ -595,9 +595,10 @@ cd contracts && uv run mox run deploy --network anvil     # writes deployments/3
 cd api && uv run alembic upgrade head
 cd api && uv run uvicorn openad.main:app --reload
 cd api && uv run python -m openad.indexer
+cd api && uv run python -m openad.settler   # needs OPENAD_SETTLER_KEY
 npm run dev:web                          # http://localhost:5173
 npm run dev:embed                        # demo page using a local slot
-# optional: API + indexer as containers (migrations on API start)
+# optional: api/indexer/settler as containers; a one-shot `migrate` service runs first
 docker compose -f docker-compose.yml -f docker-compose.stack.yml up --build
 ```
 

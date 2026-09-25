@@ -5,7 +5,8 @@
 # account may hold OPENAD_SETTLER_KEY, and per ADR-0014 this process may only call
 # `CampaignVault.settle_batch`. AGENTS.md: api and web never hold spending keys.
 #
-# Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG, CHAIN_ID, RPC_URL.
+# Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG, CHAIN_ID, RPC_URL,
+# VPC_NETWORK, VPC_SUBNET (Direct VPC egress to Cloud SQL's private IP, docs/deploy-gcp.md §3).
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
@@ -22,6 +23,10 @@ spec:
         autoscaling.knative.dev/maxScale: "1"
         run.googleapis.com/cpu-throttling: "false"
         run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:${REGION}:openad-${ENV}
+        # Direct VPC egress (docs/deploy-gcp.md §3, ADR-0017 amendment): see api.yaml's comment.
+        # (inferred; verify before deploy)
+        run.googleapis.com/network-interfaces: '[{"network":"${VPC_NETWORK}","subnetwork":"${VPC_SUBNET}"}]'
+        run.googleapis.com/vpc-access-egress: private-ranges-only
     spec:
       serviceAccountName: openad-settler-${ENV}@${PROJECT_ID}.iam.gserviceaccount.com
       containers:

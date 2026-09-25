@@ -2,7 +2,9 @@
 # no CPU throttling (a poll loop must not stall between requests). Reuses the api image with a
 # different `command`. Never reachable from the internet.
 #
-# Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG, CHAIN_ID, RPC_URL.
+# Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG, CHAIN_ID, RPC_URL,
+# MEDIA_BUCKET (docs/deploy-gcp.md §4), VPC_NETWORK, VPC_SUBNET (Direct VPC egress to Cloud
+# SQL's private IP, docs/deploy-gcp.md §3).
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
@@ -19,6 +21,10 @@ spec:
         autoscaling.knative.dev/maxScale: "1"
         run.googleapis.com/cpu-throttling: "false"
         run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:${REGION}:openad-${ENV}
+        # Direct VPC egress (docs/deploy-gcp.md §3, ADR-0017 amendment): see api.yaml's comment.
+        # (inferred; verify before deploy)
+        run.googleapis.com/network-interfaces: '[{"network":"${VPC_NETWORK}","subnetwork":"${VPC_SUBNET}"}]'
+        run.googleapis.com/vpc-access-egress: private-ranges-only
     spec:
       serviceAccountName: openad-indexer-${ENV}@${PROJECT_ID}.iam.gserviceaccount.com
       containers:
@@ -32,7 +38,7 @@ spec:
             - name: OPENAD_MEDIA_BACKEND
               value: "gcs"
             - name: OPENAD_MEDIA_GCS_BUCKET
-              value: "openad-media-${ENV}"
+              value: "${MEDIA_BUCKET}"
             - name: OPENAD_CHAIN_ID
               value: "${CHAIN_ID}"
             - name: OPENAD_RPC_URL

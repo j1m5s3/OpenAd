@@ -27,8 +27,14 @@ gcloud services enable \
   artifactregistry.googleapis.com \
   storage.googleapis.com \
   cloudbuild.googleapis.com \
-  iamcredentials.googleapis.com
+  iamcredentials.googleapis.com \
+  compute.googleapis.com \
+  servicenetworking.googleapis.com
 ```
+
+`compute.googleapis.com` and `servicenetworking.googleapis.com` are needed for Private Services
+Access and Direct VPC egress (§3) — both underpin every Cloud Run service reaching Cloud SQL's
+private IP **(inferred; verify before deploy)**.
 
 ## 2. Artifact Registry
 
@@ -36,6 +42,19 @@ gcloud services enable \
 gcloud artifacts repositories create openad \
   --repository-format=docker --location=<REGION> \
   --description="OpenAd images (api/indexer/settler share one image; web separate)"
+```
+
+`gcloud builds submit` (§6) stages its source upload in a bucket. Rather than the default
+`gs://<PROJECT_ID>_cloudbuild` (whose ownership `gcloud` checks by listing the project's
+buckets when no `--gcs-source-staging-dir` is given, which needs project-wide list access
+**(inferred; verify before deploy)**), it uses a dedicated one instead, named by
+`BUILD_STAGING_BUCKET` (default `<PROJECT_ID>-openad-builds`, `scripts/deploy-gcp.sh`), so the
+deployer SA's storage grant (§10) can be scoped to just that bucket. Pre-create it once, since
+the deployer SA cannot create buckets itself:
+
+```bash
+gcloud storage buckets create gs://<PROJECT_ID>-openad-builds \
+  --location=<REGION> --uniform-bucket-level-access
 ```
 
 ## 3. Private Services Access + Cloud SQL Postgres 16
@@ -52,11 +71,37 @@ gcloud services vpc-peerings connect \
   --ranges=google-managed-services-default --network=default
 ```
 
+**Reaching the private IP: Direct VPC egress.** The instance below is created with
+`--no-assign-ip` (private IP only), so every Cloud Run service that talks to it (`api`,
+`indexer`, `settler`, and the `openad-migrate` job) needs a route into the VPC. Each of their
+manifests (`infra/gcp/services/{api,indexer,settler}.yaml`,
+`infra/gcp/jobs/migrate.yaml`) sets Direct VPC egress
+(`run.googleapis.com/network-interfaces` + `run.googleapis.com/vpc-access-egress:
+private-ranges-only`) against `VPC_NETWORK`/`VPC_SUBNET` (both default `default`,
+`scripts/deploy-gcp.sh`). `private-ranges-only` keeps RPC/GCS traffic on Cloud Run's normal
+internet egress, so no Cloud NAT is needed. The subnet (`default` in `<REGION>`) needs enough
+free IPs for however many instances these services scale to **(inferred; verify before
+deploy)**.
+
+**Verify-first, before the first real deploy.** The `openad-migrate` job (§7) opens the first
+connection to this instance on every deploy. If the `/cloudsql/…` Unix socket can't reach a
+private-IP-only instance from Cloud Run's Direct VPC egress path, store the connection string
+in TCP form instead — `postgresql+asyncpg://openad:<PASSWORD>@<PRIVATE_IP>:5432/openad` (drop
+`?host=/cloudsql/…`) — in the secret (step 5), where `<PRIVATE_IP>` is:
+
+```bash
+gcloud sql instances describe openad-<ENV> --format='value(ipAddresses[0].ipAddress)'
+```
+
+**(inferred; verify before deploy)**.
+
 ```bash
 # max_connections is set explicitly rather than left to the tier default: the connection
 # budget below requires at least 100, verified before every deploy.
+# --edition=ENTERPRISE: new Postgres 16 instances default to Enterprise Plus, which doesn't
+# offer db-custom-* tiers (inferred; verify before deploy).
 gcloud sql instances create openad-<ENV> \
-  --database-version=POSTGRES_16 --tier=db-custom-1-3840 \
+  --database-version=POSTGRES_16 --tier=db-custom-1-3840 --edition=ENTERPRISE \
   --region=<REGION> --no-assign-ip --network=default \
   --database-flags=max_connections=100
 
@@ -179,8 +224,11 @@ instance-level connection cap over fewer concurrent requests per instance.
 
 ## 4. GCS media bucket + service accounts
 
+Bucket names are global, so `<MEDIA_BUCKET>` below should be project-scoped — the suggested
+(and `scripts/deploy-gcp.sh`'s default) value is `openad-media-<PROJECT_ID>-<ENV>`.
+
 ```bash
-gcloud storage buckets create gs://openad-media-<ENV> \
+gcloud storage buckets create gs://<MEDIA_BUCKET> \
   --location=<REGION> --uniform-bucket-level-access
 
 gcloud iam service-accounts create openad-api-<ENV> --display-name="OpenAd api <ENV>"
@@ -188,14 +236,14 @@ gcloud iam service-accounts create openad-indexer-<ENV> --display-name="OpenAd i
 gcloud iam service-accounts create openad-settler-<ENV> --display-name="OpenAd settler <ENV>"
 gcloud iam service-accounts create openad-migrate-<ENV> --display-name="OpenAd migrate job <ENV>"
 
-gcloud storage buckets add-iam-policy-binding gs://openad-media-<ENV> \
+gcloud storage buckets add-iam-policy-binding gs://<MEDIA_BUCKET> \
   --member="serviceAccount:openad-api-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com" \
   --role="roles/storage.objectViewer"
 
 # objectUser (not objectCreator): the indexer legitimately overwrites the same key on a
 # replay (reorg re-verification, or the scheduled re-check), which objectCreator can't do.
 # Scoped to this one bucket only, not project-wide.
-gcloud storage buckets add-iam-policy-binding gs://openad-media-<ENV> \
+gcloud storage buckets add-iam-policy-binding gs://<MEDIA_BUCKET> \
   --member="serviceAccount:openad-indexer-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com" \
   --role="roles/storage.objectUser"
 
@@ -241,7 +289,12 @@ the images, running the migration job and deploying the services is one command
 ```bash
 cd /path/to/OpenAd
 ./scripts/deploy-gcp.sh --env staging --only demo  --project <PROJECT_ID> --region <REGION>
-./scripts/deploy-gcp.sh --env staging --only stack --project <PROJECT_ID> --region <REGION>
+# stack/all refuse when API_URL/WEB_URL are unset or empty (see the Guards list below) —
+# set them to this env's real public URLs first, even before §9's domain mapping exists: the
+# script smokes api/web at their live *.run.app URLs, not these domains (for the api, only
+# while API_INGRESS is `all`; see below).
+API_URL=https://api.<domain> WEB_URL=https://app.<domain> \
+  ./scripts/deploy-gcp.sh --env staging --only stack --project <PROJECT_ID> --region <REGION>
 # --only all does both plus the real (non-demo) web site. --dry-run prints every command
 # instead of running it. --env prod additionally requires
 # --i-understand-this-is-mainnet and is refused outright when CI=true.
@@ -253,6 +306,31 @@ This is exactly what `.github/workflows/deploy.yml` runs on `main` (staging only
 between the CI path and running it yourself. The rest of this section (§6-§8) is the manual
 fallback: the individual `gcloud` commands the script above wraps, for debugging one step in
 isolation or if you'd rather not use the script.
+
+**The script also makes `openad-api`, `openad-web` and `openad-web-demo` public** —
+`gcloud run services add-iam-policy-binding <svc> --member=allUsers --role=roles/run.invoker`
+after each one's `services replace` — because `services replace` applies no IAM of its own;
+without this follow-up step every request to those three services would get a 403 from Cloud
+Run itself, before the container ever runs. It is never applied to the indexer or the settler,
+which stay `--ingress=internal` with no public invoker at all. If an org policy
+(domain-restricted sharing) refuses `allUsers`, the binding step fails; set
+`PUBLIC_INVOKER=iam-disabled` (`scripts/deploy-gcp.sh`) instead. For all three services the
+script then writes `run.googleapis.com/invoker-iam-disabled: "true"` into the rendered spec
+before its `services replace` (a replace applies the whole spec, so without it every deploy
+would turn the IAM check back on until the next step), and runs `gcloud run services update
+<svc> --no-invoker-iam-check` after it in place of the binding **(inferred; verify before
+deploy — confirm the annotation and `--no-invoker-iam-check` are accepted and have no other
+side effects for this org/project first)**.
+
+**The api's ingress: `API_INGRESS`.** The script renders `api.yaml`'s
+`run.googleapis.com/ingress` annotation from `API_INGRESS`: `all` by default, or
+`internal-and-cloud-load-balancing` behind a load balancer, so nothing reaches the api around it
+(§11, "Click integrity"). The post-deploy smoke check follows the same variable. With `all` it
+fetches `/v1/health` at the service's own `*.run.app` URL, which answers even before §9 maps a
+domain. With `internal-and-cloud-load-balancing` that URL refuses outside requests **(inferred;
+verify before deploy)**, so it fetches `API_URL` instead, which must then be the load balancer's
+host. `openad-web` and `openad-web-demo` keep ingress `all` and are checked at their `*.run.app`
+URLs (the demo at `WEB_DEMO_URL` once that is set).
 
 ### 6. Build and push images (manual fallback)
 
@@ -270,7 +348,9 @@ variant). `indexer` and `settler` reuse the `api` image with a different Cloud R
 ### 7. Run the migration job (manual fallback)
 
 ```bash
-envsubst <infra/gcp/jobs/migrate.yaml # with PROJECT_ID, REGION, ENV, IMAGE_TAG set
+envsubst <infra/gcp/jobs/migrate.yaml # with PROJECT_ID, REGION, ENV, IMAGE_TAG, VPC_NETWORK,
+                                       # VPC_SUBNET set (an unset VPC_NETWORK/VPC_SUBNET renders
+                                       # "network":"","subnetwork":"" — always set both)
 gcloud run jobs replace <rendered-migrate.yaml> --project <PROJECT_ID> --region <REGION>
 gcloud run jobs execute openad-migrate --project <PROJECT_ID> --region <REGION> --wait
 ```
@@ -296,13 +376,16 @@ subset of `.env.example`; adjust per environment (`OPENAD_CHAIN_ID`, `OPENAD_RPC
 `84532.json`/`8453.json` baked into the image, or an external RPC URL).
 
 ```bash
+# --network/--subnet/--vpc-egress give each service Direct VPC egress, the route into the VPC
+# that reaching Cloud SQL's private IP needs (§3). (inferred; verify before deploy)
 gcloud run deploy openad-api \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest \
   --region=<REGION> --platform=managed --allow-unauthenticated \
   --port=8000 --min-instances=1 --max-instances=4 \
+  --network=<VPC_NETWORK> --subnet=<VPC_SUBNET> --vpc-egress=private-ranges-only \
   --service-account=openad-api-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com \
   --set-cloudsql-instances=<PROJECT_ID>:<REGION>:openad-<ENV> \
-  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=openad-media-<ENV>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_PUBLIC_URL=https://api.<ENV>.example.com,OPENAD_CORS_ORIGINS=https://<ENV>.example.com,OPENAD_DB_POOL_SIZE=4,OPENAD_DB_MAX_OVERFLOW=2 \
+  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=<MEDIA_BUCKET>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_PUBLIC_URL=https://api.<ENV>.example.com,OPENAD_CORS_ORIGINS=https://<ENV>.example.com,OPENAD_DB_POOL_SIZE=4,OPENAD_DB_MAX_OVERFLOW=2 \
   --set-secrets=OPENAD_DATABASE_URL=openad-database-url-<ENV>:latest,OPENAD_SESSION_SECRET=openad-session-secret-<ENV>:latest,OPENAD_CLICK_HMAC_SECRET=openad-click-hmac-secret-<ENV>:latest
 
 # No --port here: Cloud Run injects $PORT (default 8080) into every container regardless of
@@ -312,16 +395,18 @@ gcloud run deploy openad-indexer \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest \
   --region=<REGION> --platform=managed --no-allow-unauthenticated --ingress=internal \
   --min-instances=1 --max-instances=1 --no-cpu-throttling \
+  --network=<VPC_NETWORK> --subnet=<VPC_SUBNET> --vpc-egress=private-ranges-only \
   --command="uv,run,python,-m,openad.indexer" \
   --service-account=openad-indexer-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com \
   --set-cloudsql-instances=<PROJECT_ID>:<REGION>:openad-<ENV> \
-  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=openad-media-<ENV>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_DB_POOL_SIZE=2,OPENAD_DB_MAX_OVERFLOW=1 \
+  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=<MEDIA_BUCKET>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_DB_POOL_SIZE=2,OPENAD_DB_MAX_OVERFLOW=1 \
   --set-secrets=OPENAD_DATABASE_URL=openad-database-url-<ENV>:latest
 
 gcloud run deploy openad-settler \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest \
   --region=<REGION> --platform=managed --no-allow-unauthenticated --ingress=internal \
   --min-instances=1 --max-instances=1 --no-cpu-throttling \
+  --network=<VPC_NETWORK> --subnet=<VPC_SUBNET> --vpc-egress=private-ranges-only \
   --command="uv,run,python,-m,openad.settler" \
   --service-account=openad-settler-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com \
   --set-cloudsql-instances=<PROJECT_ID>:<REGION>:openad-<ENV> \
@@ -362,7 +447,14 @@ Map both services under one registrable domain instead, e.g. `app.<domain>` and
 ```bash
 gcloud run domain-mappings create --service=openad-api --domain=api.<domain> --region=<REGION>
 gcloud run domain-mappings create --service=openad-web --domain=app.<domain> --region=<REGION>
+gcloud run domain-mappings create --service=openad-web-demo --domain=demo.<domain> --region=<REGION>
 ```
+
+The third mapping is optional — the demo has no sign-in, so it has no same-site requirement of
+its own — but gives it a stable, branded URL instead of `openad-web-demo`'s bare `*.run.app`
+one. Once mapped, set both `WEB_DEMO_URL` (this runbook's own var, for
+`scripts/deploy-gcp.sh`'s post-deploy smoke check) and `DEMO_URL` (fed into the real web
+build's "Try the demo" link) to `https://demo.<domain>`.
 
 Then point the api's CORS allowlist and the web build's api URL at those same hosts:
 `OPENAD_CORS_ORIGINS=https://app.<domain>` (rendered into `api.yaml` as `WEB_URL`) and
@@ -418,12 +510,24 @@ gcloud iam service-accounts add-iam-policy-binding \
   --member="principalSet://iam.googleapis.com/projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/github/attribute.repository/<ORG>/<REPO>"
 
 # Minimum roles the deployer SA needs to build, push and deploy: it must NOT get
-# roles/owner or roles/editor.
-for ROLE in roles/run.admin roles/iam.serviceAccountUser roles/artifactregistry.writer; do
+# roles/owner or roles/editor. cloudbuild.builds.editor submits builds; serviceUsageConsumer
+# lets `gcloud builds submit` bill/attribute usage to this project; logging.viewer is needed
+# because gcloud streams CLOUD_LOGGING_ONLY build logs and exits non-zero without it.
+# (inferred; verify before deploy)
+for ROLE in roles/run.admin roles/iam.serviceAccountUser roles/artifactregistry.writer \
+  roles/cloudbuild.builds.editor roles/serviceusage.serviceUsageConsumer roles/logging.viewer; do
   gcloud projects add-iam-policy-binding <PROJECT_ID> \
     --member="serviceAccount:openad-deployer-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com" \
     --role="${ROLE}"
 done
+
+# The source upload for `gcloud builds submit` (§6) goes to the dedicated staging bucket from
+# §2 (gs://<PROJECT_ID>-openad-builds by default, BUILD_STAGING_BUCKET), which the deployer SA
+# needs write access to — scoped to just this bucket, not gs://<PROJECT_ID>_cloudbuild or any
+# project-wide storage role.
+gcloud storage buckets add-iam-policy-binding gs://<PROJECT_ID>-openad-builds \
+  --member="serviceAccount:openad-deployer-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com" \
+  --role="roles/storage.admin"
 ```
 
 `roles/iam.serviceAccountUser` lets the deployer SA deploy Cloud Run revisions *as*
@@ -437,12 +541,46 @@ plus `GCP_PROJECT_ID` and `GCP_REGION` for `scripts/deploy-gcp.sh --project`/`--
 the `deploy` job entirely when it is absent; the workflow only ever targets `staging` and never
 broadcasts to Base mainnet regardless of what secrets are configured.
 
+Also set, as GitHub **environment variables** (`vars`, not `secrets` — none of these are
+sensitive) on the `staging` environment, so the workflow can pass them through to
+`scripts/deploy-gcp.sh` (an unset one arrives as an empty string, which the script's guards and
+defaults treat the same as unset): `API_URL`, `WEB_URL`, `WEB_DEMO_URL`, `MEDIA_BUCKET`,
+`BUILD_STAGING_BUCKET`, `VPC_NETWORK`, `VPC_SUBNET`, `PUBLIC_INVOKER`, `API_INGRESS`,
+`WALLETCONNECT_PROJECT_ID`, `GUIDE_URL` and `DEMO_URL`. Leaving `API_URL`/`WEB_URL` unset means
+a `stack`/`all` deploy from CI refuses outright — see the Guards list in
+`scripts/deploy-gcp.sh --help` — rather than silently deploying against the `example.com`
+placeholder.
+
+**The service account that *runs* the build** (not the deployer SA above, which only
+*submits* it) is a separate identity — on a new project this is often the Compute Engine
+default service account, which gets no roles automatically. It needs `roles/cloudbuild.builds.builder`
+to run the build at all, plus `roles/artifactregistry.writer` to push the built images
+**(inferred; verify before deploy — see which service account `gcloud builds submit`'s output
+names as the build's runner)**.
+
 ## 11. Smoke checks
 
+Paste the whole block: it runs in a subshell with `set -e`, so the first failing check stops it
+with a non-zero status (`echo $?`) and leaves your own shell open.
+
 ```bash
-curl -sf https://api.<ENV>.example.com/v1/health
-curl -sf https://api.<ENV>.example.com/v1/serve/1
-curl -sf https://<ENV>.example.com/embed-demo   # or /demo/ for the demo build
+(
+  set -e
+  curl -sf https://api.<ENV>.example.com/v1/health
+
+  # /v1/serve/<id> legitimately 404s on a fresh deploy (no slot 1 minted yet): check the status
+  # and that the body is JSON, not `-f` (which treats a 404 as a curl failure).
+  STATUS="$(curl -s -o /tmp/serve1.json -w '%{http_code}' https://api.<ENV>.example.com/v1/serve/1)"
+  [ "$STATUS" = "200" ] || [ "$STATUS" = "404" ] || { echo "unexpected status: $STATUS" >&2; exit 1; }
+  python3 -m json.tool </tmp/serve1.json >/dev/null
+
+  curl -sf https://<ENV>.example.com/embed-demo   # the real web app's own embed-demo page
+
+  # openad-web-demo is a SEPARATE Cloud Run service with its own host (WEB_DEMO_URL, §9) —
+  # check it there at /healthz, never at a "/demo/" path on the real web app's own host.
+  curl -sf https://demo.<domain>/healthz
+  echo "smoke checks passed"
+)
 ```
 
 ### Sign-in origin

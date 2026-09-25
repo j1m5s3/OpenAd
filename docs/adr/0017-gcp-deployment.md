@@ -103,19 +103,28 @@ listening on `$PORT`.
 ### Database: Cloud SQL Postgres 16
 
 Managed Postgres 16, matching local (`docker-compose.yml` also runs Postgres 16). `api`,
-`indexer` and `openad-migrate` connect over a private IP / the Cloud SQL Auth Proxy sidecar (no
-public IP on the instance). A private IP Cloud SQL instance needs Private Services Access set
+`indexer`, `settler` and `openad-migrate` connect over a private IP / the Cloud SQL Auth Proxy
+sidecar (no public IP on the instance). A private IP Cloud SQL instance needs Private Services
+Access set
 up once per VPC (an allocated peering IP range plus a `servicenetworking.googleapis.com` VPC
 peering to that range) before instance creation; the runbook's §3 does this ahead of
 `gcloud sql instances create`. `OPENAD_DATABASE_URL` for each service comes from Secret
 Manager, not a plain env var, since it embeds a password.
+
+Reaching the private IP from Cloud Run needs its own route: `api`, `indexer`, `settler` and the
+`openad-migrate` job each get Direct VPC egress (`run.googleapis.com/network-interfaces` +
+`run.googleapis.com/vpc-access-egress: private-ranges-only`, docs/deploy-gcp.md §3). The
+instance is created with `--edition=ENTERPRISE`: new Postgres 16 instances default to
+Enterprise Plus, which doesn't offer the `db-custom-*` tier this ADR uses (both **inferred;
+verify before deploy**).
 
 ### Media cache: `MediaStore` interface, GCS in production
 
 `api/src/openad/services/media_store.py` (this step) defines a `MediaStore` Protocol with
 `local` (unchanged disk cache — the default, and still what a single-host Compose deployment
 uses) and `gcs` (`OPENAD_MEDIA_BACKEND=gcs`) implementations. In production, a single private,
-uniform-bucket-level-access bucket `openad-media-<env>` holds verified creative bytes; the
+uniform-bucket-level-access bucket `openad-media-<project>-<env>` (bucket names are global, so
+per-project; docs/deploy-gcp.md §4) holds verified creative bytes; the
 indexer's service account gets `roles/storage.objectUser` **scoped to that one bucket** (read +
 write + overwrite, no bucket-level admin) — plain `objectCreator` cannot overwrite an existing
 object, and the indexer legitimately re-writes the same `{creative_id}.bin` key on a replay
@@ -254,3 +263,54 @@ None of this changes the Decision, the services, or the media-cache design above
 guards what was already specified. `docs/threat-model.md` T17 ("Media fetch SSRF via redirect")
 is a related fix from the same step, in `api/src/openad/services/media.py`'s `fetch_media`, not
 in this ADR's scope.
+
+## Amendment (2026-09-25, slice-review fixes)
+
+A slice review of the launch state found the topology above described but not yet wired end to
+end. Closed without changing the Decision:
+
+- **VPC egress.** Cloud SQL's `--no-assign-ip` instance has no public IP, but nothing gave
+  Cloud Run a route to it: `api`, `indexer`, `settler` and the `openad-migrate` job now each
+  carry Direct VPC egress (`run.googleapis.com/network-interfaces` +
+  `run.googleapis.com/vpc-access-egress: private-ranges-only`) against `VPC_NETWORK`/
+  `VPC_SUBNET` (`scripts/deploy-gcp.sh`, default `default`/`default`). `private-ranges-only`
+  keeps RPC/GCS traffic on Cloud Run's normal internet egress, so no Cloud NAT is needed.
+- **Cloud SQL edition.** New Postgres 16 instances default to Enterprise Plus, which doesn't
+  offer the `db-custom-*` tier this ADR uses, so §3's `gcloud sql instances create` now passes
+  `--edition=ENTERPRISE` (both inferred; verify before deploy).
+- **Invoker binding.** `gcloud run services replace` applies no IAM by itself, so
+  `openad-api`/`openad-web`/`openad-web-demo` were reachable only by their deployer's own
+  identity, not the public. `scripts/deploy-gcp.sh` now runs
+  `gcloud run services add-iam-policy-binding <svc> --member=allUsers --role=roles/run.invoker`
+  after each of those three (never the indexer or the settler). Where an org policy
+  (domain-restricted sharing) refuses `allUsers`, the opt-in `PUBLIC_INVOKER=iam-disabled`
+  replaces the binding: the script writes `run.googleapis.com/invoker-iam-disabled: "true"` into
+  each of the three rendered specs before its replace, then runs
+  `gcloud run services update <svc> --no-invoker-iam-check` (inferred; verify before deploy).
+- **The api's ingress and its smoke check.** `api.yaml`'s ingress annotation is rendered from
+  `API_INGRESS`: `all` by default, or `internal-and-cloud-load-balancing` behind a load balancer
+  (docs/deploy-gcp.md §11, "Click integrity"). The script's post-deploy smoke check fetches
+  `/v1/health` at the service's own `*.run.app` URL while it's `all`, so a first deploy works
+  before any domain is mapped, and at `API_URL` (the load balancer's host) otherwise, since
+  `*.run.app` then refuses outside requests (inferred; verify before deploy).
+- **WIF deployer roles.** §10's roles list (`run.admin`, `iam.serviceAccountUser`,
+  `artifactregistry.writer`) could not itself run `gcloud builds submit`: it now also gets
+  `cloudbuild.builds.editor`, `serviceusage.serviceUsageConsumer`, `logging.viewer`, and
+  `storage.admin` scoped to a dedicated `gs://<PROJECT_ID>-openad-builds` source-upload bucket
+  (named by `BUILD_STAGING_BUCKET`, §2), pre-created once, rather than the default
+  `_cloudbuild` one (inferred; verify before deploy). The service account that *runs* the
+  build is a separate identity from the deployer SA these roles belong to — often the Compute
+  Engine default service account on a fresh project, which gets no roles automatically — and
+  needs `roles/cloudbuild.builds.builder` to run at all plus `artifactregistry.writer` to push
+  the built images (inferred; verify before deploy).
+- **Placeholder guard.** `API_URL`/`WEB_URL` defaulted to `example.com` hosts even for a real
+  `stack`/`all` deploy, and those defaults reached `OPENAD_PUBLIC_URL`/`OPENAD_CORS_ORIGINS`
+  and the web build's `VITE_API_URL`. `scripts/deploy-gcp.sh --only stack|all` now refuses
+  outright when either is unset or empty, before any default is applied.
+
+Also closed, smaller: the media bucket name is now per-project
+(`openad-media-<project>-<env>`, since bucket names are global); the web app's CSP
+`RPC_ORIGINS` defaults to the public chain RPC it actually uses and is reduced to a bare
+origin, never to the api/indexer/settler's own (possibly provider-keyed) `RPC_URL`; and
+`openad-web-demo` gets a domain mapping and a resolved `WEB_DEMO_URL` for its post-deploy smoke
+check instead of an undocumented placeholder host.
