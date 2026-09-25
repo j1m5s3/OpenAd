@@ -3,8 +3,10 @@
 import { setRequestHandler } from '../lib/api';
 import { createDemoProvider, type DemoProvider } from './demoChain';
 import { createDemoRequestHandler } from './demoApi';
+import { buildServeResponse } from './demoServe';
 import { registerDemoDeployment } from './deployment';
-import { installNetworkGuard } from './networkGuard';
+import { demoNow } from './clock';
+import { installNetworkGuard, registerDemoResponder } from './networkGuard';
 import { demoStore } from './store';
 
 /** Installs the fixture-backed `lib/api.ts` request handler (ROADMAP 6.2 step 6,
@@ -12,6 +14,30 @@ import { demoStore } from './store';
  * reaching the network. */
 function installDemoRequestHandler(): void {
   setRequestHandler(createDemoRequestHandler(demoStore));
+}
+
+/** Matches exactly `GET /v1/serve/{id}` — one path segment after `serve`, nothing more (rules
+ * out `POST /v1/serve/0`, a trailing sub-path like `/v1/serve/0/x`, and a near-miss route like
+ * `/v1/serves/0`). Exported so it is unit-tested directly (`networkGuard.test.ts`), separately
+ * from the guard's own same-origin check (`isAllowedDemoUrl`), which is what actually rules out a
+ * cross-origin request before this matcher is ever consulted. */
+export function isServeRoute(method: string, pathname: string): boolean {
+  return method === 'GET' && /^\/v1\/serve\/[^/]+$/.test(pathname);
+}
+
+/** The network guard's only same-origin exception (ROADMAP 6.2 step 10+11, `/embed-demo`): the
+ * real `<open-ad>` element calls `fetch("{origin}/v1/serve/{id}")`, and the guard would otherwise
+ * deny every `/v1` path. Answers that one `GET` route in-process from `demoStore`; every other
+ * `/v1` path, and any cross-origin request, stays denied (`networkGuard.ts`). */
+function installDemoServeResponder(): void {
+  registerDemoResponder(isServeRoute, (url) => {
+    const slotId = decodeURIComponent(url.pathname.split('/').pop() ?? '');
+    const body = buildServeResponse(demoStore.get(), slotId, demoNow());
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  });
 }
 
 let demoProvider: DemoProvider | null = null;
@@ -42,6 +68,7 @@ function mountDemoBanner(): void {
  * then the read/write seams later steps fill in. */
 export function installDemo(): void {
   installNetworkGuard();
+  installDemoServeResponder();
   installDemoRequestHandler();
   installDemoWalletConnector();
   mountDemoBanner();

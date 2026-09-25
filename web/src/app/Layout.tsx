@@ -24,10 +24,22 @@ function useDemoBanner(): ComponentType | null {
   return Banner;
 }
 
+/** Same dead-code-elimination pattern as `useDemoBanner`, for the guided tour overlay. */
+function useDemoTour(): ComponentType | null {
+  const [TourComponent, setTourComponent] = useState<ComponentType | null>(null);
+  useEffect(() => {
+    if (DEMO_MODE) {
+      void import('../demo/tour/Tour').then((m) => setTourComponent(() => m.Tour));
+    }
+  }, []);
+  return TourComponent;
+}
+
 const nav = [
   { to: routes.discover, label: 'Discover', end: true },
   { to: routes.supply, label: 'Supply', end: false },
   { to: routes.campaigns, label: 'Campaigns', end: false },
+  { to: routes.why, label: 'Why OpenAd', end: false },
 ];
 
 export function Layout() {
@@ -37,6 +49,7 @@ export function Layout() {
   const [q, setQ] = useState(params.get('q') ?? '');
   const guideHref = guideUrl();
   const DemoBanner = useDemoBanner();
+  const DemoTour = useDemoTour();
 
   function onSearch(e: FormEvent) {
     e.preventDefault();
@@ -119,6 +132,7 @@ export function Layout() {
         </nav>
       </header>
       {DemoBanner && <DemoBanner />}
+      {DemoTour && <DemoTour />}
       <IndexerLagBanner />
       {error && (
         <p className="border-b border-accent/40 bg-surface px-4 py-2 text-center text-sm text-ink">

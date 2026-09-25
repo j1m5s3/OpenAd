@@ -19,6 +19,25 @@ export class DemoNetworkError extends Error {
  * demo build talking to either, same-origin or not, is a leak. */
 const DENIED_SAME_ORIGIN_PATH_PREFIXES = ['/v1', '/anvil'];
 
+/** A registered exception: `matcher` decides whether a same-origin `fetch()` request is answered
+ * in-process instead of being denied, and `handler` builds the `Response`. Used only by
+ * `registerDemoResponder` below (ROADMAP 6.2 step 10+11, `/embed-demo`): the real `<open-ad>`
+ * element calls `fetch("{origin}/v1/serve/{id}")`, and that one path must resolve without ever
+ * reaching a real API. Every other `/v1` path, and any cross-origin request, stays denied. */
+interface DemoResponder {
+  matcher: (method: string, pathname: string, origin: string) => boolean;
+  handler: (url: URL) => Response;
+}
+
+let responder: DemoResponder | null = null;
+
+/** Registers the one same-origin exception `guardFetch` may answer in-process. Passing no
+ * arguments clears it (used by tests, and safe to call outside `DEMO_MODE` where it is simply
+ * never installed). */
+export function registerDemoResponder(matcher?: DemoResponder['matcher'], handler?: DemoResponder['handler']): void {
+  responder = matcher && handler ? { matcher, handler } : null;
+}
+
 /** Origins denied outright, in addition to same-origin path prefixes: the configured real API
  * base (`VITE_API_URL`), if it can be parsed. Kept as a function (not a module-level constant)
  * so it re-reads `import.meta.env` per call, which keeps it test-friendly. */
@@ -75,6 +94,16 @@ function guardFetch(win: typeof window): () => void {
   win.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = resolveRequestUrl(input);
     if (!isAllowedDemoUrl(url, win.location.origin)) {
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      let resolved: URL | null = null;
+      try {
+        resolved = new URL(url, win.location.origin);
+      } catch {
+        resolved = null;
+      }
+      if (resolved && resolved.origin === win.location.origin && responder?.matcher(method, resolved.pathname, resolved.origin)) {
+        return Promise.resolve(responder.handler(resolved));
+      }
       const error = new DemoNetworkError(url);
       console.error(error);
       // fetch() itself never throws synchronously for a bad URL; reject its promise so callers

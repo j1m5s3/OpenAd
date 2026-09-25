@@ -1,8 +1,27 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { DemoNetworkError, installNetworkGuard, isAllowedDemoUrl } from './networkGuard';
+import { DemoNetworkError, installNetworkGuard, isAllowedDemoUrl, registerDemoResponder } from './networkGuard';
+import { isServeRoute } from './install';
 
 const ORIGIN = 'http://localhost:3000';
+
+describe('isServeRoute', () => {
+  it('matches GET /v1/serve/{id}', () => {
+    expect(isServeRoute('GET', '/v1/serve/0')).toBe(true);
+  });
+
+  it('rejects a POST to the same path', () => {
+    expect(isServeRoute('POST', '/v1/serve/0')).toBe(false);
+  });
+
+  it('rejects a trailing sub-path', () => {
+    expect(isServeRoute('GET', '/v1/serve/0/x')).toBe(false);
+  });
+
+  it('rejects a near-miss route', () => {
+    expect(isServeRoute('GET', '/v1/serves/0')).toBe(false);
+  });
+});
 
 describe('isAllowedDemoUrl', () => {
   it('blocks the real API by origin', () => {
@@ -117,6 +136,44 @@ describe('installNetworkGuard', () => {
     expect(() => win.navigator.sendBeacon('http://127.0.0.1:8545', 'x')).toThrow(
       DemoNetworkError,
     );
+  });
+
+  it('answers a matched same-origin serve path in-process, with no real fetch', async () => {
+    const win = fakeWindow();
+    const originalFetch = win.fetch;
+    installNetworkGuard(win);
+    registerDemoResponder(
+      (method, pathname) => method === 'GET' && pathname === '/v1/serve/0',
+      () => new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } }),
+    );
+    try {
+      const res = await win.fetch('/v1/serve/0');
+      expect(await res.json()).toEqual({ ok: true });
+      expect(originalFetch).not.toHaveBeenCalled();
+    } finally {
+      registerDemoResponder();
+    }
+  });
+
+  it('leaves every other /v1 path denied even with a responder registered', async () => {
+    const win = fakeWindow();
+    installNetworkGuard(win);
+    registerDemoResponder(
+      (method, pathname) => method === 'GET' && pathname === '/v1/serve/0',
+      () => new Response('{}'),
+    );
+    try {
+      await expect(win.fetch('/v1/slots')).rejects.toBeInstanceOf(DemoNetworkError);
+      await expect(win.fetch('http://localhost:8000/v1/serve/0')).rejects.toBeInstanceOf(DemoNetworkError);
+    } finally {
+      registerDemoResponder();
+    }
+  });
+
+  it('registers nothing outside DEMO_MODE (no responder means every /v1 path is denied)', async () => {
+    const win = fakeWindow();
+    installNetworkGuard(win);
+    await expect(win.fetch('/v1/serve/0')).rejects.toBeInstanceOf(DemoNetworkError);
   });
 
   it('undo restores every wrapped surface', () => {

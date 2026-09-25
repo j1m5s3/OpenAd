@@ -10,7 +10,10 @@ import type { DemoProvider } from './demoChain';
 import { getDemoProvider } from './install';
 import { demoStore } from './store';
 
-type PersonaProvider = Pick<DemoProvider, 'getAccount' | 'setAccount'>;
+// `on`/`removeListener` are optional so existing tests can keep passing a bare
+// `{ getAccount, setAccount }` fake; the real demo provider always has them.
+type PersonaProvider = Pick<DemoProvider, 'getAccount' | 'setAccount'> &
+  Partial<Pick<DemoProvider, 'on' | 'removeListener'>>;
 
 /** The two personas the switcher offers: the default advertiser and the publisher that owns the
  * seeded LEASE slot #0 and CPC slot #1 (and has a pending approval request to act on). */
@@ -38,6 +41,20 @@ export function PersonaSwitcher({ provider }: { provider?: PersonaProvider }) {
       unsubscribe();
     };
   }, []);
+  // Stay in sync with an account switch made elsewhere (the guided tour switches personas
+  // directly through `setAccount`, ROADMAP 6.2 step 10+11) — not just one made through this
+  // dropdown's own `onChange`.
+  useEffect(() => {
+    if (!wallet.on || !wallet.removeListener) return;
+    const onAccountsChanged = (...args: unknown[]) => {
+      const accounts = args[0] as readonly string[] | undefined;
+      setCurrent((accounts?.[0] ?? wallet.getAccount()).toLowerCase());
+    };
+    wallet.on('accountsChanged', onAccountsChanged);
+    return () => {
+      wallet.removeListener?.('accountsChanged', onAccountsChanged);
+    };
+  }, [wallet]);
   const signedIn = session?.toLowerCase() === current;
 
   function onChange(address: string) {

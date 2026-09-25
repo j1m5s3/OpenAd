@@ -304,6 +304,109 @@ test('switching persona keeps the in-memory store (lease → publisher earnings,
   await expect(page.getByRole('button', { name: 'paused' }).first()).toBeVisible();
 });
 
+test('guided tour: Take the tour walks both personas through Discover → slot → Supply → Campaigns → embed → /why', async ({
+  page,
+}) => {
+  await connect(page);
+  await page.getByRole('button', { name: 'Take the tour' }).click();
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('Tour 1 of 6');
+  await expect(dialog).toContainText('Discover, as the advertiser');
+  await dialog.getByRole('button', { name: 'Next' }).click();
+
+  await expect(page).toHaveURL(/\/slots\/0$/);
+  await expect(dialog).toContainText('Tour 2 of 6');
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  await expect(dialog).toContainText('Tour 3 of 6');
+  await dialog.getByRole('button', { name: 'Back' }).click();
+  await expect(dialog).toContainText('Tour 2 of 6');
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  await dialog.getByRole('button', { name: 'Next' }).click();
+
+  await expect(page).toHaveURL(/\/supply$/);
+  await expect(dialog).toContainText('Tour 4 of 6');
+  await expect(dialog).toContainText('Switch to the publisher');
+  // The persona switch went through the demo wallet's setAccount, same as the manual switcher.
+  await expectSignedIn(page);
+  await expect(page.getByLabel('Viewing as')).toHaveValue(PUBLISHER_ADDRESS);
+  await dialog.getByRole('button', { name: 'Next' }).click();
+
+  await expect(page).toHaveURL(/\/campaigns$/);
+  await expect(dialog).toContainText('Tour 5 of 6');
+  await dialog.getByRole('button', { name: 'Next' }).click();
+
+  await expect(page).toHaveURL(/\/embed-demo$/);
+  await expect(dialog).toContainText('Tour 6 of 6');
+  await dialog.getByRole('button', { name: 'Finish' }).click();
+
+  await expect(page).toHaveURL(/\/why$/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('embed-demo: the real <open-ad> element renders a demo creative with no outside request, and updates after a buy', async ({
+  page,
+}) => {
+  await connect(page);
+  // Client-side navigation only: /embed-demo is reached from /why, not the main nav, and a full
+  // reload would re-seed the store and disconnect the demo wallet (see the file header).
+  await page.getByRole('navigation').first().getByRole('link', { name: 'Why OpenAd', exact: true }).click();
+  await page.getByRole('link', { name: 'See the embed live' }).click();
+  await expect(page.getByRole('heading', { name: 'See the embed live' })).toBeVisible();
+
+  const select = page.getByLabel('Slot');
+  await select.selectOption('0');
+  const embed = page.locator('open-ad[slot-id="0"]').first();
+  await expect(embed).toBeVisible();
+  const img = embed.locator('img');
+  await expect
+    .poll(async () => img.evaluate((el: HTMLImageElement) => el.getAttribute('src')))
+    .toMatch(/^\/demo\/creatives\//);
+
+  // Slot 0's current period is already leased in the fixture; switch to a slot whose current
+  // period is still open so a buy visibly changes what the embed serves.
+  await select.selectOption('4');
+  const embed4 = page.locator('open-ad[slot-id="4"]').first();
+  const before = await embed4.locator('img').evaluate((el: HTMLImageElement) => el.getAttribute('src'));
+
+  await page.getByRole('link', { name: 'Buy the next period as the advertiser →' }).click();
+  // Buy period 3 specifically: it is slot 4's *current* period (remainder phase, unsold in the
+  // fixture), so buying it is what changes what the embed serves right now. Its dialog ends in a
+  // "Buy remainder" button, not "Buy with permit" (`buyFirstPeriod` assumes the latter — a Dutch
+  // buy — so this is inlined rather than reusing it).
+  const period3Row = page.locator('tbody tr', { has: page.getByRole('cell', { name: '3', exact: true }) }).first();
+  await period3Row.getByRole('button', { name: 'Buy', exact: true }).click();
+  const buyDialog = page.getByRole('dialog');
+  await expect(buyDialog.locator('p.text-2xl')).toContainText('USDC');
+  await buyDialog.getByRole('button', { name: 'Next' }).click();
+  // Slot 4 is 300×250; the advertiser's default creative (#1) is 728×90, so pick the matching one
+  // (the dialog's "Creative" field has no <label htmlFor>, so select by its lone <select>).
+  await buyDialog.locator('select').selectOption('3');
+  await buyDialog.getByRole('button', { name: 'Next' }).click();
+  await buyDialog.getByRole('button', { name: 'Buy remainder' }).click();
+  await expect(buyDialog).toContainText('Confirmed on chain');
+  await buyDialog.getByRole('button', { name: 'Close' }).click();
+  await expect(period3Row.getByRole('button', { name: 'Leased' })).toBeVisible();
+  await page.goBack();
+  await select.selectOption('4');
+  const after = page.locator('open-ad[slot-id="4"]').first().locator('img');
+  await expect.poll(() => after.evaluate((el: HTMLImageElement) => el.getAttribute('src'))).not.toBe(before);
+});
+
+test('/why: the earnings calculator updates with integer USDC and shows the disclaimer', async ({ page }) => {
+  await page.goto('/why');
+  await expect(page.getByRole('heading', { name: /Keep about 97.5%/ })).toBeVisible();
+  await expect(page.getByText(/Illustrative\. Network take rates are approximate public ranges and vary\./).first()).toBeVisible();
+
+  const impressions = page.getByLabel('Monthly impressions');
+  const ecpm = page.getByLabel('eCPM (USD)');
+  await impressions.fill('1000000');
+  await ecpm.fill('5.00');
+  await expect(page.getByText('OpenAd payout')).toBeVisible();
+  const openAdPayout = page.getByText('OpenAd payout').locator('xpath=following-sibling::p[1]');
+  await expect(openAdPayout).toHaveText('4,875.00 USDC');
+});
+
 /** Same output as `web/src/lib/format.ts` `formatUsdc` (kept local: e2e does not import web). */
 function formatUsdc(baseUnits: bigint): string {
   const whole = baseUnits / USDC;

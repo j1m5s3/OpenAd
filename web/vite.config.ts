@@ -32,6 +32,15 @@ export default defineConfig(({ mode }) => ({
     ),
   ],
   envDir: repoRoot,
+  resolve: {
+    alias: {
+      // `@openad/embed`'s package "exports" points at its build output (`dist/open-ad.js`),
+      // which does not exist in dev or CI unless `embed`'s own build ran first. Resolve straight
+      // to its source instead, so `/embed-demo` renders the real `<open-ad>` element with no
+      // prebuilt dist required (ROADMAP 6.2 step 10+11).
+      '@openad/embed': fileURLToPath(new URL('../embed/src/open-ad.ts', import.meta.url)),
+    },
+  },
   server: {
     host: true,
     port: 5173,
