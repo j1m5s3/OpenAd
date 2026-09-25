@@ -1,0 +1,33 @@
+# Cloud Run Job `openad-migrate` (ADR-0017 "Migrations"): runs `alembic upgrade head` once,
+# before traffic shifts to a new `openad-api` revision. Reuses the api image; never listens on
+# a port (jobs don't need to). Applied with `gcloud run jobs replace`, run with
+# `gcloud run jobs execute openad-migrate --wait` (scripts/deploy-gcp.sh does both).
+#
+# Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG.
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: openad-migrate
+  labels:
+    env: ${ENV}
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:${REGION}:openad-${ENV}
+    spec:
+      template:
+        spec:
+          serviceAccountName: openad-migrate-${ENV}@${PROJECT_ID}.iam.gserviceaccount.com
+          maxRetries: 1
+          containers:
+            - image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/openad/api:${IMAGE_TAG}
+              command: ["uv", "run", "alembic", "upgrade", "head"]
+              env:
+                - name: OPENAD_ENV
+                  value: "${ENV}"
+                - name: OPENAD_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: openad-database-url-${ENV}
+                      key: latest

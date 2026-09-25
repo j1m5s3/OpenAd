@@ -1,0 +1,59 @@
+# Cloud Run service spec for `openad-api` (ADR-0017). Rendered with `envsubst` by
+# scripts/deploy-gcp.sh, then applied with `gcloud run services replace`.
+#
+# Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG, CHAIN_ID, RPC_URL,
+# API_URL (this service's own public URL, used to build serve mediaUrl), WEB_URL (for CORS).
+# Secrets (never plain env vars): openad-database-url-<ENV>, openad-session-secret-<ENV>,
+# openad-click-hmac-secret-<ENV> — all in Secret Manager, bound below by reference only.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: openad-api
+  labels:
+    env: ${ENV}
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # Cold starts on the serve path are a bad publisher/advertiser experience (ADR-0017).
+        autoscaling.knative.dev/minScale: "1"
+        run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:${REGION}:openad-${ENV}
+    spec:
+      serviceAccountName: openad-api-${ENV}@${PROJECT_ID}.iam.gserviceaccount.com
+      containers:
+        - image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/openad/api:${IMAGE_TAG}
+          ports:
+            - name: http1
+              containerPort: 8000
+          env:
+            - name: OPENAD_ENV
+              value: "${ENV}"
+            - name: OPENAD_MEDIA_BACKEND
+              value: "gcs"
+            - name: OPENAD_MEDIA_GCS_BUCKET
+              value: "openad-media-${ENV}"
+            - name: OPENAD_CHAIN_ID
+              value: "${CHAIN_ID}"
+            - name: OPENAD_RPC_URL
+              value: "${RPC_URL}"
+            - name: OPENAD_PUBLIC_URL
+              value: "${API_URL}"
+            - name: OPENAD_CORS_ORIGINS
+              value: "${WEB_URL}"
+            - name: OPENAD_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openad-database-url-${ENV}
+                  key: latest
+            - name: OPENAD_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: openad-session-secret-${ENV}
+                  key: latest
+            - name: OPENAD_CLICK_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: openad-click-hmac-secret-${ENV}
+                  key: latest

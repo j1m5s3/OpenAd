@@ -1,0 +1,51 @@
+# Rendered by nginxinc/nginx-unprivileged's docker-entrypoint envsubst step: only variables
+# that are ACTUAL environment variables at container start (e.g. ${PORT}, ${CSP_CONNECT_SRC})
+# are substituted — nginx's own $uri/$http_upgrade/... are untouched since they aren't env
+# vars. See web/Dockerfile (ENV PORT / ENV CSP_CONNECT_SRC) and infra/gcp/services/web*.yaml.
+
+# nginx only inherits a parent block's `add_header` directives into a location that declares
+# NONE of its own; both `/assets/` and `/` below also set their own Cache-Control, which
+# otherwise silently drops every server-level security header for exactly those two locations
+# — the ones that actually serve content. So each location below repeats the full header set
+# instead of relying on inheritance from the server block.
+server {
+    listen ${PORT};
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Repeated verbatim in every location block below (nginx does not merge add_header sets
+    # across levels — a location with its own add_header must restate all of them).
+    location = /healthz {
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src ${CSP_CONNECT_SRC}; frame-ancestors 'none'; base-uri 'self'" always;
+        default_type text/plain;
+        return 200 "ok";
+    }
+
+    location /assets/ {
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src ${CSP_CONNECT_SRC}; frame-ancestors 'none'; base-uri 'self'" always;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    location / {
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        add_header X-Frame-Options "DENY" always;
+        # connect-src is the enforcement point for ADR-0016 in the demo build: the demo
+        # variant's CSP_CONNECT_SRC is 'self' only, so even a bug that re-enabled a real
+        # fetch/RPC/WS call would be blocked by the browser, not just by the JS network guard.
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src ${CSP_CONNECT_SRC}; frame-ancestors 'none'; base-uri 'self'" always;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri /index.html;
+    }
+}

@@ -8,6 +8,7 @@ from openad.chain.client import make_web3
 from openad.chain.deployments import load_deployment
 from openad.config import get_settings
 from openad.db.session import Database
+from openad.health import Liveness, stale_after_seconds, start_liveness_server_from_env
 from openad.indexer.runner import IndexerRunner
 from openad.logging import configure_logging, get_logger
 
@@ -23,9 +24,13 @@ async def main() -> None:
             "indexer.nothing_to_index",
             hint="deployments artifact has no protocol contracts yet (ROADMAP 1.4)",
         )
+    liveness = Liveness(stale_after_seconds(settings.indexer_poll_seconds))
+    start_liveness_server_from_env(liveness)  # no-op unless Cloud Run's $PORT is set
     db = Database(settings.database_url)
     try:
-        runner = IndexerRunner(settings, db.sessions, deployment, make_web3(settings.rpc_url))
+        runner = IndexerRunner(
+            settings, db.sessions, deployment, make_web3(settings.rpc_url), liveness=liveness
+        )
         await runner.run_forever()
     finally:
         await db.dispose()

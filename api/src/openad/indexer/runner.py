@@ -26,6 +26,7 @@ from web3.types import LogReceipt
 
 from openad.chain.deployments import ContractInfo, Deployment
 from openad.config import Settings
+from openad.health import Liveness
 from openad.indexer import handlers
 from openad.indexer.events import DecodedEvent
 from openad.logging import get_logger
@@ -76,11 +77,13 @@ class IndexerRunner:
         sessions: async_sessionmaker[AsyncSession],
         deployment: Deployment,
         w3: AsyncWeb3[Any],
+        liveness: Liveness | None = None,
     ) -> None:
         self.settings = settings
         self.sessions = sessions
         self.deployment = deployment
         self.w3 = w3
+        self.liveness = liveness
         self.contracts: list[ContractInfo] = deployment.protocol_contracts
         # address (lowercase) -> (contract name, topic0 -> web3 event decoder)
         self._decoders: dict[str, tuple[str, dict[bytes, Any]]] = {
@@ -262,6 +265,8 @@ class IndexerRunner:
                 await self.run_once()
             except Exception:
                 log.exception("indexer.iteration_failed")
+            if self.liveness is not None:
+                self.liveness.tick()
             await asyncio.sleep(self.settings.indexer_poll_seconds)
 
 

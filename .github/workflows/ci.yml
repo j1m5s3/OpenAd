@@ -67,6 +67,35 @@ jobs:
       - run: npm run build:demo
       - run: node web/scripts/check-demo-bundle.mjs
       - run: npx prettier --check web/src/demo e2e/demo web/src/features/marketing web/src/app/routes.tsx
+      - run: npm run check:sh
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build api image
+        run: docker build -f api/Dockerfile --build-arg UV_EXTRAS=gcs -t openad-api:ci .
+      - name: Build web-demo image
+        run: docker build -f web/Dockerfile --build-arg VITE_DEMO_MODE=1 -t openad-web-demo:ci .
+      - name: Run web-demo container
+        run: docker run -d --name web-demo -p 8080:8080 openad-web-demo:ci
+      - name: Wait for /healthz
+        run: curl --fail --silent --show-error --retry 10 --retry-delay 2 --retry-connrefused
+          http://localhost:8080/healthz
+      - name: Check / returns 200
+        run: |
+          code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/)"
+          test "$code" = "200"
+      - name: Check demo CSP is same-origin only
+        run: |
+          curl -sSI http://localhost:8080/ | tr -d '\r' \
+            | grep -i '^content-security-policy:' | grep -qF "connect-src 'self'"
+      - name: Container logs (always, for debugging)
+        if: always()
+        run: docker logs web-demo || true
+      - name: Stop container
+        if: always()
+        run: docker rm -f web-demo || true
 
   e2e:
     runs-on: ubuntu-latest

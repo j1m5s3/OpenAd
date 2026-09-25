@@ -212,7 +212,17 @@ Triggered by the indexer on `CreativeRegistered` and re-run on a schedule
    dimensions, else `failed:dimensions`.
 4. `click_url` must be `https://` and not on the phishing blocklist (`OPENAD_SAFE_BROWSING_KEY`,
    optional in dev).
-5. Store bytes at `cached_path` (local disk in dev, object storage in prod). Mark `verified`.
+5. Store bytes at `cached_path` via `services/media_store.py`'s `MediaStore` (local disk in dev,
+   GCS in prod behind `OPENAD_MEDIA_BACKEND`, ADR-0017). Mark `verified`.
+
+**Storage backends (ADR-0017).** `media_store.py` defines a `MediaStore` protocol with `put`
+and `get`. `OPENAD_MEDIA_BACKEND=local` (default) keeps today's disk cache under
+`OPENAD_MEDIA_CACHE_DIR`; `cached_path` is the absolute path. `OPENAD_MEDIA_BACKEND=gcs`
+(`OPENAD_MEDIA_GCS_BUCKET` required) stores objects at `gs://<bucket>/<prefix>/<key>` and
+`cached_path` is that ref. Reads dispatch on the ref's scheme, so switching backends does not
+require migrating already-written rows. This exists because on Cloud Run the indexer (writer)
+and the api (reader) are separate containers with no shared disk — local-only storage would
+silently break serve media in that topology.
 
 `NFT_REF`:
 
@@ -390,19 +400,28 @@ web/src/
 | Chain       | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC               | public RPC              | none (in-memory simulator) |
 | USDC        | `MockUSDC`                                            | Circle testnet USDC      | native USDC             | none (fixture math only)   |
 | DB          | `docker compose up postgres`                          | managed Postgres         | managed Postgres        | none (in-memory fixtures)  |
-| Media cache | local `./.cache/media`                                | object storage           | object storage + CDN    | none (bundled assets)      |
+| Media cache | local `./.cache/media`                                | GCS (`OPENAD_MEDIA_BACKEND=gcs`) | GCS + CDN in front of serve | none (bundled assets) |
 | Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` (committed) | `8453.json` (committed) | none (not read)            |
 | Build       | `npm run dev:web`                                     | `npm run build -w web`   | `npm run build -w web`  | `npm run build:demo` → `web/dist-demo` (hash router, relative base, no server fallback needed; ADR-0016) |
+| Production (GCP, ADR-0017) | n/a (Compose is the local target) | Cloud Run (`api`/`indexer`/`settler`/`web`) + Cloud SQL, one GCP project | same topology, separate project/instance, manual promotion | any static host, or the `web-demo` image |
 
 Local loop (canonical on Windows: `.\scripts\setup.cmd`, `.\scripts\dev-up.cmd`, `.\scripts\dev-down.cmd`;
-`npm run stack:*` is the same if PowerShell can load `npm.ps1`). CI is `.github/workflows/ci.yml`
-(contracts, api, web/embed, Playwright). Live GCP and Base mainnet are out of scope.
+`npm run stack:*` is the same if PowerShell can load `npm.ps1`; bash twins on Linux/macOS/WSL
+per the ADR-0007 amendment). CI is `.github/workflows/ci.yml` (contracts, api, web/embed,
+Playwright, `check:sh`). Production hosting is GCP Cloud Run (ADR-0017, `docs/deploy-gcp.md`);
+CI's deploy job (step 27+28) is gated on GCP secrets and never broadcasts to Base mainnet.
 
 ```text
 .\scripts\setup.cmd                      # .env, docker, protocol deploy, alembic upgrade, npm install
 .\scripts\dev-up.cmd                     # starts docker if needed; titled windows: api, indexer, web (-Embed optional)
 .\scripts\sim-up.cmd                     # optional: live Anvil personas (openad-sim). Not started by dev-up
 .\scripts\dev-down.cmd                   # stops docker; next up restarts Anvil/Postgres (Anvil chain is ephemeral)
+
+# Linux/macOS/WSL bash twins (ADR-0007 amendment); each supports --dry-run
+./scripts/setup.sh                       # same steps as setup.cmd
+./scripts/dev-up.sh                      # background children (not titled windows), line-prefixed output; --embed
+./scripts/dev-down.sh                    # stops docker; --reset drops pgdata/31337.json/api/.cache
+./scripts/stack-docker.sh                # one-command full stack: api/indexer/settler as containers
 ```
 
 What the scripts run (manual equivalent):

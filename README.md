@@ -50,6 +50,14 @@ Prerequisites: [uv](https://docs.astral.sh/uv/), Node ≥ 20, Docker Desktop run
 
 These `.cmd` shims exist because Windows PowerShell often blocks `npm.ps1` (`running scripts is disabled on this system`). Equivalents: `npm.cmd run stack:up`, or `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` and then `npm run stack:*`.
 
+On Linux/macOS/WSL, use the bash twins instead (ADR-0007 amendment):
+
+```text
+./scripts/setup.sh       # same steps as setup.cmd; --skip-docker, --dry-run
+./scripts/dev-up.sh      # starts docker if needed; background children, not titled windows (add --embed for the embed demo)
+./scripts/dev-down.sh    # stops docker; --reset drops pgdata/31337.json/api/.cache
+```
+
 Setup deploys the protocol on Anvil (CreativeRegistry, AdSlot, Marketplace, MockUSDC) and applies Alembic migrations. The manual equivalent of these scripts is in `docs/ARCHITECTURE.md` §7.
 
 After `stack:up`: API health at `http://localhost:8000/v1/health`, web at `http://localhost:5173`.
