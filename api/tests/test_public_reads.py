@@ -5,6 +5,7 @@ from __future__ import annotations
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from openad.db.types import UINT256_MAX
 from tests.conftest import (
     ADVERTISER,
     PUBLISHER,
@@ -67,3 +68,15 @@ async def test_slot_periods_range_is_capped_at_60(
     too_wide = await client.get("/v1/slots/1/periods?from=0&to=60")
     assert too_wide.status_code == 422
     assert too_wide.json()["error"] == "invalid_window"
+
+
+async def test_slot_periods_index_above_uint256_max_gets_422(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    """A width of 1 (`from == to`) slips past the range cap, so `to` alone must still be bounded
+    to a valid uint256 — otherwise the Uint256 bind raises and the request 500s instead of 422."""
+    session.add_all([make_slot(), make_terms()])
+    await session.commit()
+
+    resp = await client.get(f"/v1/slots/1/periods?from={UINT256_MAX + 1}&to={UINT256_MAX + 1}")
+    assert resp.status_code == 422
