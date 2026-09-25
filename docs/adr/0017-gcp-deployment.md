@@ -185,7 +185,8 @@ itself, never an advertiser URL.
   hold an open poll loop against `eth_getLogs` and a database cursor. Rejected.
 - **Cloudflare-only (Workers + R2 + D1)** — would mean rewriting the API off SQLAlchemy/asyncpg
   and the indexer off `web3.py`/`httpx`, a rewrite this ADR is not proposing. Rejected; nothing
-  stops adding Cloudflare in front of Cloud Run later purely as a CDN for serve traffic.
+  stops adding Cloudflare in front of Cloud Run later purely as a CDN for `/v1/serve/*/media`
+  only, never `/v1/serve/{slot_id}` itself.
 - **Shared-disk single VM (all four processes on one host)** — sidesteps the media-cache problem
   entirely (this is exactly today's Docker Compose topology) but gives up independent scaling,
   independent deploys, and a managed database. Rejected as the production target; it remains
@@ -303,7 +304,9 @@ end. Closed without changing the Decision:
   (docs/deploy-gcp.md §11, "Click integrity"). The script's post-deploy smoke check fetches
   `/v1/health` at the service's own `*.run.app` URL while it's `all`, so a first deploy works
   before any domain is mapped, and at `API_URL` (the load balancer's host) otherwise, since
-  `*.run.app` then refuses outside requests (inferred; verify before deploy).
+  `*.run.app` then refuses outside requests (inferred; verify before deploy). Set
+  `API_INGRESS=internal-and-cloud-load-balancing` only once the load balancer already serves
+  `API_URL`.
 - **WIF deployer roles.** §10's roles list (`run.admin`, `iam.serviceAccountUser`,
   `artifactregistry.writer`) could not itself run `gcloud builds submit`: it now also gets
   `cloudbuild.builds.editor`, `serviceusage.serviceUsageConsumer`, `logging.viewer`, and

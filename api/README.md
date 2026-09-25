@@ -35,7 +35,7 @@ src/openad/
   serve/           origin.py + cache generation; verified bytes on disk via Settings.media_cache_path
   chain/           deployments.py (artifact loader), client.py (AsyncWeb3) — indexer + settler
   indexer/         events.py (EXPECTED_EVENTS), handlers.py (one per event), runner.py, __main__.py
-  settler/         batches.py, runner.py, settings.py (OPENAD_SETTLER_KEY), __main__.py
+  settler/         batches.py, identity.py, runner.py, settings.py (OPENAD_SETTLER_KEY), __main__.py
 alembic/           migrations (0001_baseline, 0002_cpc, 0003_analytics_indexes,
                      0004_slot_listings, 0005_auth_prune_indexes)
 tests/             pytest + pytest-asyncio; SQLite in-memory; httpx ASGI client

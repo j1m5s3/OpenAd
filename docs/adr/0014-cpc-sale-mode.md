@@ -114,8 +114,10 @@ recorded at serve, IVT caps pass. House-ad clicks are never payable.
 
 **IVT (first cut):** one use per token; token TTL 1 hour; max payable clicks
 per campaign per hour (config); discard if no prior serve. Raw IP is not stored
-on `serve_events`. The click route may keep a short-TTL HMAC of
-`ip + slot_id` for burst discard (`OPENAD_CLICK_IVT`). No cookies in the embed.
+on `serve_events`. The click route keeps a short-TTL HMAC of the trusted-hop
+client key (`OPENAD_TRUSTED_PROXY_HOPS`) and `slot_id`, in a bounded map, for
+burst discard (`OPENAD_CLICK_IVT`); it is skipped, and logged, until the hop
+count is verified in staging (ROADMAP 6.14). No cookies in the embed.
 
 **Settler** (platform EOA, like moderator): `settle_batch(campaign_id,
 payable_clicks, charged_usdc, batch_id)`. On-chain checks: caller is settler,

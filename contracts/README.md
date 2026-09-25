@@ -19,6 +19,8 @@ src/
   CreativeRegistry.vy  (ROADMAP 1.1)  creatives, approvals, allowlists, moderator revoke
 script/
   deploy.py            deploy order per PROTOCOL §10; writes deployments/<chainId>.json
+  settler.py           resolve_settler(): who CampaignVault.set_settler gets (PROTOCOL §10)
+  set_settler.py       rotates the settler via CampaignVault.set_settler (deploy-sepolia.md)
   artifacts.py         artifact schema + writer (ARCHITECTURE §4.1)
 tests/
   conftest.py          personas (publisher/advertiser/treasury), usdc_token fixture
@@ -36,6 +38,7 @@ uv run mox test                  # titanoboa (pyevm), fast; use -k / -x as with 
 uv run mox run deploy            # pyevm dry run (no artifact written)
 uv run mox run deploy --network anvil          # docker compose up -d anvil first
 uv run mox run deploy --network base-sepolia   # prompts; needs BASE_SEPOLIA_RPC_URL in ../.env
+                                                # and an exported OPENAD_SETTLER_ADDRESS
 uv run vyper -p ./src <file.vy> -f abi          # compile a single file directly
 ```
 

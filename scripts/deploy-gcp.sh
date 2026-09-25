@@ -90,6 +90,8 @@ Environment variables (all optional unless noted; an empty value counts as unset
                          internal-and-cloud-load-balancing so nothing reaches the api around it,
                          and make API_URL the load balancer's host (docs/deploy-gcp.md §11,
                          "Click integrity"; inferred; verify before deploy).
+                         Set it only once the load balancer already serves API_URL: switching
+                         earlier fails the api smoke check below.
 
 Smoke checks: openad-api's /v1/health is fetched at its own *.run.app URL (status.url, from
 `gcloud run services describe`) while API_INGRESS is all, so a first run works before

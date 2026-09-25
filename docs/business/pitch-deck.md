@@ -135,7 +135,7 @@ customer names, quotes, or traction are claimed — the deck is honest about cur
   demo mode; publisher growth tooling (embed code, shareable slot page, slot listings with
   category filters); analytics (CTR, eCPM, spend/earnings); cross-platform run scripts; and
   production deploy artifacts (Cloud Run configs, migration job, nginx image) plus auth, capacity
-  and request-bound hardening.
+  and request-bound hardening, and deploy and click-integrity fixes.
 - **Pending:** the live GCP deployment (ROADMAP 6.10, a user-run step), a Base Sepolia contract
   deployment, and an independent security audit before any mainnet deploy.
 - Honest framing: this is a pre-launch, testnet-ready product — no customers, users, or traction

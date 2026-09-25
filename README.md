@@ -152,6 +152,9 @@ Start at [`docs/README.md`](docs/README.md). AI agents and new contributors: rea
   request (PR #18, T19).
 - **Deploy artifacts** — Cloud Run configs, a migration job, and an nginx web image for GCP
   (`docs/deploy-gcp.md`); the live deploy itself is a user-run step (ROADMAP 6.10).
+- **Launch fixes** (PRs #20, #21, #22, #23) — images that boot on Cloud Run; private database
+  networking, and public services that anyone can reach; a dedicated settler key; CPC click
+  integrity.
 
 ## Repository layout
 

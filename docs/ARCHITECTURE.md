@@ -14,7 +14,7 @@ OpenAd/
 │                CampaignVault (ADR-0014).   → deployments/<chainId>.json
 ├── api/         Python (FastAPI).  Four processes from one package `openad`:
 │                  • api      – read API + auth + publisher/advertiser write helpers (off-chain data only)
-│                  • serve    – GET /v1/serve/{slot_id} and /media  (may later move to a CDN worker)
+│                  • serve    – GET /v1/serve/{slot_id} and /media  (a CDN may cache /media only)
 │                  • indexer  – event → Postgres worker
 │                  • settler  – CPC `settle_batch` signer (ADR-0014). Not the HTTP API.
 ├── web/         Vite + React + TypeScript + Tailwind + RainbowKit + wagmi. Discover, Supply, Campaigns.
@@ -156,11 +156,12 @@ Public reads:
   uint256, so an out-of-range index gets FastAPI's normal 422 instead of a 500. Leases in the
   window are read with one query, not one per period index.
 - `GET /v1/creatives/{creative_id}` — creative + verification status.
-- `GET /v1/publishers/{address}/…` (except `pricing-suggestion`, below), `GET /v1/advertisers/{address}/…` — dashboards' read models.
+- `GET /v1/publishers/{address}/…` (except `pricing-suggestion`, below), `GET
+  /v1/advertisers/{address}/…` — dashboards' read models.
 - `GET /v1/analytics/slots/{slot_id}`, `GET /v1/analytics/advertisers/{address}` — CTR/eCPM/
   spend/earnings read model; see § 3.10.
 
-Serving (public, cacheable):
+Serving (public; campaign responses are never cached, § 3.4):
 
 - `GET /v1/serve/{slot_id}` — JSON described in § 3.4.
 - `GET /v1/serve/{slot_id}/media` — the verified media bytes for the current lease, CPC winner, or house ad, with `Cache-Control` and `ETag`. Advertisers never see visitor traffic.
@@ -617,7 +618,7 @@ web/src/
 | Chain       | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC                                                      | public RPC                                                    | none (in-memory simulator)                                                                               |
 | USDC        | `MockUSDC`                                            | Circle testnet USDC                                             | native USDC                                                   | none (fixture math only)                                                                                 |
 | DB          | `docker compose up postgres`                          | managed Postgres                                                | managed Postgres                                              | none (in-memory fixtures)                                                                                |
-| Media cache | local `./.cache/media`                                | GCS (`OPENAD_MEDIA_BACKEND=gcs`)                                | GCS + CDN in front of serve                                   | none (bundled assets)                                                                                    |
+| Media cache | local `./.cache/media`                                | GCS (`OPENAD_MEDIA_BACKEND=gcs`)                                | GCS, plus an optional CDN on `/v1/serve/*/media` only (ADR-0017) | none (bundled assets)                                                                                    |
 | Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` — committed once deployed (none yet; ROADMAP 6.10) | `8453.json` — committed once deployed (none yet; ROADMAP 4.6) | none (not read)                                                                                          |
 | Build       | `npm run dev:web`                                     | `npm run build -w web`                                          | `npm run build -w web`                                        | `npm run build:demo` → `web/dist-demo` (hash router, relative base, no server fallback needed; ADR-0016) |
 
@@ -628,11 +629,13 @@ Local loop (canonical on Windows: `.\scripts\setup.cmd`, `.\scripts\dev-up.cmd`,
 `npm run stack:*` is the same if PowerShell can load `npm.ps1`; bash twins on Linux/macOS/WSL
 per the ADR-0007 amendment). CI is `.github/workflows/ci.yml` (contracts; api, whose pytest
 also runs against a Postgres 16 service with `OPENAD_TEST_PG_URL`; web/embed; Playwright;
-`check:sh`). Production hosting is GCP Cloud Run (ADR-0017, `docs/deploy-gcp.md`): staging is
-Cloud Run (`api`/`indexer`/`settler`/`web`) plus Cloud SQL in one GCP project; production is the
-same topology in a separate project and instance, promoted manually; the demo build runs from
-any static host, including the `web-demo` Cloud Run image. CI's deploy job is gated on GCP
-secrets and never broadcasts to Base mainnet (ROADMAP 6.10 is the live deploy, user-run).
+`check:sh`; a `docker` job that builds the `api`, `web` and `web-demo` images and boot-checks
+each, ROADMAP 6.11). Production hosting is GCP Cloud Run (ADR-0017, `docs/deploy-gcp.md`):
+staging is Cloud Run (`api`/`indexer`/`settler`/`web`) plus Cloud SQL in one GCP project;
+production is the same topology in a separate project and instance, promoted manually; the demo
+build runs from any static host, including the `web-demo` Cloud Run image. CI's deploy job is
+gated on GCP secrets and never broadcasts to Base mainnet (ROADMAP 6.10 is the live deploy,
+user-run).
 
 ```text
 .\scripts\setup.cmd                      # .env, docker, protocol deploy, alembic upgrade, npm install

@@ -20,6 +20,7 @@ contracts/lib/
 contracts/.moccasin/
 contracts/deployments/31337.json
 contracts/deployments/*.local.json
+contracts/.deployments.db
 
 # --- node ---
 node_modules/

@@ -289,7 +289,67 @@ protocol contract changes in this phase (anything that would need one is recorde
       (`/v1/health`, a `/v1/serve/{slot}` response, the embed rendering on a real publisher
       origin); web and api are mapped under one registrable domain (`docs/deploy-gcp.md` §9); the
       auth rate limit is turned on once the `X-Forwarded-For` chain is verified in staging (6.8
-      shipped it off by default — follow §11's verify-then-enable steps).
+      shipped it off by default — follow §11's verify-then-enable steps); the settler is a
+      dedicated, gas-only EOA (6.13); the `staging` environment's `vars` are set in GitHub
+      (6.12); and every "(inferred; verify before deploy)" fact in the runbook has been checked.
+- [x] **6.11 The deploy images boot on Cloud Run (ADR-0017).** _Done 2026-09-25 (PR #20)._
+      Pointers: `api/Dockerfile` · `web/Dockerfile` · `web/nginx/default.conf.template` ·
+      `infra/gcp/cloudbuild.yaml` · `infra/gcp/services/{web,web-demo}.yaml` ·
+      `web/src/lib/wagmi.ts` · `e2e/scripts/web-boot-check.mjs` · `.github/workflows/ci.yml`
+      (`docker` job).
+      Acceptance: the `api` image carries `contracts/deployments` at `/app/contracts/deployments`
+      and sets `OPENAD_DEPLOYMENTS_DIR` to that path, so the indexer and settler load the
+      artifact; CI's `docker` job builds the `api`, `web` and `web-demo` images and boot-checks
+      each, failing on any `pageerror`/`projectId` console message or an empty `#root` at first
+      paint or after a settle window; an unset or empty `VITE_*` build input means unset (no
+      WalletConnect id means browser wallets only; no guide or demo URL hides those links),
+      except an empty `VITE_API_URL`, which means same-origin requests; no build loads Google
+      Fonts; Cloud Build's source upload stages in a dedicated bucket (`BUILD_STAGING_BUCKET`,
+      default `<PROJECT_ID>-openad-builds`).
+- [x] **6.12 Cloud Run wiring: database, public access and ingress (ADR-0017).**
+      _Done 2026-09-25 (PR #23)._
+      Pointers: `scripts/deploy-gcp.sh` · `.github/workflows/deploy.yml` ·
+      `infra/gcp/services/{api,indexer,settler,web}.yaml` · `infra/gcp/jobs/migrate.yaml` ·
+      `docs/deploy-gcp.md` · ADR-0017.
+      Acceptance: `api`, `indexer`, `settler` and the `migrate` job each get Direct VPC egress to
+      Cloud SQL's private IP; the Cloud SQL instance is created with `--edition=ENTERPRISE`;
+      after each `services replace`, `openad-api`, `openad-web` and `openad-web-demo` (never the
+      indexer or settler) get `allUsers` `roles/run.invoker`, or, where an org policy refuses
+      `allUsers`, `PUBLIC_INVOKER=iam-disabled` writes the `invoker-iam-disabled` annotation
+      instead; `--only stack|all` refuses an unset or empty `API_URL`/`WEB_URL`, and every guard
+      runs before the first side effect, under `--dry-run` too; `API_INGRESS` renders
+      `api.yaml`'s ingress (`all` by default, or `internal-and-cloud-load-balancing` behind a
+      load balancer, switched only once it already serves `API_URL`) and the post-deploy smoke
+      follows the same variable; the media bucket defaults to `openad-media-<project>-<env>`; the
+      web build's CSP RPC origins reduce to a bare origin, never `RPC_URL`; a dedicated Cloud
+      Build staging bucket (`BUILD_STAGING_BUCKET`) replaces the default `_cloudbuild` one;
+      `deploy.yml` passes the `staging` environment's `vars` through to the script.
+- [x] **6.13 A dedicated settler key (ADR-0014).** _Done 2026-09-25 (PR #22)._
+      Pointers: `contracts/script/{settler.py,set_settler.py,deploy.py}` ·
+      `api/src/openad/settler/identity.py` · `docs/PROTOCOL.md` §10 · `docs/deploy-sepolia.md` ·
+      `docs/deploy-mainnet.md` · `docs/threat-model.md` T20.
+      Acceptance: the settler is a dedicated, gas-only EOA, never the contracts' deployer or
+      owner; `deploy.py` requires `OPENAD_SETTLER_ADDRESS` off Anvil and pyevm, and refuses the
+      deployer, a malformed, zero or bad-checksum address, or any forbidden role;
+      `set_settler.py` rotates it, refusing the deployer and the vault's current `owner()`
+      (ownership can move to a Safe while the deployer key still exists) and sending from the
+      checked owner, or, on `base`, printing the Safe transaction instead of sending; the settler
+      process refuses to start, before its liveness listener, if its key owns `CampaignVault` or
+      is the artifact's deployer off chain 31337, and a chain id mismatch is always fatal; threat
+      model **T20**.
+- [x] **6.14 CPC click integrity (ADR-0014).** _Done 2026-09-25 (PR #21)._
+      Pointers: `api/src/openad/routers/serve.py`, `api/src/openad/routers/clicks.py`,
+      `api/src/openad/services/clicks.py`, `api/src/openad/serve/origin.py` ·
+      `infra/gcp/services/api.yaml` · `docs/ARCHITECTURE.md` §3.4 · `docs/threat-model.md` T13.
+      Acceptance: a campaign serve response is `Cache-Control: private, no-store` with no `ETag`;
+      lease, house and empty responses stay `public, max-age=<ttl>`; a CDN may cache
+      `/v1/serve/{slot_id}/media` only, never `/v1/serve/{slot_id}`; the click burst rule keys on
+      the trusted-hop client key (`OPENAD_TRUSTED_PROXY_HOPS`) HMAC'd with `slot_id`, in a
+      bounded map, and is skipped, with a logged warning, while hops are 0 outside dev and test;
+      best-effort origin enforcement (`OPENAD_SERVE_ENFORCE_ORIGIN=true` in `api.yaml`) gives a
+      mismatched `Origin`/`Referer` the house ad or empty and no click token, with loopback hosts
+      counted only in dev and test and a request with neither header treated as a match; threat
+      model **T13** amended in place.
 
 ---
 
@@ -324,8 +384,10 @@ blocks a testnet/staging launch. **7.10** (the independent security audit) does 
       script (all of `web/`, `embed/` and `docs/`) never runs in CI, and `docs/` table alignment
       already fails at base on `ARCHITECTURE.md` and `docs/threat-model.md`; some code comments
       cite JIT step numbers (e.g. "step 39", "PLAN step 40") that only the archived plan's
-      step → PR map (`.cursor/jit_history/`) resolves. Pointers: `api/tests/test_migrations.py`,
-      `api/pyproject.toml`, `.github/workflows/ci.yml`, `package.json` (`format:check`).
+      step → PR map (`.cursor/jit_history/`) resolves; `contracts/script/deploy.py` L226
+      (`_seed_demo`'s signature) runs over 100 columns, unformatted by the same unscoped
+      `ruff format`. Pointers: `api/tests/test_migrations.py`, `api/pyproject.toml`,
+      `.github/workflows/ci.yml`, `package.json` (`format:check`), `contracts/script/deploy.py`.
 - [ ] **7.8 `useSiwe` in-flight race** on an account switch (real app and demo). Pointers:
       `web/src/features/auth/useSiwe.ts`.
 - [ ] **7.9 `BuyDialog` unit test** for the `BaseError.shortMessage` error branch. Pointers:
@@ -339,9 +401,11 @@ blocks a testnet/staging launch. **7.10** (the independent security audit) does 
       `docs/threat-model.md` T17.
 - [ ] **7.13 Media-fetch and deploy-guard follow-ups from 6.9.** A prod-mode test that public IP
       literals (`8.8.8.8`, `[2001:4860:4860::8888]`, `[::ffff:8.8.8.8]`, `ads.example.`) are
-      accepted; `deploy.yml`'s `--only stack` passing real `API_URL`/`WEB_URL` to the same-site
-      guard instead of placeholders; a Public-Suffix-List-aware same-site guard (multi-part
-      suffixes such as `co.uk`, `web.app`); `host_of` verified on a real macOS bash 3.2.
+      accepted; a Public-Suffix-List-aware same-site guard (multi-part suffixes such as `co.uk`,
+      `web.app`); `host_of` verified on a real macOS bash 3.2.
+      Done in 6.12 (PR #23): `deploy.yml`'s `--only stack` passing real `API_URL`/`WEB_URL`
+      instead of placeholders — `--only stack|all` now refuses outright when either is unset or
+      empty, and `deploy.yml` passes the `staging` environment's `vars` through to the script.
       Pointers: `api/tests/`, `.github/workflows/deploy.yml`, `scripts/deploy-gcp.sh`.
 - [ ] **7.14 Bounded-concurrency media verification, and a per-verify limit.** PR #17 bounds each
       fetch and each verification pass, but not how many run concurrently; it also leaves
@@ -372,6 +436,21 @@ blocks a testnet/staging launch. **7.10** (the independent security audit) does 
       verification and on the scheduled re-check; otherwise drop the setting. Pointers:
       `api/src/openad/services/media.py` (`check_click_url`), `api/src/openad/config.py`,
       `docs/ARCHITECTURE.md` §3.5, `docs/threat-model.md`.
+- [ ] **7.20 Follow-ups from the launch deploy/settler/click-integrity fixes (PRs #20–#23).**
+      Key IPv6 clients by their /64 in the click burst rule, not their full address; limit
+      `workers/serve` to `/media` before it is ever deployed; the settler's startup check should
+      also compare its key against the owners of `AdSlot`, `Marketplace` and `CreativeRegistry`,
+      not only the vault's; generate the runbook's §8 manual commands from the `infra/gcp/`
+      manifests instead of hand-copying them; optionally run `gcloud builds submit --async` to
+      drop the deployer's `roles/logging.viewer` grant; `host_of`'s refusal message could print a
+      URL's username instead of redacting it entirely. Four `scripts/check-sh.sh` mutants
+      survived PR #23's mutation-testing round: a whitespace-only `RPC_ORIGINS`, the
+      `MEDIA_BUCKET` default, a static check that `render()`'s env prefix names every `${VAR}`
+      in `infra/gcp/services/*.yaml` and `infra/gcp/jobs/*.yaml` (about 8 lines), and the awk
+      invoker annotator run, via sed-extraction, on the three public manifests.
+      Pointers: `api/src/openad/services/clicks.py` · `workers/serve/` ·
+      `api/src/openad/settler/identity.py` · `docs/deploy-gcp.md` §8 · `scripts/deploy-gcp.sh` ·
+      `scripts/check-sh.sh`.
 
 ---
 

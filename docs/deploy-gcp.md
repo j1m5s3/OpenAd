@@ -120,6 +120,9 @@ gcloud sql users create openad --instance=openad-<ENV> --password="${DB_PASS}" \
 unset DB_PASS
 ```
 
+This is the Unix-socket form. If it can't reach this instance (see the verify-first note above),
+rebuild the same command with the private-IP TCP form instead.
+
 **Recovery** (password lost, or a rotation): generate a new one the same way, set it, then add a
 new secret version — never reusing the old value. `gcloud sql users set-password` takes the
 username positionally (there is no `--user` flag), and the two commands are chained with `&&` so
@@ -365,7 +368,7 @@ that is set).
 
 ```bash
 gcloud builds submit --config infra/gcp/cloudbuild.yaml --project <PROJECT_ID> \
-  --substitutions=_REGION=<REGION>,_REPO=openad,_ENV=<ENV>,_API_URL=https://api.<ENV>.example.com,_CHAIN_ID=<CHAIN_ID>,_WALLETCONNECT_PROJECT_ID=<WC_PROJECT_ID>,_GUIDE_URL=<GUIDE_URL>,_DEMO_URL=<DEMO_URL> \
+  --substitutions=_REGION=<REGION>,_REPO=openad,_ENV=<ENV>,_API_URL=https://api.<domain>,_CHAIN_ID=<CHAIN_ID>,_WALLETCONNECT_PROJECT_ID=<WC_PROJECT_ID>,_GUIDE_URL=<GUIDE_URL>,_DEMO_URL=<DEMO_URL> \
   --gcs-source-staging-dir=gs://<PROJECT_ID>-openad-builds/source
 ```
 
@@ -442,7 +445,7 @@ gcloud run deploy openad-api \
   --network=<VPC_NETWORK> --subnet=<VPC_SUBNET> --vpc-egress=private-ranges-only \
   --service-account=openad-api-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com \
   --set-cloudsql-instances=<PROJECT_ID>:<REGION>:openad-<ENV> \
-  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=<MEDIA_BUCKET>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_PUBLIC_URL=https://api.<ENV>.example.com,OPENAD_CORS_ORIGINS=https://<ENV>.example.com,OPENAD_DB_POOL_SIZE=4,OPENAD_DB_MAX_OVERFLOW=2 \
+  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=<MEDIA_BUCKET>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_PUBLIC_URL=https://api.<domain>,OPENAD_CORS_ORIGINS=https://app.<domain>,OPENAD_DB_POOL_SIZE=4,OPENAD_DB_MAX_OVERFLOW=2,OPENAD_SERVE_ENFORCE_ORIGIN=true \
   --set-secrets=OPENAD_DATABASE_URL=openad-database-url-<ENV>:latest,OPENAD_SESSION_SECRET=openad-session-secret-<ENV>:latest,OPENAD_CLICK_HMAC_SECRET=openad-click-hmac-secret-<ENV>:latest
 
 # No --port here: Cloud Run injects $PORT (default 8080) into every container regardless of
@@ -473,7 +476,7 @@ gcloud run deploy openad-settler \
 gcloud run deploy openad-web \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/web:latest \
   --region=<REGION> --platform=managed --allow-unauthenticated --max-instances=10 \
-  --set-env-vars="CSP_CONNECT_SRC='self' https://api.<ENV>.example.com <RPC_ORIGINS> https://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.com wss://*.walletconnect.org,CSP_IMG_SRC='self' data: https://api.<ENV>.example.com https:"
+  --set-env-vars="CSP_CONNECT_SRC='self' https://api.<domain> <RPC_ORIGINS> https://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.com wss://*.walletconnect.org,CSP_IMG_SRC='self' data: https://api.<domain> https:"
 ```
 
 Without that last flag, the image's demo-safe CSP defaults (`web/Dockerfile`) stay in force and
@@ -691,7 +694,7 @@ Each check below is a real serve, so it records one impression.
   them.)
 
   ```bash
-  curl -s -o /dev/null -D - "https://api.<ENV>.example.com/v1/serve/<CPC_SLOT_ID>" \
+  curl -s -o /dev/null -D - "https://api.<domain>/v1/serve/<CPC_SLOT_ID>" \
     | grep -i '^cache-control'
   ```
 
@@ -704,7 +707,7 @@ Each check below is a real serve, so it records one impression.
   ```bash
   for ORIGIN in https://not-the-slot-domain.example null; do
     curl -s -H "Origin: ${ORIGIN}" \
-      "https://api.<ENV>.example.com/v1/serve/<LEASED_SLOT_ID>" | grep -o '"status":"[a-z]*"'
+      "https://api.<domain>/v1/serve/<LEASED_SLOT_ID>" | grep -o '"status":"[a-z]*"'
   done
   ```
 
@@ -771,7 +774,7 @@ To verify and enable:
 2. From one machine, send four requests, each with a different forged header:
 
    ```bash
-   API=https://api.staging.example.com
+   API=https://api.<domain>
    for spoof in 198.51.100.1 198.51.100.2 198.51.100.3 198.51.100.4; do
      curl -s -o /dev/null -w '%{http_code}\n' -X POST -H "X-Forwarded-For: ${spoof}" "${API}/v1/auth/nonce"
    done
@@ -838,7 +841,7 @@ for svc in openad-api openad-indexer openad-settler openad-web openad-web-demo; 
 done
 gcloud run jobs delete openad-migrate --region=<REGION>
 gcloud sql instances delete openad-<ENV>
-gcloud storage rm --recursive gs://openad-media-<ENV>
+gcloud storage rm --recursive gs://<MEDIA_BUCKET>
 for secret in openad-database-url-<ENV> openad-settler-key-<ENV> \
   openad-session-secret-<ENV> openad-click-hmac-secret-<ENV>; do
   gcloud secrets delete "$secret"
