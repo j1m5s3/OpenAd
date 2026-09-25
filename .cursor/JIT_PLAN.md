@@ -76,6 +76,7 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 | E Cross-platform scripts + one-command stack | `feat/bash-stack-scripts` | 6.5 | — |
 | F Production deploy (GCP) | `feat/gcp-deploy` | 6.6 | E |
 | G Docs polish (README, demo script, guide) | `docs/launch-polish` | 6.7 | A–F |
+| I Fix: buy receipt after confirmation (found in G review) | `fix/buy-receipt` | 6.2 follow-up | #10 merged; merge before G |
 | H Fix: fresh-DB Alembic chain (found in review) | `fix/alembic-fresh-db` | 6.6 prerequisite | — (merge before D ships and before F) |
 
 ## 4. Micro-steps (one line each; ✱ active, [>] active in parallel, ○ pending, ✓ done)
@@ -94,13 +95,16 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 - ✓ 12+13. B: prettier-only commit `085cf2c`; feature `ef04b17`. Hash router, relative base, base-relative media, `public-demo`, `build-demo.mjs` (process.execPath, no npx), `check-demo-bundle.mjs` (context-anchored whitelist, negative test), Playwright in static sub-path mode (8/8), CI wiring, ADR-0016 hosting, ROADMAP 6.2 `[x]`. FIX r1 → PASS r2. Main merged `f6f1b46`. **PR #8 merged `591e576`** (CI 5/5). Demo published: https://claude.ai/artifact/AzkEcWfmUT23GCo2qkWxE7 (deck `DEMO_URL` filled).
 
 ### Slice C — `feat/publisher-growth`
-- [>] 14+15. C (PARALLEL with 21+22; primary tree `/home/claude/OpenAd`, `feat/publisher-growth` @ `591e576`): **serve CORS fix (probable prod blocker)**, versioned embed script shipped by the web build, `EmbedCodePanel` (platform tabs + badge), shareable slot page, static OG defaults, guide page, `e2e/demo/growth.spec.ts`. Overlaps D only in `SupplyPage.tsx`: **merge D first**. In FIX r1: L1 nginx `/embed/` needs `Access-Control-Allow-Origin: *` (cross-origin `type=module` script fetch), plus tighter serve CORS path matching. **Risk: medium.**
-- ○ 16. C (next after 14+15 PASS and #9 merged into C): **slot listings**: `slot_listings` off-chain table, taxonomy enum, owner-only `PUT/DELETE /v1/slots/{id}/listing`, additive `SlotOut.listing`, `GET /v1/slots?category=`, migration 0004 after D's 0003; `ListingEditor`, Discover category filter, `SlotCard`/`SlotPage` display, demo support. **Risk: medium.** **(full spec below, pre-written)**
-- ○ 17+18. C: guide `docs/guide/publisher/embed-code.md` + SUMMARY; ROADMAP 6.3 `[x]` → ship. **Risk: low.**
+- ✓ 14+15. C: serve CORS (`*`, no credentials, raw-path exact match on `/v1/serve/*`), versioned `embed/open-ad.v1.js` shipped by the web build (nginx `/embed/` ACAO:*), `embedSnippet.ts`, `EmbedCodePanel` ("Slot to embed"), share row, badge, OG defaults, guide page, `growth.spec.ts`. FIX r1 → PASS r2. `b13eda4`/`3195f17`/`142a3f2`/`d4b6acf`. **PR #10 merged `eba40cd`** (CI 5/5). api 103/4 skipped, web 182, test:demo 13/13.
+- ✱ 16. C (`feat/slot-listings`): in **FIX r1**. L1: ListingEditor re-hydrates on refetch and clobbers edits (growth e2e failed 5/5). L2: no catch on save; bidi, zero-width and C1 characters accepted; `.js` false positive in URL detection. L3: NFC before length checks, dedupe before the cap, ignore a bogus `?category`, demo 422 on invalid category. Ships its own PR (guide page, glossary and 6.3 progress already in scope).
+- → 17+18. C: **merged into step 36** (same files as 32+33); 16 ships slice C by itself.
+
+### Slice I — `fix/buy-receipt` (PARALLEL; merge before G)
+- ✓ 35. I: BuyDialog freezes the signed quote; the receipt shows price paid, split, tx hash and View slot; header has three states; `shortMessage` errors; Buy disabled while quoting. Item 6 diagnosis: **not a bug** (9.2625 = seed 6.3375 + 2.925 proceeds; the screenshot was already post-buy), now guarded by an exact-balance e2e assertion. FIX r1 → PASS r2. **PR #12 merged `d5d46a0`**, CI 5/5. Demo Artifact republished (v2) from `d5d46a0`.
 
 ### Slice D — `feat/analytics`
 - ✓ 19+20. D: analytics schemas/service/router + `0003` indexes (`IF NOT EXISTS`), ORM `__table_args__` indexes; day bucket `col - col % 86400`; serve match on (slot, calendar_version, period); `by_slot` window-limited; `SlotNotFoundError`/`InvalidWindowError`. FIX r1 → PASS r2; 72 api tests. Committed on `feat/analytics` (`/home/claude/OpenAd-d`). Ship after 21+22.
-- ✓ 21+22. D: analytics client, `lib/analytics.ts`, `Sparkline`/`StatTile`, `SlotPerformance`, `AdvertiserPerformance`, demo analytics. LEASE CTR shows "—" (not tracked for leases: direct click_url, no click_events); `bySlot` = lease + settled only. FIX r1 → PASS r2. Web 169, api 95/4 skipped, test:demo 9/9. **PR #9 open, CI running.**
+- ✓ 21+22. D: analytics client, `lib/analytics.ts`, `Sparkline`/`StatTile`, `SlotPerformance`, `AdvertiserPerformance`, demo analytics. LEASE CTR shows "—" (not tracked for leases: direct click_url, no click_events); `bySlot` = lease + settled only. FIX r1 → PASS r2. Web 169, api 95/4 skipped, test:demo 9/9. **PR #9 merged `07eeece`** (plus a CI fix: the web-demo healthz curl uses `--retry-all-errors`). Worktree removed.
 
 ### Slice E — `feat/bash-stack-scripts`
 - ✓ 23+24. E: bash twins + `lib.sh` + `stack-docker.sh` + `check-sh.sh` (CI), ADR-0007 amendment, ROADMAP 6.5. Review FIX r1 → PASS r2; CI shellcheck SC1091 fixed (`# shellcheck source=` + `shellcheck -x`, `811bc8e`). PR #5 — **merge pending CI** (orchestrator). Worktree `/home/claude/OpenAd-e` can be removed after merge.
@@ -114,171 +118,15 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 - ✓ 29. F ship: PR #7 merged `866d7fe`, all 5 CI jobs green (first real docker build of both images). Worktree removed. Live GCP deploy is user-run.
 
 ### Slice G — `docs/launch-polish`
-- [>] 30+31. G (PARALLEL with C; new worktree `/home/claude/OpenAd-g`, `docs/launch-polish` off `origin/main` after #9): README rewrite (demo and deck links, private note), `docs/business/{competitive,demo-script,launch-checklist}.md`, screenshots via `e2e/demo/capture-screenshots.mjs`. Must not touch ROADMAP, ARCHITECTURE, guide or code. **Risk: low–medium.** **(full spec below)**
-- ○ 32+33. G (after C merges; merge main in): README "Coming next" → available features from C; ROADMAP 6.x ticked; ARCHITECTURE and guide lines deferred from 30+31; including **6.6 note: "deploy artifacts done (PR #7); live deploy pending the user's GCP project, WIF secrets and a committed `84532.json`"**; web prod image `build.sourcemap: false` (Backlog); JIT_INDEX, guide SUMMARY, `docs/qa/scorecard.md` round-4 note → ship; archive plan to `jit_history/2026-09-24-market-fit-launch.md`. **Risk: low.**
+- ✓ 30+31. G: README rewrite, `docs/business/{competitive,demo-script,launch-checklist}.md`, `capture-screenshots.mjs` (pinned epoch, byte-identical; `buy-leased.png` instead of buy-confirmed, so it doesn't depend on I), checklist mainnet row and demo-script fixes. FIX r1 → PASS r2. `23b1c5b`, merged main `f27df3c`; **PR #11 merged `c3f39dc`**. Deferred to 36: README "Coming next" still lists the embed panel and share row, which are now on main.
+- → 32+33. G: **merged into step 36.**
+- ○ 36. Final (`chore/launch-final` off main after `feat/slot-listings` merges, primary tree): ROADMAP 6.3/6.6/6.7 `[x]` with 6.6 split so live deploy is new 6.8 `[ ]`; Phase 7 backlog; sourcemaps off; onramp guide page; SUMMARY; README shipped features and fresh screenshots; business docs, scorecard, ARCHITECTURE §7; planner archives the plan in the same PR. **Risk: low.** **(full spec below)**
 
 ## 5. Active step — full spec
 
-### Step 14+15 — Publisher growth: embed code that works anywhere, shareable slot page, "Advertise here" badge (slice C, PARALLEL with D)
-
-**Where:** the primary tree `/home/claude/OpenAd`, branch `feat/publisher-growth` off `origin/main`
-@ `591e576`. The uncommitted JIT file edits live here and are committed with slice C; the coder
-must not stage `.cursor/`.
-**Coder model:** Sonnet. **Risk:** medium, because of a **probable production blocker** found
-while planning:
-- The API's `CORSMiddleware` allows only `settings.cors_origins` (the web app origins), with
-  credentials.
-- `routers/serve.py` sets no CORS header of its own.
-- So `<open-ad>` on a publisher's own domain gets a browser CORS failure on
-  `GET /v1/serve/{id}` and falls back to house.
-- Tests don't catch it: TestClient ignores CORS, and e2e runs same-origin or on localhost
-  allowlisted origins.
-
-A second gap: publishers have no real script URL to paste. The Supply snippet omits a
-`<script>`, and 10+11 left a placeholder comment.
-
-**Read first:**
-- `api/src/openad/main.py` (CORS middleware), `api/src/openad/routers/serve.py`,
-  `api/src/openad/serve/origin.py`, `api/src/openad/config.py` (`cors_origins`), `api/tests/test_serve.py`.
-- `embed/package.json` and `embed/vite.config.*` (outputs `dist/open-ad.js` ES module plus
-  `open-ad.iife.js`), `embed/src/open-ad.ts` (attributes: `slot-id`, `api`, `width`, `height`,
-  `house-src`, `house-href`).
-- `web/src/features/publisher/SupplyPage.tsx` L245–253 (the inline snippet `<section>`).
-- `web/src/features/marketplace/SlotPage.tsx`, `web/src/features/marketing/EmbedDemoPage.tsx`.
-- `web/package.json` `build`, `web/scripts/build-demo.mjs`, `web/vite.config.ts`, `web/index.html`.
-- `docs/guide/publisher/house-ads-and-embed.md`, `docs/business/gtm-marketing.md` (the badge
-  tactic).
-- ADR-0014 on click redirects; the serve invariants in `AGENTS.md`.
-
-**A. Serve CORS (api)**
-1. Public serve endpoints (`GET /v1/serve/{slot_id}` and `/v1/serve/{slot_id}/media`) answer any
-   origin: `Access-Control-Allow-Origin: *`, **no credentials**, `Vary: Origin`, and an `OPTIONS`
-   preflight that works (the embed sends no custom headers, so it's usually a simple request;
-   still handle preflight).
-   - Every other route keeps the credentialed allowlist unchanged.
-   - Implement it either as a small path-scoped middleware placed **outside** the existing
-     `CORSMiddleware`, or by excluding `/v1/serve` from it. Pick whichever is simpler and
-     provably correct; note that Starlette's `CORSMiddleware` would otherwise echo credentialed
-     headers only for allowlisted origins.
-   - Origin enforcement (`serve_enforce_origin`) is unrelated and unchanged: CORS says who may
-     read the response; origin checks decide paid vs house.
-2. Tests in `api/tests/test_serve_cors.py`:
-   - An arbitrary `Origin: https://publisher.example` on `/v1/serve/1` gets `*` and no
-     `Access-Control-Allow-Credentials`.
-   - Preflight gets 200 with the allowed methods.
-   - `/v1/publishers/...` from a non-allowlisted origin gets no ACAO.
-   - An allowlisted origin on non-serve routes keeps credentials.
-3. `docs/ARCHITECTURE.md` §3.4: add one paragraph on serve CORS. Add a line to
-   `docs/threat-model.md` covering why `*` is safe here: public data, no cookies, no
-   credentials.
-
-**B. A real embed script URL (web build)**
-4. The web build ships the embed. `web/package.json` gets `"prebuild": "npm run build -w embed"`,
-   or `build`/`build-demo.mjs` call it first; the embed build is fast and size-gated. A tiny
-   Vite plugin, or a post-build copy in `vite.config.ts` `closeBundle`, copies
-   `embed/dist/open-ad.js` → `dist/embed/open-ad.v1.js` (and `dist-demo/embed/…`).
-   - Serve it with nginx caching. `/embed/*` gets `Cache-Control: public, max-age=86400`; if
-     editing `web/nginx/default.conf.template` is needed, keep it tiny.
-   - The snippet URL is `VITE_EMBED_SCRIPT_URL ?? new URL('embed/open-ad.v1.js', document.baseURI)`.
-     Add it to `vite-env.d.ts` and `.env.example`.
-   - Record this in ADR-0017 as a one-line amendment ("web origin hosts the versioned embed
-     script"). A CDN or npm publish can come later.
-5. `web/src/lib/embedSnippet.ts` (pure, tested): `buildSnippet({ slotId, apiUrl, scriptUrl,
-   width, height, houseSrc?, houseHref? })` returns
-   `<script type="module" src="…"></script>\n<open-ad slot-id="…" api="…" width="…" height="…"></open-ad>`,
-   with attribute values HTML-escaped. Presets: 300×250, 728×90, 320×50, and the slot's own size
-   when known.
-
-**C. Publisher UI**
-6. `web/src/features/publisher/components/EmbedCodePanel.tsx`:
-   - A slot select from the publisher's slots and a size preset.
-   - The live snippet (from `buildSnippet`) with a Copy button (clipboard API in try/catch, with
-     a fallback that selects the text).
-   - Tabs with short instructions: "Any HTML site", "WordPress (Custom HTML block)", "Ghost (HTML
-     card)", "Notion / Substack", the last one plainly stating that custom scripts aren't
-     supported there, and suggesting a linked banner or the badge.
-   - A "Preview" link to `/embed-demo?slot=<id>`.
-   - Replace **only** the existing `<section>` in `SupplyPage.tsx` (L245–253) with
-     `<EmbedCodePanel … />`. This is the one unavoidable overlap with slice D, which mounts
-     `SlotPerformance` in a different part of the same file.
-7. `EmbedDemoPage.tsx` reuses `buildSnippet`, replacing its placeholder comment with the real
-   script URL. It also accepts `?slot=` to preselect.
-
-**D. Shareable slot page + badge**
-8. `SlotPage.tsx` gets a "Share" row with:
-   - Copy link (the absolute slot URL, which works with hash routing via `useHref` +
-     `document.baseURI`).
-   - A prefilled X/Farcaster intent link (plain `https://twitter.com/intent/tweet?text=…&url=…`
-     and `https://warpcast.com/~/compose?text=…`, opened with `rel="noopener"`, no SDKs).
-   - An "Advertise here" CTA explaining the current price and next period (reuse existing data).
-   - Set `document.title` to `"<domain> — ad slot on OpenAd"`.
-9. The "Advertise here via OpenAd" badge:
-   - `web/public/badge/advertise-here.svg`: small, original, and in the **normal** `public/`
-     (it's a product asset). Confirm that `public-demo` from 12+13 still gets it, or copy it
-     there.
-   - A "Badge" tab in `EmbedCodePanel` with the snippet
-     `<a href="<slot URL>"><img src="<web origin>/badge/advertise-here.svg" alt="Advertise here via OpenAd" width=… height=…></a>`.
-     It works on Substack, GitHub READMEs and anywhere else scripts can't run.
-10. `web/index.html`: static default `og:title`, `og:description`, `og:type`, `twitter:card=summary`.
-    Per-slot OG previews need server rendering: record that in the Backlog (JIT) and say it in the
-    commit, not in product copy.
-
-**E. Docs + tests**
-11. `docs/guide/publisher/embed-code.md` covers where to get the code, each platform, the badge,
-    troubleshooting (house ad shows → domain verification or no lease; nothing shows → the
-    script URL or CSP on the host site). Link it from `docs/guide/SUMMARY.md` and the publisher
-    README. Update `house-ads-and-embed.md` to point to it.
-12. Vitest:
-    - `embedSnippet.test.ts`: escaping, presets, house attributes optional.
-    - `EmbedCodePanel.test.tsx`: slot and size change the snippet, copy is called, the
-      Substack tab shows the no-scripts note.
-    - `SlotPage` share row: the link is absolute and hash-safe.
-13. Playwright in a **new** file `e2e/demo/growth.spec.ts`, not `flows.spec.ts`, which D is
-    extending:
-    - As the publisher, open Supply, the embed code panel and copy, then assert that the snippet
-      contains `embed/open-ad.v1.js` and `slot-id`.
-    - Fetch that script URL relative to the page; it returns 200 with a JS MIME type.
-    - The badge SVG loads.
-    - The slot page shows the Share row.
-    - The off-origin guard still holds.
-14. ROADMAP 6.3 progress note: "embed code, serve CORS, share page, badge done; publisher
-    profile (16) next".
-
-**Overlap with slice D (merge order):**
-- `SupplyPage.tsx` is edited by both, in different hunks. **Merge D first**, then
-  `git merge origin/main` into C.
-- `docs/ROADMAP.md` and `docs/guide/SUMMARY.md` get appended lines on both sides; keep both.
-- Everything else is disjoint: C does not touch `lib/api.ts`, the demo analytics files,
-  `demoApi.ts`, `CampaignsPage.tsx` or `flows.spec.ts`.
-
-**Verify**
-```bash
-cd /home/claude/OpenAd
-(cd api && uv run ruff check && uv run ruff format --check && uv run mypy src && uv run pytest -q)
-npm run typecheck && npm run lint && npm run test && npm run build && npm run build:demo
-test -f web/dist/embed/open-ad.v1.js && test -f web/dist-demo/embed/open-ad.v1.js && echo embed-shipped
-node web/scripts/check-demo-bundle.mjs
-npx prettier --check web/src/demo e2e/demo web/src/features/marketing web/src/app/routes.tsx
-PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:demo -w e2e
-# optional real cross-origin proof (docker available): run api on :8000, serve a page from another port with the snippet, assert the embed renders a non-house creative or at least a 200 serve fetch with ACAO:*
-git status --short   # .cursor/ must not be staged by the coder
-```
-
-**Done when:**
-- Serve is readable from any origin without credentials, and the other routes are unchanged.
-  Tests prove both.
-- The web build ships a versioned embed script and the snippet references it.
-- The panel, badge, share row and guide page exist.
-- Demo Playwright passes.
-- Checks are green.
-- Ship after D merges: merge main in, PR, CI, merge. Step 16 (publisher profile) and 17+18
-  (guide + ship) follow on the same branch.
-
-
 ### Step 16 — Slot listings: audience description + categories, Discover filter (slice C, `feat/publisher-growth`)
 
-**Precondition:** 14+15 PASS, and #9 (slice D) merged into `feat/publisher-growth`
-(`git merge origin/main`). This is needed because the new migration must chain after D's `0003`.
+**Precondition (updated 2026-09-25 14:30):** #10 merged. Work on a **fresh branch `feat/slot-listings` off `origin/main`** in the primary tree. D's `0003` is on main, so `down_revision` = 0003. Extend the existing `e2e/demo/growth.spec.ts`. Name the ListingEditor slot select "Slot to describe" to avoid a third "Slot" combobox on Supply.
 **Coder model:** Sonnet. **Risk:** medium. It adds a new off-chain table, a migration (the parity
 test from slice H must stay green), a SIWE-guarded write, and user-generated text shown to other
 users.
@@ -397,177 +245,128 @@ git status --short   # .cursor/ not staged by the coder
 - 17+18 then finishes slice C (guide index, ROADMAP 6.3 `[x]`, ship).
 
 
-### Step 30+31 — README, demo script, competitive doc, launch checklist, screenshots (slice G, PARALLEL with C)
+### Step 36 — Launch finalization (replaces 17+18 and 32+33; one branch, one PR, the last step)
 
-**Where:** a new worktree `/home/claude/OpenAd-g`, branch `docs/launch-polish` off `origin/main`,
-created after #9 merges, so main has slices A, B, D, E, F and H. JIT files are not edited there.
-**Coder model:** Sonnet. **Risk:** low–medium.
-- These are docs, but they are the most-read, outward-facing text. The main risks are
-  overclaiming (features that aren't on main yet, invented market numbers, traction) and naming
-  competitors' rates as fact.
+**Why merged:** 17+18 (guide, ROADMAP 6.3, ship C) and 32+33 (ROADMAP ticks, README, guide
+SUMMARY, qa note, archive) edit the same three files: `docs/ROADMAP.md`, `docs/guide/SUMMARY.md`
+and `README.md`. Step 16 already ships its own guide page, glossary term and ROADMAP 6.3
+progress line on `feat/slot-listings`. What's left is one docs-and-polish pass.
 
-**Hard scope, to avoid conflicts with slice C:**
-- **May edit or create:** `README.md`; new files under `docs/business/`;
-  `docs/business/README.md` (the index); `docs/business/pitch-deck.md` (only the Slide 9 speaker
-  note pointer and `DEMO_URL` placeholders); new `docs/business/assets/*.png`; and a new
-  `e2e/demo/capture-screenshots.mjs`.
-- **Must not touch:** `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/guide/**` (including
-  SUMMARY), `web/**`, `api/**`, or `e2e/demo/*.spec.ts`. Lines needed there go to 32+33.
-- **Features not on main yet** (slice C: embed code panel, serve CORS, share and badge, listings)
-  are **not** described as available. At most, a "Coming next" line in README, reworded or
-  removed in 32+33.
-
-**Links (use exactly):**
-- Live demo: https://claude.ai/artifact/AzkEcWfmUT23GCo2qkWxE7
-- Pitch deck: https://claude.ai/artifact/Day12XXUFNi7CJdNpa2MUH
-- Wherever they appear, add: "Private until the owner shares it. If the link asks you to sign in
-  or request access, ask the OpenAd team for access."
+**Where:** the primary tree `/home/claude/OpenAd`, a fresh branch `chore/launch-final` off
+`origin/main` **after `feat/slot-listings` merges**. The JIT files ride along here; the planner
+archives the plan in this branch after the coder finishes (see item 10).
+**Coder model:** Sonnet. **Risk:** low. It is docs plus a one-line build flag. The main risk is
+ticking something that isn't done. Every tick must match what is on main.
 
 **Read first:**
-- `docs/business/{README,market-fit,gtm-marketing,pitch-deck}.md`: stay consistent with the
-  verdict, ICP, fee wording ("default 2.5%, capped at 10% on-chain"), payout wording (LEASE:
-  atomic in the buy transaction; CPC: at each settler batch), and non-custodial wording (LEASE
-  never holds funds; CPC budgets are escrowed in `CampaignVault` until settled or closed).
-- `web/src/demo/tour/steps.ts` (6 steps: "Discover, as the advertiser", "The Dutch price is
-  falling", "Buy the period", "Switch to the publisher", "CPC campaigns", "Your creative is
-  live", ending on `/why`).
-- `web/src/demo/fixtures.ts` personas: advertisers **Nimbus Wallet** and **Fastlane L2**;
-  publishers **Basecamp Weekly (newsletter)**, **Voidkit Docs (dev-tool docs)** and
-  **ChainScope Explorer (dashboard)**.
-- `web/src/demo/PersonaSwitcher.tsx`, `web/src/features/marketing/{WhyPage,EmbedDemoPage}.tsx`,
-  `e2e/demo/demo.config.ts` (the static sub-path server and `demoPath`).
-- The current `README.md`, `AGENTS.md` (commands and invariants), `docs/deploy-gcp.md`,
-  `scripts/*.sh`, `docs/GLOSSARY.md`.
+- `docs/ROADMAP.md` Phase 6 as on main. 6.3 has a progress block, 6.6 has a progress block, and
+  6.7's acceptance names the README, demo script, launch checklist, **onramp guide links**, 6.x
+  fully ticked, and guide SUMMARY.
+- `README.md` ("Coming next" section), `docs/business/{README,launch-checklist,demo-script,competitive}.md`.
+- `docs/guide/SUMMARY.md` and the guide pages added by C, D and 16.
+- `docs/qa/scorecard.md`, `docs/ARCHITECTURE.md` §7, `web/vite.config.ts` (L94
+  `build: { sourcemap: true, … }`), `e2e/demo/capture-screenshots.mjs`, and the Backlog in
+  `.cursor/JIT_PLAN.md` §8 (read-only).
 
-**Files**
-1. `README.md` rewrite, about 150 lines max:
-   - A one-line value proposition and a 3-bullet "why" for publishers and for advertisers.
-   - **Try it now:** the demo link, the private note, and "Take the tour" from the banner.
-   - Pitch deck link.
-   - "How it works": LEASE and CPC in 4 lines each, glossary terms linked to
-     `docs/GLOSSARY.md`, and the invariants in plain words.
-   - Screenshots: 3–4 images from `docs/business/assets/`.
-   - Quickstart: bash (`scripts/setup.sh`, `dev-up.sh`), Windows (`scripts\setup.cmd`), and a
-     one-command docker stack (`npm run stack:docker`).
-   - "Run the demo locally" (`npm run build:demo` and serve `web/dist-demo`).
-   - "Deploy" (`docs/deploy-gcp.md`), a docs map (keep the existing Documentation section's
-     links), repository layout (updated), status ("testnet-ready; not audited; no production
-     deployment yet"), and License (unchanged).
-   - No badges that point at nonexistent services. Keep valid commands only; check each against
-     `package.json` and `scripts/`.
-2. `docs/business/competitive.md`:
-   - A top banner: "Approximate, publicly reported ranges as of 2026; verify before external
-     use. No figure here is from a customer."
-   - Compare **by category** (traditional display networks, crypto-native ad networks,
-     newsletter or sponsorship marketplaces, direct or agency-sold deals, and OpenAd) across
-     these dimensions: take rate, payout timing, custody of funds, tracking in the serve path,
-     approval gate and minimums, pricing mechanism, spend transparency, fiat support, audience
-     targeting, and demand/fill today.
-   - Company names may appear only as "examples of the category", never next to a specific
-     rate.
-   - Must include an honest "Where OpenAd loses today" section: USDC-only (no fiat onramp),
-     cold-start demand and fill, limited targeting (slot-level; listings coming), no audited
-     contracts yet, no independent measurement or IVT vendor.
-   - End with "How we answer these objections", keyed to ROADMAP items or backlog.
-   - The deck's Slide 9 summary must remain consistent with it. Update only the speaker-note
-     pointer in `pitch-deck.md` ("See `competitive.md`"), and replace any `<DEMO_URL>`
-     placeholder in that file with the live link.
-3. `docs/business/demo-script.md`, for live pitches:
-   - **Pre-flight:**
-     - Artifact shared with the audience, or you present it yourself.
-     - Chrome, window ≥1280px, zoom 100–110%.
-     - Know that a full reload resets the demo store and disconnects the demo wallet (by
-       design).
-     - Personas are fictional.
-     - "Simulated data, no real funds or chain" is shown on the banner; say it out loud once.
-   - **Three talk tracks** with timings, each a numbered click path using the demo's real
-     labels and hash routes (`#/`, `#/slots/<id>`, `#/campaigns`, `#/supply`, `#/embed-demo`,
-     `#/why`), plus "say this" lines and the "proof point" visible on screen:
-     - **2-minute** (hallway): the tour steps 1–3 and 6, then `/why` with one calculator input.
-     - **5-minute** (investor or partner): the full 6-step tour, then Supply performance tiles
-       as the publisher.
-     - **15-minute** (publisher or advertiser deep dive): the manual path without the tour.
-       Advertiser Nimbus Wallet buys a LEASE period (price falling, wallet down by exactly the
-       quote), then opens a CPC campaign as Fastlane L2. Switch to Basecamp Weekly: approvals,
-       earnings = price − fee, performance panel. Then `/embed-demo` (the real `<open-ad>`
-       element, no chain reads), and `/why` with the audience's own numbers.
-   - **Q&A crib:** is it real money? custody? what if nobody buys a period (Dutch floor, house
-     ad)? click fraud (IVT discards, settler batches)? fiat? audits? why Base and USDC? how do
-     you make money (fee on GMV, capped on-chain)? All answers must match market-fit and
-     PROTOCOL wording.
-   - **Recovery:** the wallet disconnected (Connect → "OpenAd Demo Wallet"), the tour closed
-     ("Take the tour" in the banner), state looks odd (reload resets).
-   - **Follow-up email template:** demo link, deck link and a CTA, with placeholders only and
-     no invented names.
-4. `docs/business/launch-checklist.md`: a table with item, owner (**User** / Done / Next PR) and
-   a link.
-   - **Done:** demo live, deck, docker images built in CI, deploy artifacts, analytics, run
-     scripts.
-   - **User actions:**
-     - Share the demo and deck Artifacts.
-     - Create a GCP project and follow `docs/deploy-gcp.md`.
-     - Set the GitHub WIF secrets.
-     - Deploy contracts to Base Sepolia and commit `84532.json`.
-     - A security audit before mainnet.
-     - Legal (ToS, privacy, advertiser content policy): placeholders; say "consult counsel".
-     - Domain and email.
-     - Mainnet deploy with manual approval.
-   - **Next PRs:** slice C features, Backlog items from the plan (sourcemaps off in the prod
-     image, listing moderation, analytics refinements).
-   - Also a "First 30 days" metric list consistent with `gtm-marketing.md`.
-5. `e2e/demo/capture-screenshots.mjs`, a script, not a test:
-   - Uses Playwright's library API with the same static sub-path server as `demo.config.ts`
-     (import or reuse `static-server.mjs`) against a fresh `npm run build:demo`, honouring
-     `PLAYWRIGHT_CHROMIUM_PATH`.
-   - Captures at 1280×800 with deterministic state (frozen demo clock via the same mechanism
-     the suite uses):
-     - `discover.png`;
-     - `slot-dutch-price.png`;
-     - `buy-confirmed.png`;
-     - `publisher-supply-performance.png`;
-     - `embed-demo.png`;
-     - `why-calculator.png`.
-   - Writes to `docs/business/assets/`, each PNG ≤ 400 KB (reduce with `quality`/`scale:'css'`,
-     or crop).
-   - Add npm script `capture:screenshots` in `e2e/package.json`. That's a one-line
-     `package.json` edit, which is fine since C doesn't touch `e2e/package.json`; if it does,
-     defer.
-   - README embeds 3–4 of them.
-6. `docs/business/README.md`: index entries for `competitive.md`, `demo-script.md`,
-   `launch-checklist.md` and `assets/`, plus both live links with the private note.
+**Items**
+1. **ROADMAP Phase 6:**
+   - 6.3 → `[x]` `_Done <date>._`. Condense the progress block into a one-paragraph "Delivered"
+     note: embed script and panel, serve CORS, share row and badge, static OG, slot listings and
+     category filter. Per-slot OG goes to Phase 7.
+   - 6.6: split honestly.
+     - 6.6 **"Deploy artifacts (ADR-0017)"** becomes `[x]`: Dockerfiles, `infra/gcp`, deploy
+       script, gated WIF workflow, CI docker job, GCS media store, migrate job.
+     - A new **6.8 "Live GCP deployment (user-run)"** stays `[ ]`, with its acceptance being the
+       runbook steps: GCP project, WIF secrets, Base Sepolia deploy plus a committed
+       `84532.json`, staging smoke checks. Pointers go to `docs/deploy-gcp.md` and
+       `docs/business/launch-checklist.md`.
+   - 6.7 → `[x]` once items 2–6 below land.
+   - Add **Phase 7 — Post-launch backlog**, all `[ ]`, one line each with pointers, from JIT §8:
+     - per-slot OG via edge or server render;
+     - publish `@openad/embed` to npm or a CDN;
+     - listing moderation, and clearing or flagging a listing on slot transfer (new owner
+       inherits text they didn't write);
+     - analytics: neutral CTR hint on CPC slots, advertiser CTR over CPC impressions, a "Booked
+       (upcoming)" tile;
+     - parity test covering server defaults; ruff scope including `alembic/`;
+     - the `useSiwe` in-flight race on account switch;
+     - a unit test for the BaseError `shortMessage` branch in BuyDialog;
+     - security audit before mainnet.
+2. **Sourcemaps off in production builds:** in `web/vite.config.ts`, set
+   `sourcemap: process.env.VITE_SOURCEMAP === '1'` (default off). Document it in `.env.example`.
+   Check that `web/dist` and `web/dist-demo` contain no `.map` files, and that the embed build is
+   unaffected (its own config; leave it alone unless it also emits maps into the web image).
+3. **Onramp guide page** (6.7 acceptance, blocker 5): `docs/guide/advertiser/getting-usdc-on-base.md`.
+   - Plain steps: buy USDC on a major exchange or onramp and withdraw on the **Base** network;
+     or bridge from Ethereum.
+   - Link only to **official** docs pages (Base docs, Circle USDC docs) using stable top-level
+     URLs. No affiliate links. No fee or availability claims.
+   - A warning to double-check the network (Base) and the token contract (native USDC), which
+     is the one the app uses.
+   - Link it from the advertiser README, "Buy a period", and the business launch checklist.
+4. **Guide SUMMARY:** add the onramp page, and make sure every page added by C, D and 16
+   (embed-code, performance, listing) is listed exactly once. Add a "Try the demo" line to
+   `docs/guide/README.md` with the demo link and the private-access note.
+5. **README:**
+   - Replace "Coming next" with the shipped features (embed code panel and badge, share row,
+     slot listings and category filter, analytics, buy receipt).
+   - Keep the demo and deck links with the private note.
+   - Status line: "testnet-ready, not audited; live GCP deploy pending (ROADMAP 6.8)".
+   - Refresh screenshots: extend `capture-screenshots.mjs` with `buy-receipt.png` (the step 35
+     receipt) and `discover-categories.png` (step 16 listing badges and filter), keeping the
+     pinned epoch, ≤400 KB each. Swap them into the README if they read better than the current
+     ones.
+6. **Business docs:**
+   - `launch-checklist.md`: move the shipped rows to Done (listings, buy receipt, analytics,
+     demo v2 republished), and keep User actions accurate.
+   - `demo-script.md`: add a 30-second beat for the buy receipt (price paid plus split) and for
+     the Discover category filter in the 5- and 15-minute tracks.
+   - `pitch-deck.md`: update the "Traction/roadmap" slide honestly (built vs pending: live
+     deploy, audit). Note in the commit that the hosted deck needs a regenerate.
+7. **`docs/qa/scorecard.md`:** append a short "Round 4 (2026-09-25): demo mode and launch pass"
+   entry: what was checked (demo suite 13+ tests, off-origin guard, receipt, listings), with no
+   invented persona verdicts; cite the Playwright suites.
+8. **`docs/ARCHITECTURE.md` §7:** the demo row links the hosted demo (private note) and
+   `build:demo`; the production row points to 6.8 for the live deploy.
+9. **No product code** beyond item 2. If a docs claim turns out false against main, fix the doc,
+   not the code, and list it in the commit.
+10. **Planner (not the coder), after the coder passes review:** move `.cursor/JIT_PLAN.md` to
+    `.cursor/jit_history/2026-09-25-market-fit-launch.md` with an Outcome section (PRs #4–#13+,
+    demo and deck links, open user actions), and update `JIT_INDEX.md`. That lands in the same
+    PR.
 
 **Verify**
 ```bash
-cd /home/claude/OpenAd-g
-npm install && npm run build:demo
-PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run capture:screenshots -w e2e
-ls -la docs/business/assets/*.png && find docs/business/assets -name '*.png' -size +400k | grep . && echo "FAIL too big" || echo sizes-ok
+cd /home/claude/OpenAd
+npm run typecheck && npm run lint && npm run test && npm run build && npm run build:demo
+find web/dist web/dist-demo -name '*.map' | grep . && echo "FAIL sourcemaps" || echo no-maps
+node web/scripts/check-demo-bundle.mjs
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run capture:screenshots -w e2e && find docs/business/assets -name '*.png' -size +400k | grep . && echo "FAIL size" || echo png-ok
 npx prettier --check README.md docs/business/*.md
-# relative links resolve:
-python3 - <<'PY'
+python3 - <<'PY'   # relative links in README, docs/business, docs/guide resolve
 import re,os,sys
 bad=[]
-for f in ['README.md']+[os.path.join('docs/business',x) for x in os.listdir('docs/business') if x.endswith('.md')]:
-    for l in re.findall(r'\]\(([^)#]+)', open(f).read()):
+files=['README.md']+[os.path.join(r,f) for d in ('docs/business','docs/guide') for r,_,fs in os.walk(d) for f in fs if f.endswith('.md')]
+for f in files:
+    for l in re.findall(r'\]\(([^)#\s]+)', open(f).read()):
         if l.startswith(('http','mailto:')): continue
-        p=os.path.normpath(os.path.join(os.path.dirname(f), l))
-        if not os.path.exists(p): bad.append((f,l))
+        if not os.path.exists(os.path.normpath(os.path.join(os.path.dirname(f), l))): bad.append((f,l))
 print(bad or 'links ok'); sys.exit(1 if bad else 0)
 PY
-grep -rniE "sell(s|ing)? (a |the )?slot|guarantee|trusted by|customers include" README.md docs/business && echo "REVIEW wording" || echo wording-ok
-grep -c "AzkEcWfmUT23GCo2qkWxE7" README.md docs/business/demo-script.md docs/business/README.md
-git status --short   # no ROADMAP/ARCHITECTURE/guide/web/api changes
+grep -n "^- \[ \]" docs/ROADMAP.md   # expect only 6.8 + Phase 7 items (+ any pre-existing unrelated open tasks, unchanged)
+grep -rniE "sell(s|ing)? (a |the )?slot|trusted by|customers include" README.md docs/business docs/guide && echo REVIEW || echo wording-ok
+git status --short
 ```
 
 **Done when:**
-- README sells the product accurately, with the demo and deck links and the private note.
-- Screenshots are generated reproducibly by the script and are small.
-- `competitive.md` is category-based, honest, and consistent with Slide 9.
-- The demo script gives 2/5/15-minute tracks keyed to the real tour steps and personas.
-- The launch checklist separates user actions from done work.
-- Links and prettier pass, and no out-of-scope files changed.
-- 32+33 later adds the ROADMAP/ARCHITECTURE/guide lines, rewords "Coming next" after C merges,
-  and archives the plan.
+- ROADMAP Phase 6 is truthful: 6.1–6.7 `[x]`, 6.8 open as user-run, Phase 7 backlog listed.
+- Production and demo builds ship no sourcemaps.
+- The onramp guide page exists and is linked.
+- SUMMARY is complete, and the README describes only shipped features, with fresh screenshots.
+- Business docs and the scorecard are updated. Links, prettier and wording checks pass.
+- After planner archival: PR, CI 5/5, merge. Then the orchestrator republishes the demo Artifact
+  if visuals changed, regenerates the hosted deck from `pitch-deck.md`, and gives the user the
+  final report (demo, deck, user actions from the launch checklist).
 
 
 ## 6. Identity fence (unchanged)
@@ -594,6 +393,8 @@ chain or API (D3).
 - Analytics: advertiser CTR is diluted by LEASE impressions. It should be CTR over CPC impressions (needs an API field).
 - Analytics: a "Booked (upcoming)" tile for leases whose period starts after now, kept separate (needs an API field).
 - Slot listing text moderation (moderator role?), after step 16.
+- A slot listing survives an on-chain slot transfer, so the new owner inherits text they didn't write, still labelled "Publisher-provided". Clear or flag it on transfer (needs an indexer hook).
+- BuyDialog: add a unit test for the BaseError `shortMessage` branch.
 
 - Per-slot Open Graph previews need server-side rendering or an edge function (the SPA can't set crawler-visible meta). Static defaults land in 14+15.
 - Publish `@openad/embed` to npm / a CDN (today the web origin hosts `embed/open-ad.v1.js`).
@@ -613,3 +414,6 @@ chain or API (D3).
 - 2026-09-25 12:15 — PR #8 merged (`591e576`); demo Artifact live at https://claude.ai/artifact/AzkEcWfmUT23GCo2qkWxE7. 21+22 coding in `/home/claude/OpenAd-d`. The primary tree is now on `feat/publisher-growth` (JIT edits ride with slice C). 14+15 spec written as a parallel step; while planning it I found that serve has no public CORS, so embeds on publisher domains would fail in browsers. The fix is in 14+15. Merge order: D, then C.
 - 2026-09-25 13:05 — 21+22 DONE (PASS r2; PR #9 open). 14+15 is in FIX r1 (nginx `/embed/` ACAO, serve CORS path match). Step 16 pre-specced: slot listings plus a category filter, migration 0004 after D's 0003. Merge order: #9 → merge main into C → finish 14+15 → 16. Analytics L3s added to the Backlog.
 - 2026-09-25 13:40 — 30+31 (slice G) specced as a parallel step in `/home/claude/OpenAd-g`. Scope: README plus new business docs and screenshots only; ROADMAP, ARCHITECTURE, guide and code are deferred to 32+33 to avoid conflicts with C. Deck: https://claude.ai/artifact/Day12XXUFNi7CJdNpa2MUH.
+- 2026-09-25 14:30 — #9 merged (`07eeece`). 14+15 DONE (PASS r2; PR #10 open). G 30+31 is in FIX r1 (screenshots, launch-checklist mainnet path, demo-script accuracy). The G review found a product bug: BuyDialog re-quotes to "0.00 … Not sellable" after a confirmed buy. New slice I, step 35, `fix/buy-receipt`, runs in parallel and merges before G, so the screenshots are re-captured. Step 16 re-checked against main plus #10: it holds, on a fresh `feat/slot-listings` branch. Merge order: #10 → I → 16/17+18 → G 30+31 → G 32+33.
+- 2026-09-25 15:20 — #10 merged (`eba40cd`). 16 coding on `feat/slot-listings`; 35 coding in `/home/claude/OpenAd-i`. 30+31 DONE (PASS r2; PR #11). Demo publisher balance finding: `reducers.buy()` does credit the slot owner, so the likely cause is a stale wagmi `balanceOf` read on persona switch, or the screenshot showing a non-owning publisher. Folded into 35 as item 6, with a diagnosis order and an exact-balance Playwright assertion. The 30+31 spec is removed from §5.
+- 2026-09-25 16:40 — #11 merged (`c3f39dc`). 35 DONE (#12 → `d5d46a0`; the balance item was not a bug and is now guarded). Demo Artifact v2 republished. Worktrees `-g` and `-i` removed. 16 is in FIX r1. **17+18 and 32+33 merged into one final step 36** (`chore/launch-final`), because they edit the same files. Spec written; 6.6 is split so the live deploy is an honest open 6.8. Backlog: listing on slot transfer, BaseError unit test.

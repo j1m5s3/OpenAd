@@ -6,6 +6,7 @@ export const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost
 export type HealthResponse = components['schemas']['HealthResponse'];
 export type SlotOut = components['schemas']['SlotOut'];
 export type SlotListOut = components['schemas']['SlotListOut'];
+export type SlotListingOut = components['schemas']['SlotListingOut'];
 export type PeriodOut = components['schemas']['PeriodOut'];
 export type PeriodListOut = components['schemas']['PeriodListOut'];
 export type CreativeOut = components['schemas']['CreativeOut'];
@@ -72,10 +73,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request<HealthResponse>('/v1/health'),
-  listSlots: (params: { domain?: string; kind?: number; limit?: number; offset?: number } = {}) => {
+  listSlots: (
+    params: {
+      domain?: string;
+      kind?: number;
+      category?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) => {
     const qs = new URLSearchParams();
     if (params.domain) qs.set('domain', params.domain);
     if (params.kind !== undefined) qs.set('kind', String(params.kind));
+    if (params.category) qs.set('category', params.category);
     if (params.limit !== undefined) qs.set('limit', String(params.limit));
     if (params.offset !== undefined) qs.set('offset', String(params.offset));
     const suffix = qs.size ? `?${qs.toString()}` : '';
@@ -107,6 +117,17 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     }),
+  putSlotListing: (
+    slotId: bigint | string,
+    body: { summary: string; audience: string; categories: string[] },
+  ) =>
+    request<SlotListingOut>(`/v1/slots/${slotId.toString()}/listing`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  deleteSlotListing: (slotId: bigint | string) =>
+    request<void>(`/v1/slots/${slotId.toString()}/listing`, { method: 'DELETE' }),
   startDomainVerification: (slotId: bigint | string, method: 'meta_tag' | 'dns_txt' = 'meta_tag') =>
     request<Record<string, string | boolean | null>>(
       `/v1/slots/${slotId.toString()}/domain-verification?method=${method}`,

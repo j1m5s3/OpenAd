@@ -170,6 +170,14 @@ export interface DemoDomainVerification {
   verifiedAt: number | null;
 }
 
+export interface DemoListing {
+  slotId: string;
+  summary: string;
+  audience: string;
+  categories: string[];
+  updatedAt: number;
+}
+
 export interface DemoCampaign {
   campaignId: string;
   slotId: string;
@@ -217,6 +225,7 @@ export interface DemoState {
   campaigns: Record<string, DemoCampaign>;
   houseAds: Record<string, DemoHouseAd>;
   domainVerifications: Record<string, DemoDomainVerification>;
+  listings: Record<string, DemoListing>;
   connectedAddress: string | null;
   ledger: DemoLedger;
 }
@@ -499,6 +508,39 @@ export function seedDemoState(now: number): DemoState {
     },
   };
 
+  // Publisher-provided listings (ROADMAP 6.3 step 16) for most slots — self-described, never
+  // verified. Slots 3 and 5 are left without one to demonstrate the optional field.
+  const listings: Record<string, DemoListing> = {
+    '0': {
+      slotId: '0',
+      summary: 'Weekly crypto market recap, 40k opens.',
+      audience: 'Solidity developers and DeFi power users reading our weekly security digest.',
+      categories: ['defi', 'security'],
+      updatedAt: now,
+    },
+    '1': {
+      slotId: '1',
+      summary: 'Newsletter sidebar, high-intent readers.',
+      audience: 'The same audience as our header banner, with longer average session time.',
+      categories: ['defi'],
+      updatedAt: now,
+    },
+    '2': {
+      slotId: '2',
+      summary: 'Dev-tool docs rail, high dwell time.',
+      audience: 'Solidity and Vyper developers integrating our SDK into production.',
+      categories: ['developer-tools', 'infrastructure'],
+      updatedAt: now,
+    },
+    '4': {
+      slotId: '4',
+      summary: 'Explorer dashboard tile, power users.',
+      audience: 'On-chain analysts and traders tracking L2 activity in real time.',
+      categories: ['infrastructure', 'layer-2'],
+      updatedAt: now,
+    },
+  };
+
   const state: DemoState = {
     slots,
     creatives,
@@ -506,6 +548,7 @@ export function seedDemoState(now: number): DemoState {
     campaigns,
     houseAds: {},
     domainVerifications: {},
+    listings,
     connectedAddress: null,
     ledger: { usdc: {}, allowances: {}, nonces: {}, allowedAdvertisers: {} },
   };

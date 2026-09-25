@@ -6,8 +6,9 @@ from typing import Literal
 from fastapi import APIRouter, Query, Request
 
 from openad.db.session import SessionDep
+from openad.listing_taxonomy import Category
 from openad.schemas.dashboard import HouseAdIn
-from openad.schemas.slot import PeriodListOut, SlotListOut, SlotOut
+from openad.schemas.slot import PeriodListOut, SlotListingIn, SlotListingOut, SlotListOut, SlotOut
 from openad.services import auth as auth_service
 from openad.services import offchain as offchain_service
 from openad.services import periods as periods_service
@@ -21,11 +22,12 @@ async def list_slots(
     session: SessionDep,
     domain: str | None = None,
     kind: int | None = Query(default=None, ge=0, le=3),
+    category: Category | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> SlotListOut:
     return await slots_service.list_slots(
-        session, domain=domain, kind=kind, limit=limit, offset=offset
+        session, domain=domain, kind=kind, category=category, limit=limit, offset=offset
     )
 
 
@@ -58,6 +60,31 @@ async def put_house_ad(
         session, slot_id, media_url=body.media_url, click_url=body.click_url
     )
     return {"slotId": str(row.slot_id), "mediaUrl": row.media_url, "clickUrl": row.click_url}
+
+
+@router.put("/{slot_id}/listing", response_model=SlotListingOut)
+async def put_listing(
+    slot_id: int, body: SlotListingIn, request: Request, session: SessionDep
+) -> SlotListingOut:
+    rec = await auth_service.get_session(session, request.cookies.get(auth_service.COOKIE_NAME))
+    await auth_service.require_slot_owner(session, slot_id, rec.address)
+    row = await offchain_service.set_listing(
+        session,
+        slot_id,
+        summary=body.summary,
+        audience=body.audience,
+        categories=body.categories,
+    )
+    out = slots_service.listing_to_out(row)
+    assert out is not None  # set_listing always returns a persisted row
+    return out
+
+
+@router.delete("/{slot_id}/listing", status_code=204)
+async def delete_listing(slot_id: int, request: Request, session: SessionDep) -> None:
+    rec = await auth_service.get_session(session, request.cookies.get(auth_service.COOKIE_NAME))
+    await auth_service.require_slot_owner(session, slot_id, rec.address)
+    await offchain_service.delete_listing(session, slot_id)
 
 
 @router.post("/{slot_id}/domain-verification")

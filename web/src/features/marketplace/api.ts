@@ -4,12 +4,13 @@ import { api } from '../../lib/api';
 
 export const slotKeys = {
   all: ['slots'] as const,
-  list: (params: { domain?: string; kind?: number } = {}) => ['slots', 'list', params] as const,
+  list: (params: { domain?: string; kind?: number; category?: string } = {}) =>
+    ['slots', 'list', params] as const,
   detail: (slotId: string) => ['slots', 'detail', slotId] as const,
   periods: (slotId: string) => ['slots', 'periods', slotId] as const,
 };
 
-export function useSlots(params: { domain?: string; kind?: number } = {}) {
+export function useSlots(params: { domain?: string; kind?: number; category?: string } = {}) {
   return useQuery({ queryKey: slotKeys.list(params), queryFn: () => api.listSlots(params) });
 }
 

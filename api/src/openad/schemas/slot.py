@@ -2,7 +2,32 @@
 
 from __future__ import annotations
 
+from pydantic import Field
+
 from openad.schemas.common import ApiModel
+
+
+class SlotListingIn(ApiModel):
+    """Write body for ``PUT /v1/slots/{slot_id}/listing``.
+
+    Deliberately loose types (``str``/``list[str]``, not ``Category``): validation lives in
+    ``services/offchain.py`` so every rejection (unknown category, too many categories, overlong
+    text, a URL in the summary, control characters) returns 422 in the repo's existing
+    ``{"error": ..., "message": ...}`` shape (``DomainError``), not FastAPI's default Pydantic
+    validation-error body.
+    """
+
+    summary: str
+    audience: str
+    categories: list[str] = Field(default_factory=list)
+
+
+class SlotListingOut(ApiModel):
+    slot_id: str
+    summary: str
+    audience: str
+    categories: list[str]
+    updated_at: int
 
 
 class TermsOut(ApiModel):
@@ -27,6 +52,7 @@ class SlotOut(ApiModel):
     period_seconds: int | None
     first_period_start: int | None
     terms: TermsOut | None = None
+    listing: SlotListingOut | None = None
 
 
 class SlotListOut(ApiModel):

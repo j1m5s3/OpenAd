@@ -129,6 +129,7 @@ Off-chain only:
 | Table                     | Purpose                                                                                                                                       |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `house_ads`               | Publisher fallback creative per slot (`media_url`, `click_url`). Set via authenticated API.                                                   |
+| `slot_listings`           | Publisher-provided audience description (`summary`, `audience`, `categories`) per slot (ROADMAP 6.3). Self-described, not verified. Set via authenticated API (owner-only). Off-chain and not rebuildable from chain — back it up. |
 | `domain_verifications`    | `(slot_id, method, token, verified_at)`. See § 3.6.                                                                                           |
 | `creative_verifications`  | `(creative_id, status, checked_at, cached_path, resolved_image_url, error)`. See § 3.5.                                                       |
 | `serve_events`            | Append-only: `(slot_id, lease key or campaign_id or null, served_kind, origin_ok, at, gsp_cpc?)`. No IPs, no user agents, no cookies. |

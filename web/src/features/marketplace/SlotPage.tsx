@@ -6,6 +6,7 @@ import { withDevWalletParam } from '../../lib/devWalletQuery';
 import { FieldHint, GuideLink } from '../../components/FieldHint';
 import { formatDuration, formatUnixSeconds, formatUsdc } from '../../lib/format';
 import { SALE_CPC, approvalModeLabel, saleModeLabel } from '../../lib/labels';
+import { categoryLabel } from '../../lib/listingTaxonomy';
 import { BuyDialog } from './components/BuyDialog';
 import { usePeriods, useSlot } from './api';
 
@@ -86,6 +87,27 @@ export function SlotPage() {
           </p>
         )}
       </div>
+
+      {s.listing && (
+        <section className="rounded-2xl border border-line bg-surface p-5">
+          <h2 className="font-medium">About this audience</h2>
+          <p className="mt-1 text-xs uppercase tracking-wide text-muted">Publisher-provided</p>
+          {s.listing.summary && <p className="mt-2">{s.listing.summary}</p>}
+          {s.listing.audience && <p className="mt-2 text-sm text-muted">{s.listing.audience}</p>}
+          {s.listing.categories.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1">
+              {s.listing.categories.map((c) => (
+                <span
+                  key={c}
+                  className="rounded-full border border-line px-2 py-0.5 text-xs text-muted"
+                >
+                  {categoryLabel(c)}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="rounded-2xl border border-line bg-surface p-5">
         <h2 className="font-medium">Share this slot</h2>

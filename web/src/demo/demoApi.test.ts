@@ -87,6 +87,15 @@ describe('createDemoRequestHandler', () => {
     expect(verification.verified).toBe(false);
     expect(String(verification.token)).toMatch(/^[0-9a-f]{32}$/);
 
+    const listing = await api.putSlotListing('0', {
+      summary: 'Weekly crypto recap',
+      audience: 'Solidity devs',
+      categories: ['defi', 'security'],
+    });
+    expect(listing.summary).toBe('Weekly crypto recap');
+    await api.deleteSlotListing('0');
+    expect(demoStore.get().listings['0']).toBeUndefined();
+
     const loggedOut = await api.authLogout();
     expect(loggedOut.ok).toBe(true);
 
@@ -101,6 +110,62 @@ describe('createDemoRequestHandler', () => {
     const byKind = await api.listSlots({ kind: 1 });
     expect(byKind.items.every((s) => s.kind === 1)).toBe(true);
     expect(byKind.items.length).toBeGreaterThan(0);
+  });
+
+  it('filters listSlots by category, and returns each slot with its listing when present', async () => {
+    const slot0 = await api.getSlot('0');
+    expect(slot0.listing?.categories).toContain('defi');
+
+    const byCategory = await api.listSlots({ category: 'defi' });
+    expect(byCategory.items.length).toBeGreaterThan(0);
+    expect(byCategory.items.every((s) => s.listing?.categories.includes('defi'))).toBe(true);
+
+    const bySecurity = await api.listSlots({ category: 'security' });
+    expect(bySecurity.items.every((s) => s.listing?.categories.includes('security'))).toBe(true);
+
+    const byMissing = await api.listSlots({ category: 'gaming' });
+    expect(byMissing.items).toEqual([]);
+  });
+
+  it('slot listing writes require a SIWE session that owns the slot', async () => {
+    const body = { summary: 'x', audience: 'y', categories: ['defi'] };
+    const newsletter = DEMO_PERSONAS.publisherNewsletter.address;
+    await expect(api.putSlotListing('1', body)).rejects.toMatchObject({ status: 401 });
+    await expect(api.deleteSlotListing('1')).rejects.toMatchObject({ status: 401 });
+
+    // Signed in as an advertiser: not the slot owner.
+    await api.authVerify(`as ${DEMO_PERSONAS.advertiserWallet.address}`, '0x');
+    await expect(api.putSlotListing('1', body)).rejects.toMatchObject({ status: 403 });
+
+    // Signed in as the owner: allowed.
+    await api.authVerify(`as ${newsletter}`, '0x');
+    await expect(api.putSlotListing('1', body)).resolves.toMatchObject({ slotId: '1' });
+    expect(demoStore.get().listings['1']?.categories).toEqual(['defi']);
+    await expect(api.deleteSlotListing('1')).resolves.toBeUndefined();
+    expect(demoStore.get().listings['1']).toBeUndefined();
+  });
+
+  it('rejects an unknown category or more than 3 categories with a 422 (L3)', async () => {
+    const newsletter = DEMO_PERSONAS.publisherNewsletter.address;
+    await api.authVerify(`as ${newsletter}`, '0x');
+    await expect(
+      api.putSlotListing('1', { summary: 'x', audience: 'y', categories: ['not-a-real-category'] }),
+    ).rejects.toMatchObject({ status: 422 });
+    await expect(
+      api.putSlotListing('1', {
+        summary: 'x',
+        audience: 'y',
+        categories: ['defi', 'nft', 'gaming', 'security'],
+      }),
+    ).rejects.toMatchObject({ status: 422 });
+    // 4 raw entries collapsing to 2 distinct valid categories must not be rejected as "too many".
+    await expect(
+      api.putSlotListing('1', {
+        summary: 'x',
+        audience: 'y',
+        categories: ['defi', 'defi', 'DeFi', 'security'],
+      }),
+    ).resolves.toMatchObject({ categories: ['defi', 'security'] });
   });
 
   it('rejects an unknown path with a 404 ApiError', async () => {
