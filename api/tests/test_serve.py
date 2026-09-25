@@ -152,9 +152,15 @@ async def test_origin_enforcement_falls_back_to_house(
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://api.test") as c:
+            own = await c.get("/v1/serve/1", headers={"Origin": "https://example.com"})
             res = await c.get("/v1/serve/1", headers={"Origin": "https://evil.test"})
+    assert own.json()["status"] == "lease"  # the slot's own domain still gets the paid creative
     assert res.status_code == 200
     assert res.json()["status"] == "house"
+    served = await session.execute(
+        select(ServeEvent.served_kind, ServeEvent.origin_ok).order_by(ServeEvent.id)
+    )
+    assert [tuple(row) for row in served.all()] == [("lease", True), ("house", False)]
 
 
 async def test_p95_resolve_under_50ms(session: AsyncSession) -> None:

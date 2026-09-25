@@ -4,7 +4,11 @@
 #
 # Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG, API_ORIGIN (e.g.
 # https://api.staging.example.com), RPC_ORIGINS (space- or comma-free single CSP fragment,
-# e.g. "https://sepolia.base.org https://mainnet.base.org").
+# e.g. "https://sepolia.base.org https://mainnet.base.org"). Both must be bare origins
+# (scheme://host[:port], no path/userinfo) — scripts/deploy-gcp.sh's `origin_of` enforces this
+# and refuses a userinfo-bearing value; RPC_ORIGINS defaults to the public chain RPC the web
+# app actually uses, never to `RPC_URL` (api/indexer/settler's own, possibly-keyed, backend
+# RPC), which must never reach this CSP header.
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
@@ -27,7 +31,17 @@ spec:
             - name: http1
               containerPort: 8080
           env:
-            # Widened from the image's demo-safe default of 'self' (web/Dockerfile) to the
-            # real API/RPC/WalletConnect origins this deployed build actually talks to.
+            # Widened from the image's demo-safe defaults (web/Dockerfile ENV CSP_CONNECT_SRC /
+            # CSP_IMG_SRC) to the real API/RPC/WalletConnect origins and media sources this
+            # deployed build actually talks to.
             - name: CSP_CONNECT_SRC
-              value: "'self' ${API_ORIGIN} ${RPC_ORIGINS} wss://*.walletconnect.com wss://*.walletconnect.org"
+              # WalletConnect's own SDK opens both an HTTPS relay and a WSS socket to the same
+              # hosts (inferred; verify before deploy — check the browser console for CSP
+              # violations in staging before setting a real WalletConnect id in prod).
+              value: "'self' ${API_ORIGIN} ${RPC_ORIGINS} https://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.com wss://*.walletconnect.org"
+            - name: CSP_IMG_SRC
+              # Paid media serves from this deployment's own API origin (/v1/serve/{id}/media).
+              # House-ad media is publisher-hosted, so it can be any https:// URL (the <open-ad>
+              # embed element's own creative, and the Supply house-ad preview) — never widen
+              # this beyond https: to a specific host list.
+              value: "'self' data: ${API_ORIGIN} https:"

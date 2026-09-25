@@ -2,7 +2,9 @@
 # scripts/deploy-gcp.sh, then applied with `gcloud run services replace`.
 #
 # Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG, CHAIN_ID, RPC_URL,
-# API_URL (this service's own public URL, used to build serve mediaUrl), WEB_URL (for CORS).
+# API_URL (this service's own public URL, used to build serve mediaUrl), WEB_URL (for CORS),
+# MEDIA_BUCKET (docs/deploy-gcp.md §4), VPC_NETWORK, VPC_SUBNET (Direct VPC egress to Cloud
+# SQL's private IP, docs/deploy-gcp.md §3), API_INGRESS (this service's ingress, below).
 # Secrets (never plain env vars): openad-database-url-<ENV>, openad-session-secret-<ENV>,
 # openad-click-hmac-secret-<ENV> — all in Secret Manager, bound below by reference only.
 apiVersion: serving.knative.dev/v1
@@ -12,7 +14,11 @@ metadata:
   labels:
     env: ${ENV}
   annotations:
-    run.googleapis.com/ingress: all
+    # Rendered from API_INGRESS (scripts/deploy-gcp.sh): all by default, or
+    # internal-and-cloud-load-balancing behind a load balancer (docs/deploy-gcp.md §11, "Click
+    # integrity"). Set the variable rather than editing this line: the script's post-deploy
+    # smoke check picks its URL from the same variable.
+    run.googleapis.com/ingress: ${API_INGRESS}
 spec:
   template:
     metadata:
@@ -30,6 +36,12 @@ spec:
         # OPENAD_DB_POOL_TIMEOUT if none frees up, rather than opening an extra one — that's
         # the tradeoff that keeps the connection budget under Cloud SQL's max_connections.
         run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:${REGION}:openad-${ENV}
+        # Direct VPC egress (docs/deploy-gcp.md §3, ADR-0017 amendment): the Cloud SQL instance
+        # has no public IP (--no-assign-ip), so Cloud Run needs a route into the VPC to reach
+        # it. private-ranges-only keeps RPC/GCS traffic on Cloud Run's normal internet egress,
+        # so no Cloud NAT is needed. (inferred; verify before deploy)
+        run.googleapis.com/network-interfaces: '[{"network":"${VPC_NETWORK}","subnetwork":"${VPC_SUBNET}"}]'
+        run.googleapis.com/vpc-access-egress: private-ranges-only
     spec:
       serviceAccountName: openad-api-${ENV}@${PROJECT_ID}.iam.gserviceaccount.com
       containers:
@@ -43,7 +55,7 @@ spec:
             - name: OPENAD_MEDIA_BACKEND
               value: "gcs"
             - name: OPENAD_MEDIA_GCS_BUCKET
-              value: "openad-media-${ENV}"
+              value: "${MEDIA_BUCKET}"
             - name: OPENAD_CHAIN_ID
               value: "${CHAIN_ID}"
             - name: OPENAD_RPC_URL
@@ -72,3 +84,6 @@ spec:
               value: "4"
             - name: OPENAD_DB_MAX_OVERFLOW
               value: "2"
+            # Paid creatives serve only on the slot's domain or its subdomains (ARCHITECTURE §3.4).
+            - name: OPENAD_SERVE_ENFORCE_ORIGIN
+              value: "true"

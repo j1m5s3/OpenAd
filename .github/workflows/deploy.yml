@@ -92,6 +92,21 @@ jobs:
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
           GCP_REGION: ${{ secrets.GCP_REGION }}
+          # Non-secret config, from the `staging` environment's variables (not secrets). An
+          # unset var arrives here as an empty string, which scripts/deploy-gcp.sh's guards and
+          # defaults treat the same as unset (docs/deploy-gcp.md §10).
+          API_URL: ${{ vars.API_URL }}
+          WEB_URL: ${{ vars.WEB_URL }}
+          WEB_DEMO_URL: ${{ vars.WEB_DEMO_URL }}
+          MEDIA_BUCKET: ${{ vars.MEDIA_BUCKET }}
+          BUILD_STAGING_BUCKET: ${{ vars.BUILD_STAGING_BUCKET }}
+          VPC_NETWORK: ${{ vars.VPC_NETWORK }}
+          VPC_SUBNET: ${{ vars.VPC_SUBNET }}
+          PUBLIC_INVOKER: ${{ vars.PUBLIC_INVOKER }}
+          API_INGRESS: ${{ vars.API_INGRESS }}
+          WALLETCONNECT_PROJECT_ID: ${{ vars.WALLETCONNECT_PROJECT_ID }}
+          GUIDE_URL: ${{ vars.GUIDE_URL }}
+          DEMO_URL: ${{ vars.DEMO_URL }}
         run: |
           scripts/deploy-gcp.sh \
             --env staging \

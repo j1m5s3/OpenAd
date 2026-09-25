@@ -1,6 +1,7 @@
 """Serving edge: GET /v1/serve/{slot_id} and /v1/serve/{slot_id}/media.
 
-Public, cacheable, never touches the chain. docs/ARCHITECTURE.md section 3.4.
+Public and never touches the chain. Media, and lease, house and empty responses, are publicly
+cacheable; a campaign response is ``private, no-store``. docs/ARCHITECTURE.md section 3.4.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from openad.db.session import SessionDep
 from openad.models import Creative, CreativeVerification
 from openad.schemas.serve import ServeResponse
 from openad.serve import cache as serve_cache
-from openad.serve.origin import host_matches_domain, request_host
+from openad.serve.origin import origin_allowed
 from openad.services import clicks as click_service
 from openad.services import media as media_service
 from openad.services import serve as serve_service
@@ -47,9 +48,7 @@ async def serve_slot(
     origin_ok = True
     paid = result.response.status in {"lease", "campaign"}
     if settings.serve_enforce_origin and paid:
-        origin_ok = host_matches_domain(
-            request_host(origin, referer), result.slot.domain, allow_local=settings.is_dev
-        )
+        origin_ok = origin_allowed(origin, referer, result.slot.domain, allow_local=settings.is_dev)
         if not origin_ok:
             result = await serve_service.house_or_empty(session, result.slot, ctx)
 
@@ -80,9 +79,14 @@ async def serve_slot(
         )
         result.response.creative.click_url = f"{settings.public_url}/v1/c/{raw}"
 
+    response.headers["Vary"] = "Origin"
+    if result.response.status == "campaign":
+        # Never shared by any cache: the response carries a one-time click token, and each
+        # response is an impression (the serve_events row above).
+        response.headers["Cache-Control"] = "private, no-store"
+        return result.response
     etag = _serve_etag(slot_id, result.response.status, result.lease, result.campaign)
     response.headers["Cache-Control"] = f"public, max-age={result.response.ttl}"
-    response.headers["Vary"] = "Origin"
     response.headers["ETag"] = etag
     return result.response
 

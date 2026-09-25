@@ -3,7 +3,8 @@
 # a port (jobs don't need to). Applied with `gcloud run jobs replace`, run with
 # `gcloud run jobs execute openad-migrate --wait` (scripts/deploy-gcp.sh does both).
 #
-# Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG.
+# Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG, VPC_NETWORK, VPC_SUBNET
+# (Direct VPC egress to Cloud SQL's private IP, docs/deploy-gcp.md §3).
 apiVersion: run.googleapis.com/v1
 kind: Job
 metadata:
@@ -15,6 +16,12 @@ spec:
     metadata:
       annotations:
         run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:${REGION}:openad-${ENV}
+        # Direct VPC egress (docs/deploy-gcp.md §3, ADR-0017 amendment): see api.yaml's comment.
+        # This job opens the FIRST connection to the private-IP instance (docs/deploy-gcp.md
+        # §3's verify-first note); without this route it would fail closed before migrations
+        # ever apply. (inferred; verify before deploy)
+        run.googleapis.com/network-interfaces: '[{"network":"${VPC_NETWORK}","subnetwork":"${VPC_SUBNET}"}]'
+        run.googleapis.com/vpc-access-egress: private-ranges-only
     spec:
       template:
         spec:

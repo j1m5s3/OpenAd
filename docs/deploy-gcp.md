@@ -27,8 +27,14 @@ gcloud services enable \
   artifactregistry.googleapis.com \
   storage.googleapis.com \
   cloudbuild.googleapis.com \
-  iamcredentials.googleapis.com
+  iamcredentials.googleapis.com \
+  compute.googleapis.com \
+  servicenetworking.googleapis.com
 ```
+
+`compute.googleapis.com` and `servicenetworking.googleapis.com` are needed for Private Services
+Access and Direct VPC egress (§3) — both underpin every Cloud Run service reaching Cloud SQL's
+private IP **(inferred; verify before deploy)**.
 
 ## 2. Artifact Registry
 
@@ -36,6 +42,19 @@ gcloud services enable \
 gcloud artifacts repositories create openad \
   --repository-format=docker --location=<REGION> \
   --description="OpenAd images (api/indexer/settler share one image; web separate)"
+```
+
+`gcloud builds submit` (§6) stages its source upload in a bucket. Rather than the default
+`gs://<PROJECT_ID>_cloudbuild` (whose ownership `gcloud` checks by listing the project's
+buckets when no `--gcs-source-staging-dir` is given, which needs project-wide list access
+**(inferred; verify before deploy)**), it uses a dedicated one instead, named by
+`BUILD_STAGING_BUCKET` (default `<PROJECT_ID>-openad-builds`, `scripts/deploy-gcp.sh`), so the
+deployer SA's storage grant (§10) can be scoped to just that bucket. Pre-create it once, since
+the deployer SA cannot create buckets itself:
+
+```bash
+gcloud storage buckets create gs://<PROJECT_ID>-openad-builds \
+  --location=<REGION> --uniform-bucket-level-access
 ```
 
 ## 3. Private Services Access + Cloud SQL Postgres 16
@@ -52,11 +71,37 @@ gcloud services vpc-peerings connect \
   --ranges=google-managed-services-default --network=default
 ```
 
+**Reaching the private IP: Direct VPC egress.** The instance below is created with
+`--no-assign-ip` (private IP only), so every Cloud Run service that talks to it (`api`,
+`indexer`, `settler`, and the `openad-migrate` job) needs a route into the VPC. Each of their
+manifests (`infra/gcp/services/{api,indexer,settler}.yaml`,
+`infra/gcp/jobs/migrate.yaml`) sets Direct VPC egress
+(`run.googleapis.com/network-interfaces` + `run.googleapis.com/vpc-access-egress:
+private-ranges-only`) against `VPC_NETWORK`/`VPC_SUBNET` (both default `default`,
+`scripts/deploy-gcp.sh`). `private-ranges-only` keeps RPC/GCS traffic on Cloud Run's normal
+internet egress, so no Cloud NAT is needed. The subnet (`default` in `<REGION>`) needs enough
+free IPs for however many instances these services scale to **(inferred; verify before
+deploy)**.
+
+**Verify-first, before the first real deploy.** The `openad-migrate` job (§7) opens the first
+connection to this instance on every deploy. If the `/cloudsql/…` Unix socket can't reach a
+private-IP-only instance from Cloud Run's Direct VPC egress path, store the connection string
+in TCP form instead — `postgresql+asyncpg://openad:<PASSWORD>@<PRIVATE_IP>:5432/openad` (drop
+`?host=/cloudsql/…`) — in the secret (step 5), where `<PRIVATE_IP>` is:
+
+```bash
+gcloud sql instances describe openad-<ENV> --format='value(ipAddresses[0].ipAddress)'
+```
+
+**(inferred; verify before deploy)**.
+
 ```bash
 # max_connections is set explicitly rather than left to the tier default: the connection
 # budget below requires at least 100, verified before every deploy.
+# --edition=ENTERPRISE: new Postgres 16 instances default to Enterprise Plus, which doesn't
+# offer db-custom-* tiers (inferred; verify before deploy).
 gcloud sql instances create openad-<ENV> \
-  --database-version=POSTGRES_16 --tier=db-custom-1-3840 \
+  --database-version=POSTGRES_16 --tier=db-custom-1-3840 --edition=ENTERPRISE \
   --region=<REGION> --no-assign-ip --network=default \
   --database-flags=max_connections=100
 
@@ -198,8 +243,11 @@ instance-level connection cap over fewer concurrent requests per instance.
 
 ## 4. GCS media bucket + service accounts
 
+Bucket names are global, so `<MEDIA_BUCKET>` below should be project-scoped — the suggested
+(and `scripts/deploy-gcp.sh`'s default) value is `openad-media-<PROJECT_ID>-<ENV>`.
+
 ```bash
-gcloud storage buckets create gs://openad-media-<ENV> \
+gcloud storage buckets create gs://<MEDIA_BUCKET> \
   --location=<REGION> --uniform-bucket-level-access
 
 gcloud iam service-accounts create openad-api-<ENV> --display-name="OpenAd api <ENV>"
@@ -207,14 +255,14 @@ gcloud iam service-accounts create openad-indexer-<ENV> --display-name="OpenAd i
 gcloud iam service-accounts create openad-settler-<ENV> --display-name="OpenAd settler <ENV>"
 gcloud iam service-accounts create openad-migrate-<ENV> --display-name="OpenAd migrate job <ENV>"
 
-gcloud storage buckets add-iam-policy-binding gs://openad-media-<ENV> \
+gcloud storage buckets add-iam-policy-binding gs://<MEDIA_BUCKET> \
   --member="serviceAccount:openad-api-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com" \
   --role="roles/storage.objectViewer"
 
 # objectUser (not objectCreator): the indexer legitimately overwrites the same key on a
 # replay (reorg re-verification, or the scheduled re-check), which objectCreator can't do.
 # Scoped to this one bucket only, not project-wide.
-gcloud storage buckets add-iam-policy-binding gs://openad-media-<ENV> \
+gcloud storage buckets add-iam-policy-binding gs://<MEDIA_BUCKET> \
   --member="serviceAccount:openad-indexer-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com" \
   --role="roles/storage.objectUser"
 
@@ -233,7 +281,8 @@ password, so it is never typed here. The remaining secrets:
 
 ```bash
 # Settler key — ONLY this secret's IAM binding names the settler service account.
-# Generate/import the deployer/settler EOA's private key out of band; never echo it here.
+# The dedicated, gas-only settler EOA's key (docs/deploy-sepolia.md), never the deployer's or
+# the owner's. Create it out of band; never echo it here.
 gcloud secrets create openad-settler-key-<ENV> --data-file=/path/to/local/key/file
 gcloud secrets add-iam-policy-binding openad-settler-key-<ENV> \
   --member="serviceAccount:openad-settler-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com" \
@@ -263,7 +312,12 @@ the images, running the migration job and deploying the services is one command
 ```bash
 cd /path/to/OpenAd
 ./scripts/deploy-gcp.sh --env staging --only demo  --project <PROJECT_ID> --region <REGION>
-./scripts/deploy-gcp.sh --env staging --only stack --project <PROJECT_ID> --region <REGION>
+# stack/all refuse when API_URL/WEB_URL are unset or empty (see the Guards list below) —
+# set them to this env's real public URLs first, even before §9's domain mapping exists: the
+# script smokes api/web at their live *.run.app URLs, not these domains (for the api, only
+# while API_INGRESS is `all`; see below).
+API_URL=https://api.<domain> WEB_URL=https://app.<domain> \
+  ./scripts/deploy-gcp.sh --env staging --only stack --project <PROJECT_ID> --region <REGION>
 # --only all does both plus the real (non-demo) web site. --dry-run prints every command
 # instead of running it. --env prod additionally requires
 # --i-understand-this-is-mainnet and is refused outright when CI=true.
@@ -276,23 +330,80 @@ between the CI path and running it yourself. The rest of this section (§6-§8) 
 fallback: the individual `gcloud` commands the script above wraps, for debugging one step in
 isolation or if you'd rather not use the script.
 
+**The script also makes `openad-api`, `openad-web` and `openad-web-demo` public** —
+`gcloud run services add-iam-policy-binding <svc> --member=allUsers --role=roles/run.invoker`
+after each one's `services replace` — because `services replace` applies no IAM of its own;
+without this follow-up step every request to those three services would get a 403 from Cloud
+Run itself, before the container ever runs. It is never applied to the indexer or the settler,
+which stay `--ingress=internal` with no public invoker at all. If an org policy
+(domain-restricted sharing) refuses `allUsers`, the binding step fails; set
+`PUBLIC_INVOKER=iam-disabled` (`scripts/deploy-gcp.sh`) instead. For all three services the
+script then writes `run.googleapis.com/invoker-iam-disabled: "true"` into the rendered spec
+before its `services replace` (a replace applies the whole spec, so without it every deploy
+would turn the IAM check back on until the next step), and runs `gcloud run services update
+<svc> --no-invoker-iam-check` after it in place of the binding **(inferred; verify before
+deploy — confirm the annotation and `--no-invoker-iam-check` are accepted and have no other
+side effects for this org/project first)**.
+
+**The api's ingress: `API_INGRESS`.** The script renders `api.yaml`'s
+`run.googleapis.com/ingress` annotation from `API_INGRESS`: `all` by default, or
+`internal-and-cloud-load-balancing` behind a load balancer, so nothing reaches the api around it
+(§11, "Click integrity"). The post-deploy smoke check follows the same variable. With `all` it
+fetches `/v1/health` at the service's own `*.run.app` URL, which answers even before §9 maps a
+domain. With `internal-and-cloud-load-balancing` that URL refuses outside requests **(inferred;
+verify before deploy)**, so it fetches `API_URL` instead, which must then be the load balancer's
+host. Keep `all` for a first deploy, and switch to `internal-and-cloud-load-balancing` only once
+the load balancer already serves `API_URL` (its serverless NEG, the DNS record for `API_URL`'s
+host and its managed certificate; §9). Switch any earlier and the api smoke check fails, and
+`--only all` stops before `openad-web-demo` and `openad-web`; the api is also off the public
+internet until the load balancer serves it, since its `*.run.app` URL and any domain mapping
+refuse outside requests **(inferred; verify before deploy)**. `openad-web` and `openad-web-demo`
+keep ingress `all` and are checked at their `*.run.app` URLs (the demo at `WEB_DEMO_URL` once
+that is set).
+
 ### 6. Build and push images (manual fallback)
 
 ```bash
 gcloud builds submit --config infra/gcp/cloudbuild.yaml --project <PROJECT_ID> \
-  --substitutions=_REGION=<REGION>,_REPO=openad,_ENV=<ENV>,_API_URL=https://api.<ENV>.example.com,_CHAIN_ID=<CHAIN_ID>
+  --substitutions=_REGION=<REGION>,_REPO=openad,_ENV=<ENV>,_API_URL=https://api.<ENV>.example.com,_CHAIN_ID=<CHAIN_ID>,_WALLETCONNECT_PROJECT_ID=<WC_PROJECT_ID>,_GUIDE_URL=<GUIDE_URL>,_DEMO_URL=<DEMO_URL> \
+  --gcs-source-staging-dir=gs://<PROJECT_ID>-openad-builds/source
 ```
 
-Or build one image directly, e.g. `gcloud builds submit --tag
-<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest -f api/Dockerfile --build-arg
-UV_EXTRAS=gcs .` (and `-f web/Dockerfile`, with `--build-arg VITE_DEMO_MODE=1` for the demo
-variant). `indexer` and `settler` reuse the `api` image with a different Cloud Run `command`
-(`python -m openad.indexer` / `python -m openad.settler`), so nothing extra to build there.
+`_WALLETCONNECT_PROJECT_ID`, `_GUIDE_URL` and `_DEMO_URL` each default to `""` (unset) when
+omitted — a real, working build with injected (browser) wallets only and the guide/demo links
+hidden (`web/src/lib/wagmi.ts`, `lib/copy.ts`, `features/marketing/WhyPage.tsx`). A made-up
+WalletConnect id doesn't throw the way an empty one used to — RainbowKit only throws on a falsy
+`projectId` — but it boots a page whose WalletConnect-based wallets fail as soon as a visitor
+tries to connect through one (inferred). Set a real id only, or leave it unset. A real id also
+lists RainbowKit's default wallets, whose SDKs call hosts beyond the `*.walletconnect.com` and
+`*.walletconnect.org` entries in `CSP_CONNECT_SRC` (`infra/gcp/services/web.yaml`, and §8's
+`openad-web` command). Add those hosts to `CSP_CONNECT_SRC` only: `https://api.web3modal.org`
+for WalletConnect's modal (AppKit), `https://*.coinbase.com` for Coinbase's Base Account SDK and
+`wss://metamask-sdk.api.cx.metamask.io` for MetaMask's SDK (inferred; verify in the browser
+console before deploy). `img-src` already allows `https:`. Leave `style-src` and `font-src` as
+the nginx template fixes them (no build loads Google Fonts): AppKit's web font (Inter, from Google
+Fonts) stays blocked, and AppKit falls back to system fonts.
+
+Or build and push one image directly:
+
+```bash
+docker build -f api/Dockerfile --build-arg UV_EXTRAS=gcs \
+  -t <REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest .
+docker push <REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest
+```
+
+(and `-f web/Dockerfile`, with `--build-arg VITE_DEMO_MODE=1` for the demo variant, or
+`--build-arg VITE_WALLETCONNECT_PROJECT_ID=<id> --build-arg VITE_GUIDE_URL=<url> --build-arg
+VITE_DEMO_URL=<url>` for the real one). `indexer` and `settler` reuse the `api` image with a
+different Cloud Run `command` (`python -m openad.indexer` / `python -m openad.settler`), so
+nothing extra to build there.
 
 ### 7. Run the migration job (manual fallback)
 
 ```bash
-envsubst <infra/gcp/jobs/migrate.yaml # with PROJECT_ID, REGION, ENV, IMAGE_TAG set
+envsubst <infra/gcp/jobs/migrate.yaml # with PROJECT_ID, REGION, ENV, IMAGE_TAG, VPC_NETWORK,
+                                       # VPC_SUBNET set (an unset VPC_NETWORK/VPC_SUBNET renders
+                                       # "network":"","subnetwork":"" — always set both)
 gcloud run jobs replace <rendered-migrate.yaml> --project <PROJECT_ID> --region <REGION>
 gcloud run jobs execute openad-migrate --project <PROJECT_ID> --region <REGION> --wait
 ```
@@ -315,16 +426,23 @@ first (`infra/gcp/README.md` lists every placeholder); `scripts/deploy-gcp.sh` d
 rendering into a throwaway temp directory automatically. Env vars below are the non-secret
 subset of `.env.example`; adjust per environment (`OPENAD_CHAIN_ID`, `OPENAD_RPC_URL`,
 `OPENAD_DEPLOYMENTS_DIR` point at the committed
-`84532.json`/`8453.json` baked into the image, or an external RPC URL).
+`84532.json`/`8453.json` baked into the image, or an external RPC URL). That baking happens at
+image-build time (`api/Dockerfile` copies `contracts/deployments` to
+`/app/contracts/deployments` and sets `OPENAD_DEPLOYMENTS_DIR` to match — the same image serves
+`api`, `indexer` and `settler` below), so rebuild and redeploy the `api` image itself after
+committing a new `84532.json` or `8453.json`, not just this deploy step.
 
 ```bash
+# --network/--subnet/--vpc-egress give each service Direct VPC egress, the route into the VPC
+# that reaching Cloud SQL's private IP needs (§3). (inferred; verify before deploy)
 gcloud run deploy openad-api \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest \
   --region=<REGION> --platform=managed --allow-unauthenticated \
   --port=8000 --min-instances=1 --max-instances=4 \
+  --network=<VPC_NETWORK> --subnet=<VPC_SUBNET> --vpc-egress=private-ranges-only \
   --service-account=openad-api-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com \
   --set-cloudsql-instances=<PROJECT_ID>:<REGION>:openad-<ENV> \
-  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=openad-media-<ENV>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_PUBLIC_URL=https://api.<ENV>.example.com,OPENAD_CORS_ORIGINS=https://<ENV>.example.com,OPENAD_DB_POOL_SIZE=4,OPENAD_DB_MAX_OVERFLOW=2 \
+  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=<MEDIA_BUCKET>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_PUBLIC_URL=https://api.<ENV>.example.com,OPENAD_CORS_ORIGINS=https://<ENV>.example.com,OPENAD_DB_POOL_SIZE=4,OPENAD_DB_MAX_OVERFLOW=2 \
   --set-secrets=OPENAD_DATABASE_URL=openad-database-url-<ENV>:latest,OPENAD_SESSION_SECRET=openad-session-secret-<ENV>:latest,OPENAD_CLICK_HMAC_SECRET=openad-click-hmac-secret-<ENV>:latest
 
 # No --port here: Cloud Run injects $PORT (default 8080) into every container regardless of
@@ -334,16 +452,18 @@ gcloud run deploy openad-indexer \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest \
   --region=<REGION> --platform=managed --no-allow-unauthenticated --ingress=internal \
   --min-instances=1 --max-instances=1 --no-cpu-throttling \
+  --network=<VPC_NETWORK> --subnet=<VPC_SUBNET> --vpc-egress=private-ranges-only \
   --command="uv,run,python,-m,openad.indexer" \
   --service-account=openad-indexer-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com \
   --set-cloudsql-instances=<PROJECT_ID>:<REGION>:openad-<ENV> \
-  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=openad-media-<ENV>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_DB_POOL_SIZE=2,OPENAD_DB_MAX_OVERFLOW=1 \
+  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=<MEDIA_BUCKET>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_DB_POOL_SIZE=2,OPENAD_DB_MAX_OVERFLOW=1 \
   --set-secrets=OPENAD_DATABASE_URL=openad-database-url-<ENV>:latest
 
 gcloud run deploy openad-settler \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest \
   --region=<REGION> --platform=managed --no-allow-unauthenticated --ingress=internal \
   --min-instances=1 --max-instances=1 --no-cpu-throttling \
+  --network=<VPC_NETWORK> --subnet=<VPC_SUBNET> --vpc-egress=private-ranges-only \
   --command="uv,run,python,-m,openad.settler" \
   --service-account=openad-settler-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com \
   --set-cloudsql-instances=<PROJECT_ID>:<REGION>:openad-<ENV> \
@@ -352,8 +472,15 @@ gcloud run deploy openad-settler \
 
 gcloud run deploy openad-web \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/web:latest \
-  --region=<REGION> --platform=managed --allow-unauthenticated --max-instances=10
+  --region=<REGION> --platform=managed --allow-unauthenticated --max-instances=10 \
+  --set-env-vars="CSP_CONNECT_SRC='self' https://api.<ENV>.example.com <RPC_ORIGINS> https://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.com wss://*.walletconnect.org,CSP_IMG_SRC='self' data: https://api.<ENV>.example.com https:"
 ```
+
+Without that last flag, the image's demo-safe CSP defaults (`web/Dockerfile`) stay in force and
+the deployed app can't reach its own API; `infra/gcp/services/web.yaml` sets the same two vars
+for the scripted path. The origins above are inferred from what WalletConnect's SDK is known to
+open — check the browser console for CSP violations in staging before setting a real project id
+in prod (see §6 for what a real id also pulls in beyond these).
 
 `--max-instances` on `openad-api` matches the connection budget above; on `openad-web` (and
 `openad-web-demo`, not shown here since §8 only covers the stack — see
@@ -363,7 +490,9 @@ connection.
 `openad-settler` is the **only** service with `OPENAD_SETTLER_KEY` bound, and its service
 account is the only one with `secretAccessor` on that secret (step 5) — matches ADR-0014 and
 `AGENTS.md`'s non-custodial invariant. Confirm with
-`gcloud secrets get-iam-policy openad-settler-key-<ENV>` before going further.
+`gcloud secrets get-iam-policy openad-settler-key-<ENV>` before going further. The service
+refuses to start if its key owns `CampaignVault` or is the deployer (it logs
+`settler.key_is_owner` or `settler.key_is_deployer` and exits).
 
 ## 9. Domain mapping: web and api must share a registrable domain (required)
 
@@ -384,7 +513,14 @@ Map both services under one registrable domain instead, e.g. `app.<domain>` and
 ```bash
 gcloud run domain-mappings create --service=openad-api --domain=api.<domain> --region=<REGION>
 gcloud run domain-mappings create --service=openad-web --domain=app.<domain> --region=<REGION>
+gcloud run domain-mappings create --service=openad-web-demo --domain=demo.<domain> --region=<REGION>
 ```
+
+The third mapping is optional — the demo has no sign-in, so it has no same-site requirement of
+its own — but gives it a stable, branded URL instead of `openad-web-demo`'s bare `*.run.app`
+one. Once mapped, set both `WEB_DEMO_URL` (this runbook's own var, for
+`scripts/deploy-gcp.sh`'s post-deploy smoke check) and `DEMO_URL` (fed into the real web
+build's "Try the demo" link) to `https://demo.<domain>`.
 
 Then point the api's CORS allowlist and the web build's api URL at those same hosts:
 `OPENAD_CORS_ORIGINS=https://app.<domain>` (rendered into `api.yaml` as `WEB_URL`) and
@@ -425,10 +561,23 @@ can wrongly _accept_ a genuinely cross-site pair on domains shaped like these.
 false-accept gap — a domain on a multi-label public suffix should be checked by hand rather than
 trusted to this heuristic.
 
-Optional: put a global HTTPS load balancer + Cloud CDN in front of `openad-api` scoped to
-`/v1/serve/*` and `/v1/serve/*/media`, since those responses are already
-`Cache-Control: public, max-age=<ttl>` (ARCHITECTURE §3.4). Everything else can go straight
-through Cloud Run's own HTTPS endpoint.
+Optional: put a global HTTPS load balancer in front of `openad-api`, with Cloud CDN for serve
+media. The load balancer fronts **every** api path on the `API_URL` host, and nothing reaches
+the api around it. Click and media URLs share that host (`OPENAD_PUBLIC_URL`), and the click
+burst rule's key needs every request to pass the same proxies: § 11 ("Click integrity") has
+the ingress and `API_URL` steps. Cache only `/v1/serve/*/media`: verified bytes, already
+`Cache-Control: public, max-age=<ttl>`. Never let the CDN cache `/v1/serve/{slot_id}`. A
+campaign response there carries a one-time click token and is `private, no-store`, and every
+serve is counted as an impression, so a shared copy would 404 every click after the first and
+undercount impressions (ARCHITECTURE §3.4). Lease, house and empty responses are
+`public, max-age=<ttl>`, so a CDN that follows origin headers would cache them too: scope
+caching by path, not by headers. One way: two backend services on the same serverless NEG,
+only one with Cloud CDN enabled, and a URL-map route rule (a path template such as
+`/v1/serve/*/media`) that sends media to that one and every other path to the other. Never
+use the `FORCE_CACHE_ALL` cache mode on the backend that serves `/v1/serve/{slot_id}`: it
+caches responses whatever their `Cache-Control` says (all inferred; verify before deploy). The
+load balancer adds `X-Forwarded-For` entries: re-run § 11's hop check before you rely on
+`OPENAD_TRUSTED_PROXY_HOPS`.
 
 ## 10. Workload Identity Federation for GitHub Actions (no JSON keys)
 
@@ -450,12 +599,24 @@ gcloud iam service-accounts add-iam-policy-binding \
   --member="principalSet://iam.googleapis.com/projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/github/attribute.repository/<ORG>/<REPO>"
 
 # Minimum roles the deployer SA needs to build, push and deploy: it must NOT get
-# roles/owner or roles/editor.
-for ROLE in roles/run.admin roles/iam.serviceAccountUser roles/artifactregistry.writer; do
+# roles/owner or roles/editor. cloudbuild.builds.editor submits builds; serviceUsageConsumer
+# lets `gcloud builds submit` bill/attribute usage to this project; logging.viewer is needed
+# because gcloud streams CLOUD_LOGGING_ONLY build logs and exits non-zero without it.
+# (inferred; verify before deploy)
+for ROLE in roles/run.admin roles/iam.serviceAccountUser roles/artifactregistry.writer \
+  roles/cloudbuild.builds.editor roles/serviceusage.serviceUsageConsumer roles/logging.viewer; do
   gcloud projects add-iam-policy-binding <PROJECT_ID> \
     --member="serviceAccount:openad-deployer-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com" \
     --role="${ROLE}"
 done
+
+# The source upload for `gcloud builds submit` (§6) goes to the dedicated staging bucket from
+# §2 (gs://<PROJECT_ID>-openad-builds by default, BUILD_STAGING_BUCKET), which the deployer SA
+# needs write access to — scoped to just this bucket, not gs://<PROJECT_ID>_cloudbuild or any
+# project-wide storage role.
+gcloud storage buckets add-iam-policy-binding gs://<PROJECT_ID>-openad-builds \
+  --member="serviceAccount:openad-deployer-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com" \
+  --role="roles/storage.admin"
 ```
 
 `roles/iam.serviceAccountUser` lets the deployer SA deploy Cloud Run revisions _as_
@@ -469,12 +630,47 @@ plus `GCP_PROJECT_ID` and `GCP_REGION` for `scripts/deploy-gcp.sh --project`/`--
 the `deploy` job entirely when it is absent; the workflow only ever targets `staging` and never
 broadcasts to Base mainnet regardless of what secrets are configured.
 
+Also set, as GitHub **environment variables** (`vars`, not `secrets` — none of these are
+sensitive) on the `staging` environment, so the workflow can pass them through to
+`scripts/deploy-gcp.sh` (an unset one arrives as an empty string, which the script's guards and
+defaults treat the same as unset): `API_URL`, `WEB_URL`, `WEB_DEMO_URL`, `MEDIA_BUCKET`,
+`BUILD_STAGING_BUCKET`, `VPC_NETWORK`, `VPC_SUBNET`, `PUBLIC_INVOKER`, `API_INGRESS`,
+`WALLETCONNECT_PROJECT_ID`, `GUIDE_URL` and `DEMO_URL`. Leaving `API_URL`/`WEB_URL` unset means
+a `stack`/`all` deploy from CI refuses outright — see the Guards list in
+`scripts/deploy-gcp.sh --help` — rather than silently deploying against the `example.com`
+placeholder.
+
+**The service account that *runs* the build** (not the deployer SA above, which only
+*submits* it) is a separate identity — on a new project this is often the Compute Engine
+default service account, which gets no roles automatically. It needs `roles/cloudbuild.builds.builder`
+to run the build at all, plus `roles/artifactregistry.writer` to push the built images
+**(inferred; verify before deploy — see which service account `gcloud builds submit`'s output
+names as the build's runner)**.
+
 ## 11. Smoke checks
 
+Paste the whole block: it runs in a subshell with `set -e`, so the first failing check stops it
+with a non-zero status (`echo $?`) and leaves your own shell open. Its hosts are §9's:
+`api.<domain>` (`API_URL`), `app.<domain>` (`WEB_URL`) and `demo.<domain>` (`WEB_DEMO_URL`).
+
 ```bash
-curl -sf https://api.<ENV>.example.com/v1/health
-curl -sf https://api.<ENV>.example.com/v1/serve/1
-curl -sf https://<ENV>.example.com/embed-demo   # or /demo/ for the demo build
+(
+  set -e
+  curl -sf https://api.<domain>/v1/health
+
+  # /v1/serve/<id> legitimately 404s on a fresh deploy (no slot 1 minted yet): check the status
+  # and that the body is JSON, not `-f` (which treats a 404 as a curl failure).
+  STATUS="$(curl -s -o /tmp/serve1.json -w '%{http_code}' https://api.<domain>/v1/serve/1)"
+  [ "$STATUS" = "200" ] || [ "$STATUS" = "404" ] || { echo "unexpected status: $STATUS" >&2; exit 1; }
+  python3 -m json.tool </tmp/serve1.json >/dev/null
+
+  curl -sf https://app.<domain>/embed-demo   # the real web app's own embed-demo page
+
+  # openad-web-demo is a SEPARATE Cloud Run service with its own host (WEB_DEMO_URL, §9) —
+  # check it there at /healthz, never at a "/demo/" path on the real web app's own host.
+  curl -sf https://demo.<domain>/healthz
+  echo "smoke checks passed"
+)
 ```
 
 ### Sign-in origin
@@ -485,6 +681,61 @@ only if its `domain` is the `host:port`, and its `URI` the origin, of an allowed
 is unset. Open the web app, connect a wallet and sign in. A 401 `domain not allowed` from
 `/v1/auth/verify` means the page's exact origin (scheme, host, port) is not in that list. If
 users reach the web app on more than one origin, list each one in both variables.
+
+### Click integrity
+
+Each check below is a real serve, so it records one impression.
+
+- **Campaign responses are never cached.** Once a CPC campaign is serving on a slot, read the
+  headers of a GET. (The serve route answers `HEAD` with `405`, so `curl -I` doesn't show
+  them.)
+
+  ```bash
+  curl -s -o /dev/null -D - "https://api.<ENV>.example.com/v1/serve/<CPC_SLOT_ID>" \
+    | grep -i '^cache-control'
+  ```
+
+  Expect `cache-control: private, no-store`. Lease, house and empty responses stay
+  `public, max-age=30` (`OPENAD_SERVE_TTL_SECONDS`).
+- **Browsers get paid creatives only on the slot's domain.** `api.yaml` sets
+  `OPENAD_SERVE_ENFORCE_ORIGIN=true`. Ask for a leased slot as another site would, then as an
+  opaque-origin page (a sandboxed iframe that sends no referrer):
+
+  ```bash
+  for ORIGIN in https://not-the-slot-domain.example null; do
+    curl -s -H "Origin: ${ORIGIN}" \
+      "https://api.<ENV>.example.com/v1/serve/<LEASED_SLOT_ID>" | grep -o '"status":"[a-z]*"'
+  done
+  ```
+
+  Expect `"status":"house"` or `"status":"empty"` twice, never `"lease"`. With the slot's own
+  domain as `Origin`, the same request gets `"lease"`, and so does one with no `Origin` and
+  no `Referer`: a script can send any header, so this check binds browsers only
+  (ARCHITECTURE §3.4).
+- **The click burst rule stays off until the hop count is verified.** It keys on the same
+  client key as the auth rate limit below. While `OPENAD_TRUSTED_PROXY_HOPS` is unset (`0`),
+  that key is the address of Google's front end, shared by every visitor (inferred; verify
+  before deploy), so the api skips the rule and logs `clicks.burst_rule_disabled` once at
+  startup. Once the next subsection's steps have verified the hop count and `api.yaml` sets
+  `OPENAD_TRUSTED_PROXY_HOPS`, the rule keys on that same entry and the warning stops. The
+  one-time token and the hourly per-campaign cap apply either way.
+- **Behind a load balancer, every api request must take the same proxies.** A load balancer
+  (§ 9) adds its own `X-Forwarded-For` entry, so the hop count usually becomes `2`. Close
+  every path around it:
+  - set `API_INGRESS=internal-and-cloud-load-balancing` for `scripts/deploy-gcp.sh` (it takes
+    `all`, the default, or `internal-and-cloud-load-balancing`, and renders it into `api.yaml`'s
+    `run.googleapis.com/ingress` annotation), but only once the load balancer already serves
+    `API_URL` (§6-8; inferred; verify before deploy);
+  - make `API_URL` the load balancer's host. It becomes `OPENAD_PUBLIC_URL`, the host of every
+    click and media URL the api hands out, and the web build's `VITE_API_URL`.
+
+  Closing ingress is the fix. While the `run.app` URL is still open, a client that goes there
+  directly can add one forged `X-Forwarded-For` entry, and with hops `2` that entry becomes
+  its own burst key, so it can pick a new key for every click. A request there without a
+  forged entry has a chain shorter than the hop count, and its key falls back to the TCP
+  peer, which everyone on that path shares. That fallback stops no one. It only keeps a short
+  chain from switching the rule off unnoticed: honest visitors on that path share one bucket,
+  and their repeat clicks show up as `burst`.
 
 ### Auth rate limit: verify the X-Forwarded-For chain in staging, then enable
 

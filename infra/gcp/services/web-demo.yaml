@@ -2,9 +2,11 @@
 # build, public, scale-to-zero-capable. A separate service from `openad-web` so the demo and
 # the real site promote/rollback independently (ADR-0017 "Services").
 #
-# CSP_CONNECT_SRC is left at the image's own demo-safe default ('self', set in web/Dockerfile)
-# and is repeated here explicitly: this is the HTTP-layer half of ADR-0016's "never opens an
-# RPC connection, never calls the API" invariant — the demo build must never widen it.
+# CSP_CONNECT_SRC and CSP_IMG_SRC are left at the image's own demo-safe defaults ('self' and
+# 'self' data:, set in web/Dockerfile) and are repeated here explicitly: this is the HTTP-layer
+# half of ADR-0016's "never opens an RPC connection, never calls the API" invariant — the demo
+# build must never widen either of them. The demo's own fixture creatives are bundled assets
+# under the same origin (`web/public-demo/demo/**`), never an external image source.
 #
 # Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG.
 apiVersion: serving.knative.dev/v1
@@ -32,3 +34,5 @@ spec:
           env:
             - name: CSP_CONNECT_SRC
               value: "'self'"
+            - name: CSP_IMG_SRC
+              value: "'self' data:"
