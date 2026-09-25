@@ -34,15 +34,17 @@ describe('WhyPage', () => {
   });
 
   it("changing the preset changes the comparison payout but never OpenAd's own", () => {
-    const { container } = renderPage();
+    renderPage();
     const select = screen.getByLabelText('Compare against');
-    const payouts = () =>
-      Array.from(container.querySelectorAll('.text-2xl')).map((el) => el.textContent);
     const openAdBefore = screen.getByText('OpenAd payout').nextElementSibling?.textContent;
-    const [networkBefore] = payouts();
+    // Pins the caption WhyPage.tsx derives by stripping "(approx.)" off the preset label
+    // (lib/earnings.ts): the take-rate percentage must survive that strip.
+    const networkBefore = screen.getByText('Ad network (30% take) payout').nextElementSibling
+      ?.textContent;
     fireEvent.change(select, { target: { value: 'network-50' } });
     const openAdAfter = screen.getByText('OpenAd payout').nextElementSibling?.textContent;
-    const [networkAfter] = payouts();
+    const networkAfter = screen.getByText('Ad network (50% take) payout').nextElementSibling
+      ?.textContent;
     // Only the network side moves with the comparison preset.
     expect(networkAfter).not.toBe(networkBefore);
     expect(openAdAfter).toBe(openAdBefore);
@@ -59,7 +61,7 @@ describe('WhyPage', () => {
   it('never sells or leases a slot itself (glossary copy: a publisher sells periods)', () => {
     renderPage();
     expect(document.body.textContent).not.toMatch(
-      /\b(sell|lease)(s|d|ing)? (an? )?(ad )?slots?\b/i,
+      /\b(sell(s|ing)?|sold|leas(e|es|ed|ing))\s+(an?\s+)?(ad\s+)?slots?\b/i,
     );
   });
 });

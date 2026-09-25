@@ -156,7 +156,7 @@ Public reads:
   uint256, so an out-of-range index gets FastAPI's normal 422 instead of a 500. Leases in the
   window are read with one query, not one per period index.
 - `GET /v1/creatives/{creative_id}` — creative + verification status.
-- `GET /v1/publishers/{address}/…`, `GET /v1/advertisers/{address}/…` — dashboards' read models.
+- `GET /v1/publishers/{address}/…` (except `pricing-suggestion`, below), `GET /v1/advertisers/{address}/…` — dashboards' read models.
 - `GET /v1/analytics/slots/{slot_id}`, `GET /v1/analytics/advertisers/{address}` — CTR/eCPM/
   spend/earnings read model; see § 3.10.
 

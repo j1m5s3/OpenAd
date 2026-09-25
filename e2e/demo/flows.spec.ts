@@ -250,6 +250,7 @@ test('demo script: the 15-minute CPC step as written', async ({ page }) => {
 
   // The seeded campaigns are 1-3, so the new one is Campaign 4.
   const campaign = page.locator('li', { hasText: 'Campaign 4 · slot 1 · creative 3' });
+  await expect(campaign).toContainText('Max 0.20 USDC'); // the default max CPC, kept as-is.
   await expect(campaign).toContainText('remaining 10.00 USDC of 10.00 USDC');
 });
 

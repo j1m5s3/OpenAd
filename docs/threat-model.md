@@ -88,7 +88,9 @@ organization and account security, and English occupancy auctions.
   connection-releasing, but not rate limited.
 - Click URLs are checked for `https://` only, with no phishing or malware blocklist yet
   (ROADMAP 7.19). A publisher that waives approval accepts any landing page a creative's
-  `click_url` points to; the moderator's revoke is the only takedown until then.
+  `click_url` points to; takedown is after the fact: the publisher's `set_approval(id, False)` or
+  `revoke_approval(id)` on its own slots (blocked under WAIVED too — `is_blocked_for` checks
+  REJECTED/REVOKED before the waiver), or the moderator's `moderator_revoke` everywhere.
 
 ## Review artifacts
 
