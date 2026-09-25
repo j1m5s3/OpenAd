@@ -41,18 +41,18 @@ function embedScriptCopy(): Plugin {
   };
 }
 
-/** Demo builds (ADR-0016) make no outside request, fonts included: drop the Google Fonts
- * `preconnect` + stylesheet links from `index.html` so the CSS stack falls back to system fonts,
- * and declare an empty inline favicon so the browser's implicit `/favicon.ico` probe cannot 404
- * on a static host. Normal builds keep `index.html` unchanged. */
+/** Demo builds (ADR-0016) declare an empty inline favicon so the browser's implicit
+ * `/favicon.ico` probe cannot 404 on a static host with no server-side fallback. `index.html`
+ * itself carries no Google Fonts links to strip here: they were removed outright (no build
+ * should ever send a visitor's IP to Google, and the CSP's `font-src`/`style-src` don't allow
+ * them), so the CSS stack's `--font-sans: Inter, ui-sans-serif, system-ui, sans-serif` already
+ * falls back to system fonts in every build. Normal builds keep `index.html` unchanged. */
 function demoIndexHtml(demo: boolean): Plugin {
   return {
     name: 'openad-demo-index-html',
     transformIndexHtml(html) {
       if (!demo) return html;
-      return html
-        .replace(/[ \t]*<link\b[^>]*fonts\.(?:googleapis|gstatic)\.com[^>]*>\s*/g, '')
-        .replace('</title>', '</title>\n    <link rel="icon" href="data:," />');
+      return html.replace('</title>', '</title>\n    <link rel="icon" href="data:," />');
     },
   };
 }

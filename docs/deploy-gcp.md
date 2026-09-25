@@ -258,14 +258,28 @@ isolation or if you'd rather not use the script.
 
 ```bash
 gcloud builds submit --config infra/gcp/cloudbuild.yaml --project <PROJECT_ID> \
-  --substitutions=_REGION=<REGION>,_REPO=openad,_ENV=<ENV>,_API_URL=https://api.<ENV>.example.com,_CHAIN_ID=<CHAIN_ID>
+  --substitutions=_REGION=<REGION>,_REPO=openad,_ENV=<ENV>,_API_URL=https://api.<ENV>.example.com,_CHAIN_ID=<CHAIN_ID>,_WALLETCONNECT_PROJECT_ID=<WC_PROJECT_ID>,_GUIDE_URL=<GUIDE_URL>,_DEMO_URL=<DEMO_URL>
 ```
+
+`_WALLETCONNECT_PROJECT_ID`, `_GUIDE_URL` and `_DEMO_URL` each default to `""` (unset) when
+omitted — a real, working build with injected (browser) wallets only and the guide/demo links
+hidden (`web/src/lib/wagmi.ts`, `lib/copy.ts`, `features/marketing/WhyPage.tsx`). Never pass a
+made-up WalletConnect id to fill this in: RainbowKit throws at startup building a
+WalletConnect-based connector under one, which is worse than leaving it unset.
+
+This manual command should also pass `--gcs-source-staging-dir=gs://<PROJECT_ID>-openad-builds/source`
+(the bucket `scripts/deploy-gcp.sh` stages to by default, `BUILD_STAGING_BUCKET` to override):
+without it, gcloud stages to the project's default `_cloudbuild` bucket and checks its ownership
+by listing every bucket in the project, which a bucket-scoped grant can't do (inferred; verify
+before deploy).
 
 Or build one image directly, e.g. `gcloud builds submit --tag
 <REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest -f api/Dockerfile --build-arg
 UV_EXTRAS=gcs .` (and `-f web/Dockerfile`, with `--build-arg VITE_DEMO_MODE=1` for the demo
-variant). `indexer` and `settler` reuse the `api` image with a different Cloud Run `command`
-(`python -m openad.indexer` / `python -m openad.settler`), so nothing extra to build there.
+variant, or `--build-arg VITE_WALLETCONNECT_PROJECT_ID=<id> --build-arg VITE_GUIDE_URL=<url>
+--build-arg VITE_DEMO_URL=<url>` for the real one). `indexer` and `settler` reuse the `api` image
+with a different Cloud Run `command` (`python -m openad.indexer` / `python -m openad.settler`),
+so nothing extra to build there.
 
 ### 7. Run the migration job (manual fallback)
 
@@ -293,7 +307,11 @@ first (`infra/gcp/README.md` lists every placeholder); `scripts/deploy-gcp.sh` d
 rendering into a throwaway temp directory automatically. Env vars below are the non-secret
 subset of `.env.example`; adjust per environment (`OPENAD_CHAIN_ID`, `OPENAD_RPC_URL`,
 `OPENAD_DEPLOYMENTS_DIR` point at the committed
-`84532.json`/`8453.json` baked into the image, or an external RPC URL).
+`84532.json`/`8453.json` baked into the image, or an external RPC URL). That baking happens at
+image-build time (`api/Dockerfile` copies `contracts/deployments` to
+`/app/contracts/deployments` and sets `OPENAD_DEPLOYMENTS_DIR` to match — the same image serves
+`api`, `indexer` and `settler` below), so rebuild and redeploy the `api` image itself after
+committing a new `84532.json` or `8453.json`, not just this deploy step.
 
 ```bash
 gcloud run deploy openad-api \
@@ -330,8 +348,16 @@ gcloud run deploy openad-settler \
 
 gcloud run deploy openad-web \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/web:latest \
-  --region=<REGION> --platform=managed --allow-unauthenticated --max-instances=10
+  --region=<REGION> --platform=managed --allow-unauthenticated --max-instances=10 \
+  --set-env-vars="CSP_CONNECT_SRC='self' https://api.<ENV>.example.com <RPC_ORIGINS> https://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.com wss://*.walletconnect.org,CSP_IMG_SRC='self' data: https://api.<ENV>.example.com https:"
 ```
+
+Without that last flag, the image's demo-safe defaults (`web/Dockerfile`: `CSP_CONNECT_SRC='self'`,
+`CSP_IMG_SRC='self' data:`) stay in force and the deployed app cannot reach its own API, so this
+manual path must set both — `infra/gcp/services/web.yaml` sets the same two for the scripted
+path. The WalletConnect relay/socket hosts above are the ones its SDK is known to open; other
+wallet-SDK endpoints are inferred, so check the browser console for CSP violation reports in
+staging before setting a real WalletConnect project id in prod.
 
 `--max-instances` on `openad-api` matches the connection budget above; on `openad-web` (and
 `openad-web-demo`, not shown here since §8 only covers the stack — see

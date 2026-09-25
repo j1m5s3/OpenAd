@@ -136,7 +136,10 @@ itself, never an advertiser URL.
 ### Everything else
 
 - Artifact Registry holds the `api` (also used, with different `CMD`s, for `indexer`,
-  `settler` and `openad-migrate`) and `web` images.
+  `settler` and `openad-migrate`) and `web` images. The `api` image carries
+  `contracts/deployments` at `/app/contracts/deployments` and sets `OPENAD_DEPLOYMENTS_DIR` to
+  that absolute path (`REPO_ROOT` resolves to `/` inside the image), so `indexer` and `settler`
+  can `load_deployment` without the compose-only `/deployments` bind mount.
 - Secret Manager holds `OPENAD_DATABASE_URL`, `OPENAD_SETTLER_KEY`, `OPENAD_SESSION_SECRET`,
   `OPENAD_CLICK_HMAC_SECRET`, and the Cloud SQL password. Every other `OPENAD_*` / `VITE_*`
   variable in `.env.example` is a plain Cloud Run env var.

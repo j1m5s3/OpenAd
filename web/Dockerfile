@@ -1,11 +1,23 @@
 # syntax=docker/dockerfile:1
 #
-# Multi-stage build for the web app (ADR-0017, step 27+28). Two variants of the same image:
+# Multi-stage build for the web app (ADR-0017):
 #   docker build -f web/Dockerfile .                                   # normal build
 #   docker build -f web/Dockerfile --build-arg VITE_DEMO_MODE=1 .      # demo build (ADR-0016)
-# `VITE_DEMO_MODE=1` is harmless today (this branch predates web demo mode landing on main);
-# once demo mode merges, this same build-arg switches the app into the demo bundle described
-# by ADR-0016 without any change to this file.
+#
+# Every VITE_* build arg below defaults to "" (empty), and every consumer of it treats that the
+# same as unset, never as a literal empty value baked into the bundle:
+#   VITE_DEMO_MODE                 "1" builds the demo bundle (ADR-0016): in-memory fixtures, a
+#                                   simulated wallet, no RPC/API call ever leaves the browser.
+#   VITE_API_URL, VITE_CHAIN_ID     the api origin and target chain for a normal build; unset
+#                                   falls back to a local dev api and Anvil (31337).
+#   VITE_WALLETCONNECT_PROJECT_ID   a real WalletConnect Cloud project id; unset lists injected
+#                                   (browser) wallets only. Never pass a fake id here to work
+#                                   around an unset one — RainbowKit throws at startup building a
+#                                   WalletConnect-based connector under one (web/src/lib/wagmi.ts).
+#   VITE_GUIDE_URL, VITE_DEMO_URL   the hosted guide and "try the demo" links; unset hides them
+#                                   (lib/copy.ts, features/marketing/WhyPage.tsx). The demo build
+#                                   still takes VITE_GUIDE_URL (it links out to the guide too),
+#                                   but never VITE_DEMO_URL — it is itself the demo.
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /repo
@@ -74,4 +86,10 @@ ENV PORT=8080
 # /web.yaml); the demo variant (services/web-demo.yaml) leaves this default in place, which is
 # exactly ADR-0016's "no RPC, no API, no WebSocket" enforced at the HTTP layer too.
 ENV CSP_CONNECT_SRC="'self'"
+# Demo-safe default: no external image source. The normal variant widens this to the API origin
+# (paid media from `/v1/serve/{id}/media`) and `https:` (publisher-hosted house-ad media);
+# required, not just a fallback — the nginx entrypoint only substitutes a `${VAR}` that is an
+# actual env var at container start, and leaves it in the header literally otherwise, which
+# `img-src` would otherwise be.
+ENV CSP_IMG_SRC="'self' data:"
 EXPOSE 8080

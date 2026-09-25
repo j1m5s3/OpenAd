@@ -113,6 +113,38 @@ if ! grep -q 'builds submit' <<<"$DEPLOY_OUT"; then
 else
     echo "  ok: contains 'builds submit'"
 fi
+# The web build inputs that mean "unset" when empty (web/src/lib/wagmi.ts, lib/copy.ts,
+# WhyPage.tsx) must actually reach the builds-submit substitutions, not just default quietly to
+# nothing inside cloudbuild.yaml.
+if ! grep -q '_WALLETCONNECT_PROJECT_ID=' <<<"$DEPLOY_OUT"; then
+    fail "deploy-gcp.sh --dry-run 'builds submit' missing '_WALLETCONNECT_PROJECT_ID='"
+else
+    echo "  ok: contains '_WALLETCONNECT_PROJECT_ID='"
+fi
+if ! grep -q '_GUIDE_URL=' <<<"$DEPLOY_OUT"; then
+    fail "deploy-gcp.sh --dry-run 'builds submit' missing '_GUIDE_URL='"
+else
+    echo "  ok: contains '_GUIDE_URL='"
+fi
+if ! grep -q '_DEMO_URL=' <<<"$DEPLOY_OUT"; then
+    fail "deploy-gcp.sh --dry-run 'builds submit' missing '_DEMO_URL='"
+else
+    echo "  ok: contains '_DEMO_URL='"
+fi
+# --gcs-source-staging-dir avoids gcloud's default-bucket ownership check (a bucket listing a
+# bucket-scoped grant can't do, inferred) by staging to a bucket this deployer owns instead.
+# Unset BUILD_STAGING_BUCKET here: --project p must still default to gs://p-openad-builds.
+if ! grep -qF -- '--gcs-source-staging-dir=gs://p-openad-builds/source' <<<"$DEPLOY_OUT"; then
+    fail "deploy-gcp.sh --dry-run 'builds submit' missing the default '--gcs-source-staging-dir=gs://p-openad-builds/source'"
+else
+    echo "  ok: defaults --gcs-source-staging-dir to gs://p-openad-builds/source"
+fi
+BUCKET_OUT="$(BUILD_STAGING_BUCKET=custom-staging-bucket run_fake deploy-gcp.sh --dry-run --env staging --only demo --project p --region r --tag faketag)"
+if ! grep -qF -- '--gcs-source-staging-dir=gs://custom-staging-bucket/source' <<<"$BUCKET_OUT"; then
+    fail "deploy-gcp.sh --dry-run 'builds submit' ignored BUILD_STAGING_BUCKET=custom-staging-bucket"
+else
+    echo "  ok: BUILD_STAGING_BUCKET=custom-staging-bucket overrides --gcs-source-staging-dir"
+fi
 if ! grep -q 'run services replace' <<<"$DEPLOY_OUT"; then
     fail "deploy-gcp.sh --dry-run missing 'run services replace'"
 else

@@ -9,6 +9,16 @@ substitutions:
   _ENV: staging
   _API_URL: https://api.staging.example.com
   _CHAIN_ID: "84532"
+  # Web build inputs that mean "unset" when empty (web/src/lib/wagmi.ts, lib/copy.ts,
+  # features/marketing/WhyPage.tsx): no WalletConnect id keeps the web app to injected (browser)
+  # wallets only; no guide/demo URL hides those links. Fed by scripts/deploy-gcp.sh, which reads
+  # WALLETCONNECT_PROJECT_ID/GUIDE_URL/DEMO_URL from its own environment. Every substitution
+  # declared here must be referenced by a step below — Cloud Build rejects an unused *user*
+  # substitution unless `substitution_option: ALLOW_LOOSE` is set (inferred; verify before
+  # deploy) — so don't add one here without also passing it to a build-arg.
+  _WALLETCONNECT_PROJECT_ID: ""
+  _GUIDE_URL: ""
+  _DEMO_URL: ""
   # $SHORT_SHA is a built-in substitution Cloud Build only populates for a *triggered* build
   # (a push/PR trigger); a plain `gcloud builds submit` (what scripts/deploy-gcp.sh runs) leaves
   # it empty, which would silently tag every image ":" with no tag. _TAG is set explicitly
@@ -34,7 +44,10 @@ steps:
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest-${_ENV}
       - .
 
-  # web image: the normal (non-demo) build, pointed at this env's API and chain.
+  # web image: the normal (non-demo) build, pointed at this env's API and chain. An empty
+  # _WALLETCONNECT_PROJECT_ID/_GUIDE_URL/_DEMO_URL builds a real app with injected-wallets-only
+  # and those links hidden (web/src/lib/wagmi.ts, lib/copy.ts, WhyPage.tsx) rather than a blank
+  # page or a broken link.
   - id: build-web
     name: gcr.io/cloud-builders/docker
     args:
@@ -45,6 +58,12 @@ steps:
       - VITE_API_URL=${_API_URL}
       - --build-arg
       - VITE_CHAIN_ID=${_CHAIN_ID}
+      - --build-arg
+      - VITE_WALLETCONNECT_PROJECT_ID=${_WALLETCONNECT_PROJECT_ID}
+      - --build-arg
+      - VITE_GUIDE_URL=${_GUIDE_URL}
+      - --build-arg
+      - VITE_DEMO_URL=${_DEMO_URL}
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web:${_TAG}
       - -t
@@ -52,7 +71,9 @@ steps:
       - .
 
   # web-demo image: VITE_DEMO_MODE=1 (ADR-0016). Deployed as its own Cloud Run service
-  # (openad-web-demo) so demo and real site promote/rollback independently.
+  # (openad-web-demo) so demo and real site promote/rollback independently. No WalletConnect id
+  # or demo URL: demo mode never builds `lib/wagmi.ts`'s real config, and the demo has no "try the
+  # demo" link back to itself. It does show the guide link, so VITE_GUIDE_URL still applies.
   - id: build-web-demo
     name: gcr.io/cloud-builders/docker
     args:
@@ -61,6 +82,8 @@ steps:
       - web/Dockerfile
       - --build-arg
       - VITE_DEMO_MODE=1
+      - --build-arg
+      - VITE_GUIDE_URL=${_GUIDE_URL}
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/web-demo:${_TAG}
       - -t

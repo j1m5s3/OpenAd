@@ -90,10 +90,111 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    # A disposable Postgres for the api image's own migration + health checks below — never for
+    # the web/web-demo images, which open no database connection (AGENTS.md invariant).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: openad_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d openad_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      # The boot checks below drive real Chromium; install it once here (CI only — a coder's own
+      # sandbox has a pinned build already and must never run this, per AGENTS.md/CONVENTIONS.md).
+      - run: npx playwright install chromium --with-deps
+        working-directory: e2e
+
+      # --- api image: carries contracts/deployments, migrates, and serves /v1/health ---------
+      # A CI-only, minimal deployments artifact: just enough for api/Dockerfile's `COPY
+      # contracts/deployments` to carry something real, and for `load_deployment` below to
+      # succeed. Never committed. Removed again immediately after this build, before any web
+      # image is built, so `sync:deployments` (web/scripts/sync-deployments.mjs, run by `npm run
+      # build -w web`) never bakes this fake chain-84532 record into a web bundle.
+      - name: Write a CI-only contracts/deployments/84532.json
+        run: |
+          cat > contracts/deployments/84532.json <<'JSON'
+          {
+            "artifactVersion": 1,
+            "chainId": 84532,
+            "network": "base-sepolia",
+            "contracts": {
+              "CampaignVault": {
+                "address": "0x0000000000000000000000000000000000000000",
+                "startBlock": 0,
+                "abi": []
+              }
+            }
+          }
+          JSON
       - name: Build api image
         run: docker build -f api/Dockerfile --build-arg UV_EXTRAS=gcs -t openad-api:ci .
+      - name: Remove the CI-only deployments fixture (never committed)
+        run: rm -f contracts/deployments/84532.json
+      - name: Check the api image carries and loads its deployments artifact
+        run: docker run --rm openad-api:ci uv run python -c
+          "from openad.config import Settings; from openad.chain.deployments import load_deployment;
+          s = Settings(); assert str(s.deployments_path) == '/app/contracts/deployments', s.deployments_path;
+          d = load_deployment(s.deployments_path, 84532); assert d.chain_id == 84532, d.chain_id;
+          print('deployments ok:', s.deployments_path, d.chain_id)"
+      - name: Run api image migrations against the service Postgres
+        env:
+          OPENAD_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/openad_test
+        run: docker run --rm --network host -e OPENAD_DATABASE_URL openad-api:ci
+          uv run alembic upgrade head
+      - name: Start api image (its own CMD, unmodified)
+        env:
+          OPENAD_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/openad_test
+        run: docker run -d --name api --network host -e OPENAD_DATABASE_URL openad-api:ci
+      - name: Wait for openad-api /v1/health
+        run: curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors
+          http://localhost:8000/v1/health
+      - name: api image logs (always, for debugging)
+        if: always()
+        run: docker logs api || true
+      - name: Stop api container
+        if: always()
+        run: docker rm -f api || true
+
+      # --- web image (the real, non-demo app) -------------------------------------------------
+      # No --build-arg VITE_WALLETCONNECT_PROJECT_ID: an unset id is the regression this guards —
+      # RainbowKit used to throw building a WalletConnect connector under the fake placeholder id
+      # this build used to fall back to (web/src/lib/wagmi.ts), booting the real app to a blank
+      # page in production.
+      - name: Build web image
+        run: docker build -f web/Dockerfile --build-arg VITE_API_URL=http://127.0.0.1:8000
+          --build-arg VITE_CHAIN_ID=84532 -t openad-web:ci .
+      - name: Run web container
+        run: docker run -d --name web -p 8081:8080 openad-web:ci
+      - name: Wait for openad-web /healthz
+        run: curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors
+          http://localhost:8081/healthz
+      - name: Check web image CSP img-src is the demo-safe default
+        run: |
+          curl -sSI http://localhost:8081/ | tr -d '\r' \
+            | grep -i '^content-security-policy:' | grep -qF "img-src 'self' data:"
+      - name: "Boot-check web image (no API in CI: failed requests are expected)"
+        run: node e2e/scripts/web-boot-check.mjs http://localhost:8081/ --out /tmp/boot-check-web
+      - name: web image logs (always, for debugging)
+        if: always()
+        run: docker logs web || true
+      - name: Stop web container
+        if: always()
+        run: docker rm -f web || true
+
+      # --- web-demo image ----------------------------------------------------------------------
       - name: Build web-demo image
         run: docker build -f web/Dockerfile --build-arg VITE_DEMO_MODE=1 -t openad-web-demo:ci .
       - name: Run web-demo container
@@ -109,16 +210,32 @@ jobs:
         run: |
           curl -sSI http://localhost:8080/ | tr -d '\r' \
             | grep -i '^content-security-policy:' | grep -qF "connect-src 'self'"
+      - name: Check demo CSP img-src is the demo-safe default
+        run: |
+          curl -sSI http://localhost:8080/ | tr -d '\r' \
+            | grep -i '^content-security-policy:' | grep -qF "img-src 'self' data:"
       - name: Check embed script allows cross-origin script-tag loading
         run: |
           curl -sSI http://localhost:8080/embed/open-ad.v1.js | tr -d '\r' \
             | grep -qi '^access-control-allow-origin: \*'
+      - name: Boot-check web-demo image
+        run: node e2e/scripts/web-boot-check.mjs http://localhost:8080/ --out /tmp/boot-check-web-demo
       - name: Container logs (always, for debugging)
         if: always()
         run: docker logs web-demo || true
       - name: Stop container
         if: always()
         run: docker rm -f web-demo || true
+
+      - name: Upload boot-check failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-boot-check-screenshots
+          path: |
+            /tmp/boot-check-web
+            /tmp/boot-check-web-demo
+          if-no-files-found: ignore
 
   e2e:
     runs-on: ubuntu-latest
