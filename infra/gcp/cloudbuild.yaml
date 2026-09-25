@@ -50,6 +50,10 @@ steps:
   # page or a broken link.
   - id: build-web
     name: gcr.io/cloud-builders/docker
+    # web/Dockerfile.dockerignore (not the root .dockerignore, which excludes web/embed/e2e
+    # outright) only applies under BuildKit; the legacy builder ignores it and this COPY-fails.
+    env:
+      - 'DOCKER_BUILDKIT=1'
     args:
       - build
       - -f
@@ -76,6 +80,9 @@ steps:
   # demo" link back to itself. It does show the guide link, so VITE_GUIDE_URL still applies.
   - id: build-web-demo
     name: gcr.io/cloud-builders/docker
+    # Same reliance on web/Dockerfile.dockerignore under BuildKit as build-web above.
+    env:
+      - 'DOCKER_BUILDKIT=1'
     args:
       - build
       - -f

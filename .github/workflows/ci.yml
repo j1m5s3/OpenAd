@@ -91,7 +91,8 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     # A disposable Postgres for the api image's own migration + health checks below — never for
-    # the web/web-demo images, which open no database connection (AGENTS.md invariant).
+    # the web/web-demo images: their runtime stage is a static nginx site (web/Dockerfile) with
+    # no database driver at all.
     services:
       postgres:
         image: postgres:16
@@ -112,20 +113,25 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci
-      # The boot checks below drive real Chromium; install it once here (CI only — a coder's own
-      # sandbox has a pinned build already and must never run this, per AGENTS.md/CONVENTIONS.md).
+      # The boot checks below drive real Chromium; install it once here (CI only — the other
+      # Playwright entry points, e2e/demo/demo.config.ts and e2e/demo/capture-screenshots.mjs,
+      # already expect PLAYWRIGHT_CHROMIUM_PATH to point at a pinned build everywhere else).
       - run: npx playwright install chromium --with-deps
         working-directory: e2e
 
       # --- api image: carries contracts/deployments, migrates, and serves /v1/health ---------
       # A CI-only, minimal deployments artifact: just enough for api/Dockerfile's `COPY
       # contracts/deployments` to carry something real, and for `load_deployment` below to
-      # succeed. Never committed. Removed again immediately after this build, before any web
-      # image is built, so `sync:deployments` (web/scripts/sync-deployments.mjs, run by `npm run
-      # build -w web`) never bakes this fake chain-84532 record into a web bundle.
-      - name: Write a CI-only contracts/deployments/84532.json
+      # succeed. Written only when no 84532.json is already committed (a real Sepolia deploy
+      # must never be clobbered by this fixture) and, when we did write it, removed again before
+      # any web image is built, so `sync:deployments` (web/scripts/sync-deployments.mjs, run by
+      # `npm run build -w web`) never bakes this fake chain-84532 record into a web bundle.
+      - name: Write a CI-only contracts/deployments/84532.json (skip if one is already committed)
         run: |
-          cat > contracts/deployments/84532.json <<'JSON'
+          if [ -f contracts/deployments/84532.json ]; then
+            echo "84532.json is already committed; using it as-is, not touching it."
+          else
+            cat > contracts/deployments/84532.json <<'JSON'
           {
             "artifactVersion": 1,
             "chainId": 84532,
@@ -139,9 +145,12 @@ jobs:
             }
           }
           JSON
+            echo "CREATED_FIXTURE=1" >>"$GITHUB_ENV"
+          fi
       - name: Build api image
         run: docker build -f api/Dockerfile --build-arg UV_EXTRAS=gcs -t openad-api:ci .
-      - name: Remove the CI-only deployments fixture (never committed)
+      - name: Remove the CI-only deployments fixture (only the file this run created)
+        if: env.CREATED_FIXTURE == '1'
         run: rm -f contracts/deployments/84532.json
       - name: Check the api image carries and loads its deployments artifact
         run: docker run --rm openad-api:ci uv run python -c

@@ -107,7 +107,7 @@ fi
 
 echo ""
 echo "==> deploy-gcp.sh --dry-run --only demo (fake repo root; no gcloud/envsubst needed)"
-DEPLOY_OUT="$(run_fake deploy-gcp.sh --dry-run --env staging --only demo --project p --region r --tag faketag)"
+DEPLOY_OUT="$(unset BUILD_STAGING_BUCKET; run_fake deploy-gcp.sh --dry-run --env staging --only demo --project p --region r --tag faketag)"
 if ! grep -q 'builds submit' <<<"$DEPLOY_OUT"; then
     fail "deploy-gcp.sh --dry-run missing 'builds submit'"
 else
@@ -133,7 +133,10 @@ else
 fi
 # --gcs-source-staging-dir avoids gcloud's default-bucket ownership check (a bucket listing a
 # bucket-scoped grant can't do, inferred) by staging to a bucket this deployer owns instead.
-# Unset BUILD_STAGING_BUCKET here: --project p must still default to gs://p-openad-builds.
+# DEPLOY_OUT above explicitly unsets BUILD_STAGING_BUCKET for that one call (a subshell, so it
+# doesn't touch this script's own environment) — otherwise an exported BUILD_STAGING_BUCKET in
+# whatever shell runs check-sh.sh would leak into run_fake's child process and this assertion
+# would fail for a reason that has nothing to do with deploy-gcp.sh itself.
 if ! grep -qF -- '--gcs-source-staging-dir=gs://p-openad-builds/source' <<<"$DEPLOY_OUT"; then
     fail "deploy-gcp.sh --dry-run 'builds submit' missing the default '--gcs-source-staging-dir=gs://p-openad-builds/source'"
 else

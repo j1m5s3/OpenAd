@@ -8,12 +8,20 @@
 # same as unset, never as a literal empty value baked into the bundle:
 #   VITE_DEMO_MODE                 "1" builds the demo bundle (ADR-0016): in-memory fixtures, a
 #                                   simulated wallet, no RPC/API call ever leaves the browser.
-#   VITE_API_URL, VITE_CHAIN_ID     the api origin and target chain for a normal build; unset
-#                                   falls back to a local dev api and Anvil (31337).
-#   VITE_WALLETCONNECT_PROJECT_ID   a real WalletConnect Cloud project id; unset lists injected
-#                                   (browser) wallets only. Never pass a fake id here to work
-#                                   around an unset one — RainbowKit throws at startup building a
-#                                   WalletConnect-based connector under one (web/src/lib/wagmi.ts).
+#   VITE_API_URL, VITE_CHAIN_ID     the api origin and target chain for a normal build.
+#                                   VITE_CHAIN_ID unset/empty falls back to Anvil (31337)
+#                                   (wagmi.ts's resolveTargetChainId). VITE_API_URL unset/empty
+#                                   means a same-origin request instead, not a local dev api:
+#                                   api.ts's `?? 'http://localhost:8000'` never fires, because
+#                                   Vite always defines the var (even as ""), so an empty
+#                                   VITE_API_URL bakes in as `fetch('' + path)`.
+#   VITE_WALLETCONNECT_PROJECT_ID   a real WalletConnect Cloud project id; unset/empty lists
+#                                   injected (browser) wallets only — RainbowKit throws at
+#                                   startup building a WalletConnect-based connector under a
+#                                   falsy id (web/src/lib/wagmi.ts). A made-up id doesn't throw
+#                                   (only a falsy one does), but it boots a page whose
+#                                   WalletConnect-based wallets fail as soon as someone tries to
+#                                   connect through one (inferred). Pass a real id, or none.
 #   VITE_GUIDE_URL, VITE_DEMO_URL   the hosted guide and "try the demo" links; unset hides them
 #                                   (lib/copy.ts, features/marketing/WhyPage.tsx). The demo build
 #                                   still takes VITE_GUIDE_URL (it links out to the guide too),
