@@ -41,13 +41,18 @@ customer names, quotes, or traction are claimed — the deck is honest about cur
 
 ## Slide 4 — Demo
 
-- Live demo: publisher mints a slot, sets terms, advertiser buys a period, embed updates.
-- CPC path: advertiser funds a campaign, serve picks a winner, click settles in a batch.
+- LEASE: a publisher mints a slot and sets its calendar and terms. An advertiser buys a period in
+  one simulated transaction and gets the receipt: price, publisher/fee split and tx hash.
+- CPC: an advertiser funds a campaign, whose budget sits in escrow. The embed shows the top
+  campaign's creative, and the publisher's earnings include seeded batch settlements. The demo
+  has no live click traffic and no settler.
+- The `<open-ad>` embed renders each slot's current creative without reading the chain.
 - https://claude.ai/artifact/AzkEcWfmUT23GCo2qkWxE7 — private until the owner shares it; if the
   link asks you to sign in or request access, ask the OpenAd team for access.
 
-> Speaker notes: Run the demo live if possible; otherwise walk the linked recording. Demo mode
-> uses simulated data and a simulated wallet — say so explicitly, it's not a live chain.
+> Speaker notes: Run the demo live if possible; if it can't run live, use the screenshots in
+> `docs/business/assets/`. Demo mode uses simulated data and a simulated wallet — say so
+> explicitly, it's not a live chain.
 
 ## Slide 5 — How it works
 

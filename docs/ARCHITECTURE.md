@@ -146,7 +146,9 @@ unit tests.
 Public reads:
 
 - `GET /v1/health` — liveness; includes indexer lag in blocks.
-- `GET /v1/slots?domain=&kind=&verified=` — list slots with terms, next open periods, indicative prices.
+- `GET /v1/slots?domain=&kind=&category=&limit=&offset=` — list slots (`kind` 0-3; `limit` 1-200,
+  default 50; `offset` ≥ 0, default 0). Returns `{items, total}`: slots with their terms and
+  listing. Periods and indicative prices come from `/periods` below.
 - `GET /v1/slots/{slot_id}` — slot detail; also serves as ERC-721 `tokenURI` metadata JSON when `Accept: application/json` (this is what `AdSlot.base_uri` points at).
 - `GET /v1/slots/{slot_id}/periods?from=&to=` — period calendar with lease status and quote
   inputs. Capped at 60 periods per request (`to − from + 1 ≤ 60`); a wider window gets a
@@ -168,8 +170,12 @@ Authenticated (SIWE session; wallet must match the acting address):
 
 - `POST /v1/auth/nonce`, `POST /v1/auth/verify`, `POST /v1/auth/logout`.
 - `PUT /v1/slots/{slot_id}/house-ad` — slot owner only.
+- `PUT /v1/slots/{slot_id}/listing`, `DELETE /v1/slots/{slot_id}/listing` — slot owner only
+  (§3.2 `slot_listings`, ROADMAP 6.3).
 - `POST /v1/slots/{slot_id}/domain-verification` — start/refresh verification.
 - `POST /v1/creatives/{creative_id}/verify` — request (re)verification of media.
+- `GET /v1/publishers/{address}/pricing-suggestion?slot_id=` — the wallet must be the publisher
+  (`address`) and own `slot_id`.
 
 No endpoint ever accepts a private key or signs a chain transaction.
 
@@ -300,8 +306,9 @@ same creative no longer hold a connection out of the pool for the fetch's durati
 3. Sniff MIME; must equal `mime` and be in the allowlist (`image/png`, `image/jpeg`,
    `image/webp`, `image/gif`). Decode and check `width × height` equals the registered
    dimensions, else `failed:dimensions`.
-4. `click_url` must be `https://` and not on the phishing blocklist (`OPENAD_SAFE_BROWSING_KEY`,
-   optional in dev).
+4. `click_url` must be empty or `https://` (`check_click_url`). There is no phishing or malware
+   blocklist yet (ROADMAP 7.19); `OPENAD_SAFE_BROWSING_KEY` is reserved and nothing reads it.
+   Takedown today is the publisher's approval and the moderator's revoke.
 5. Store bytes at `cached_path` via `services/media_store.py`'s `MediaStore` (local disk in dev,
    GCS in prod behind `OPENAD_MEDIA_BACKEND`, ADR-0017). Mark `verified`.
 

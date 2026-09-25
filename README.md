@@ -87,10 +87,10 @@ npm run stack:docker
 ./scripts/dev-down.sh    # stops docker; --reset drops pgdata/31337.json/api/.cache
 ```
 
-Setup deploys the protocol on Anvil (CreativeRegistry, AdSlot, Marketplace, MockUSDC) and applies
-Alembic migrations. The manual equivalent of these scripts is in `docs/ARCHITECTURE.md` §7. After
-the stack is up: API health at `http://localhost:8000/v1/health`, web at
-`http://localhost:5173`.
+Setup deploys the protocol on Anvil (CreativeRegistry, AdSlot, Marketplace, MockUSDC,
+CampaignVault) and applies Alembic migrations. The manual equivalent of these scripts is in
+`docs/ARCHITECTURE.md` §7. After the stack is up: API health at `http://localhost:8000/v1/health`,
+web at `http://localhost:5173`.
 
 ## Run the demo locally
 
@@ -158,7 +158,7 @@ Start at [`docs/README.md`](docs/README.md). AI agents and new contributors: rea
 ```text
 contracts/   Vyper + Moccasin — AdSlot, Marketplace, CreativeRegistry, MockUSDC, CampaignVault
 api/         Python/FastAPI — read API, serving edge, chain indexer, CPC settler
-web/         Vite + React + MUI + wagmi — marketplace and dashboards (demo mode: ADR-0016)
+web/         Vite + React + Tailwind + wagmi/RainbowKit — marketplace and dashboards (demo mode: ADR-0016)
 embed/       <open-ad> web component (zero dependencies)
 e2e/         Playwright — YAML scenarios and the demo-mode suite
 sim/         Opt-in local Anvil persona daemon (ADR-0012)

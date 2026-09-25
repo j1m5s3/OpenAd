@@ -64,9 +64,13 @@ Skip the guided tour; walk the manual path so you can pause and answer questions
    falling in real time, then buy. Before closing the dialog (about 20–30 seconds), show the
    receipt: price paid, the publisher/fee split, the transaction hash, and "View slot" — then
    close it and show the wallet balance dropped by exactly the quote.
-3. **Switch persona to advertiser Fastlane L2** ("Viewing as" → Advertiser — Fastlane L2), then
-   **open a CPC campaign on `#/campaigns`.** Fund it, point out the hard budget cap (`remaining`
-   never exceeds what was funded).
+3. **Stay as advertiser Nimbus Wallet — open a CPC campaign on `#/campaigns`.**
+   - Click "Open campaign".
+   - Set Slot id `1` (CPC, approval waived) and Creative `3` (Nimbus's verified 300×250).
+   - Keep the default max CPC (0.2 USDC) and budget (10 USDC); click "Next" twice, then "Fund
+     with permit".
+   - Point at the new row — "… slot 1 · creative 3 … remaining 10.00 USDC of 10.00 USDC":
+     `remaining` never exceeds what was funded, and closing the campaign refunds what's left.
 4. **Switch to publisher Basecamp Weekly.** On `#/supply`:
    - Show pending creative approvals and approve one.
    - Show earnings = price − fee for the LEASE sale just made.

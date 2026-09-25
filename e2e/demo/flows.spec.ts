@@ -234,6 +234,25 @@ test('advertiser CPC: register creative → request approval → open, top up an
   await expect(page.getByRole('button', { name: 'Buy', exact: true })).toHaveCount(0);
 });
 
+test('demo script: the 15-minute CPC step as written', async ({ page }) => {
+  await connect(page); // Nimbus Wallet is the default persona — no persona switch.
+  await nav(page, 'Campaigns');
+
+  await page.getByRole('button', { name: 'Open campaign' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('input').first().fill('1'); // Slot id 1 (CPC, approval waived).
+  await dialog.locator('select').selectOption('3'); // Creative 3, Nimbus's verified 300×250.
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  await dialog.getByRole('button', { name: 'Next' }).click(); // Keep the default max CPC/budget.
+  await dialog.getByRole('button', { name: 'Fund with permit' }).last().click();
+  await expect(dialog).toContainText('Confirmed on chain');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+
+  // The seeded campaigns are 1-3, so the new one is Campaign 4.
+  const campaign = page.locator('li', { hasText: 'Campaign 4 · slot 1 · creative 3' });
+  await expect(campaign).toContainText('remaining 10.00 USDC of 10.00 USDC');
+});
+
 test('publisher: SIWE → supply dashboard → mint, calendar, terms → approve → off-chain tools', async ({
   page,
 }) => {

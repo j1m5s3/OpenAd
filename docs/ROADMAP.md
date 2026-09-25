@@ -367,6 +367,11 @@ blocks a testnet/staging launch. **7.10** (the independent security audit) does 
       guard; a zero period is unreachable today (`set_calendar` and the demo reducer both require
       `periodSeconds >= 3600`), so this is a defensive guard, not a live bug. Pointers:
       `web/src/features/marketplace/DiscoverPage.tsx`, `web/src/lib/auction.ts`.
+- [ ] **7.19 Phishing and malware check on click URLs.** Check each `click_url` against a
+      URL-reputation service (e.g. Google Safe Browsing, with `OPENAD_SAFE_BROWSING_KEY`) at
+      verification and on the scheduled re-check; otherwise drop the setting. Pointers:
+      `api/src/openad/services/media.py` (`check_click_url`), `api/src/openad/config.py`,
+      `docs/ARCHITECTURE.md` §3.5, `docs/threat-model.md`.
 
 ---
 

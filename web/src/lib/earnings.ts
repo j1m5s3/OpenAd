@@ -7,19 +7,25 @@
  */
 import { FEE_BPS, feeSplit } from './auction';
 
-/** A take-rate preset, each labelled "approx." in the UI: a published, typical range for that
- * category, not a specific network's real rate. */
+/** A take-rate preset, each labelled "approx." in the UI: a point inside the one range
+ * `docs/business/competitive.md` backs with a public figure (~30-50% for network/exchange
+ * intermediaries), not a specific network's real rate. Every other category in that doc (crypto
+ * ad networks, newsletter marketplaces, direct/agency deals) is documented as "varies" or
+ * "negotiated" — no public number to point at. */
 export interface TakeRatePreset {
   id: string;
   label: string;
   takeBps: number;
 }
 
-/** Approximate public ranges (illustrative, not any single named network's figure). */
+/** Three points in the one backed range (~30-50%), low to high. The default (index 0, 30%) is
+ * the conservative end, so the headline uplift on `/why` is the smallest of the three, not the
+ * most flattering one. `WhyPage.tsx` strips the trailing `(approx.)` for the payout caption, so
+ * the take-rate percentage lives in its own, earlier parenthetical and survives the strip. */
 export const TAKE_RATE_PRESETS = [
-  { id: 'display', label: 'Typical display network (approx. 32% take)', takeBps: 3200 },
-  { id: 'crypto', label: 'Crypto ad network (approx. 40% take)', takeBps: 4000 },
-  { id: 'agency', label: 'Agency-sold direct (approx. 20% take)', takeBps: 2000 },
+  { id: 'network-30', label: 'Ad network (30% take) (approx.)', takeBps: 3000 },
+  { id: 'network-40', label: 'Ad network (40% take) (approx.)', takeBps: 4000 },
+  { id: 'network-50', label: 'Ad network (50% take) (approx.)', takeBps: 5000 },
 ] as const satisfies readonly TakeRatePreset[];
 
 export interface CompareEarningsInput {

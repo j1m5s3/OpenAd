@@ -33,14 +33,19 @@ describe('WhyPage', () => {
     expect(after).not.toBe(before);
   });
 
-  it('changing the preset changes the comparison payout', () => {
-    renderPage();
+  it("changing the preset changes the comparison payout but never OpenAd's own", () => {
+    const { container } = renderPage();
     const select = screen.getByLabelText('Compare against');
-    const before = screen.getByText('OpenAd payout').nextElementSibling?.textContent;
-    fireEvent.change(select, { target: { value: 'agency' } });
-    const after = screen.getByText('OpenAd payout').nextElementSibling?.textContent;
-    // OpenAd's own payout never changes with the comparison preset — only the network side does.
-    expect(after).toBe(before);
+    const payouts = () =>
+      Array.from(container.querySelectorAll('.text-2xl')).map((el) => el.textContent);
+    const openAdBefore = screen.getByText('OpenAd payout').nextElementSibling?.textContent;
+    const [networkBefore] = payouts();
+    fireEvent.change(select, { target: { value: 'network-50' } });
+    const openAdAfter = screen.getByText('OpenAd payout').nextElementSibling?.textContent;
+    const [networkAfter] = payouts();
+    // Only the network side moves with the comparison preset.
+    expect(networkAfter).not.toBe(networkBefore);
+    expect(openAdAfter).toBe(openAdBefore);
   });
 
   it('links to /embed-demo', () => {
@@ -51,8 +56,10 @@ describe('WhyPage', () => {
     );
   });
 
-  it('never renders "sell" for a slot (glossary copy)', () => {
+  it('never sells or leases a slot itself (glossary copy: a publisher sells periods)', () => {
     renderPage();
-    expect(document.body.textContent).not.toMatch(/sell(s|ing)? a slot/i);
+    expect(document.body.textContent).not.toMatch(
+      /\b(sell|lease)(s|d|ing)? (an? )?(ad )?slots?\b/i,
+    );
   });
 });
