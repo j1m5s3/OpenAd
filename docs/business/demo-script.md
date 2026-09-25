@@ -39,6 +39,10 @@ Routes below are the demo's real hash routes: `#/`, `#/slots/<id>`, `#/campaigns
 
 1. Run the full 6-step guided tour end to end (Discover → slot → buy → Supply → Campaigns →
    embed), narrating each step's "say this" line above, plus:
+   - **Tour step 3 — the receipt, before closing the dialog (about 20–30 seconds).**
+     - _Say:_ "Here's the receipt: price paid, the publisher/fee split, and the transaction hash —
+       nothing left in `Marketplace`."
+     - _Proof point:_ the "Lease confirmed" panel with price, split, tx hash, and "View slot".
    - **Tour step 4 — `#/supply`, as the publisher.**
      - _Say:_ "Earnings already reflect every lease and settlement, net of OpenAd's 2.5% fee."
      - _Proof point:_ the Supply page's performance tiles (earnings, eCPM, CTR trend).
@@ -53,18 +57,27 @@ Routes below are the demo's real hash routes: `#/`, `#/slots/<id>`, `#/campaigns
 
 Skip the guided tour; walk the manual path so you can pause and answer questions.
 
-1. **As advertiser Nimbus Wallet, buy a LEASE period on `#/slots/0`.** Point out the price
-   falling in real time, then buy — the wallet balance drops by exactly the quote.
-2. **Switch persona to advertiser Fastlane L2** ("Viewing as" → Advertiser — Fastlane L2), then
-   **open a CPC campaign on `#/campaigns`.** Fund it, point out the hard budget cap (`remaining`
-   never exceeds what was funded).
-3. **Switch to publisher Basecamp Weekly.** On `#/supply`:
+1. **On `#/` (Discover), filter by a category** (e.g. "DeFi"). Point out the listing badges on
+   the filtered cards — publisher-written audience/category text, self-described and not
+   verified on-chain.
+2. **As advertiser Nimbus Wallet, buy a LEASE period on `#/slots/0`.** Point out the price
+   falling in real time, then buy. Before closing the dialog (about 20–30 seconds), show the
+   receipt: price paid, the publisher/fee split, the transaction hash, and "View slot" — then
+   close it and show the wallet balance dropped by exactly the quote.
+3. **Stay as advertiser Nimbus Wallet — open a CPC campaign on `#/campaigns`.**
+   - Click "Open campaign".
+   - Set Slot id `1` (CPC, approval waived) and Creative `3` (Nimbus's verified 300×250).
+   - Keep the default max CPC (0.2 USDC) and budget (10 USDC); click "Next" twice, then "Fund
+     with permit".
+   - Point at the new row — "… slot 1 · creative 3 … remaining 10.00 USDC of 10.00 USDC":
+     `remaining` never exceeds what was funded, and closing the campaign refunds what's left.
+4. **Switch to publisher Basecamp Weekly.** On `#/supply`:
    - Show pending creative approvals and approve one.
    - Show earnings = price − fee for the LEASE sale just made.
    - Show the performance panel (CTR, eCPM, spend/earnings trend).
-4. **`#/embed-demo`.** Show the real `<open-ad>` element rendering a creative for a chosen slot —
+5. **`#/embed-demo`.** Show the real `<open-ad>` element rendering a creative for a chosen slot —
    say explicitly that this makes no chain read.
-5. **`#/why`.** Plug in the audience's own approximate impressions and eCPM numbers and let them
+6. **`#/why`.** Plug in the audience's own approximate impressions and eCPM numbers and let them
    read the payout comparison themselves.
 
 ## Q&A crib
@@ -83,8 +96,9 @@ Skip the guided tour; walk the manual path so you can pause and answer questions
   token and invalid-traffic checks — are ever charged; a settler batches those, never a raw click
   count.
 - **"Do you support fiat?"** Not today — USDC only, on Base. That is an accepted, documented gap
-  (see `docs/business/competitive.md`); planned mitigation is guide links to a third-party
-  on/off-ramp, not custodial code — those links don't exist yet.
+  (see `docs/business/competitive.md`); mitigated by
+  `docs/guide/advertiser/getting-usdc-on-base.md` (PR #16), which walks advertisers through
+  getting USDC on Base without endorsing or linking any specific provider — not custodial code.
 - **"Has this been audited?"** No. That is a launch-checklist item before any mainnet deploy —
   see `docs/business/launch-checklist.md`.
 - **"Why Base and USDC?"** Low fees and fast finality make small-ticket, instant ad settlement

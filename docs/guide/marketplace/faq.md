@@ -8,8 +8,9 @@ Buy the next period if you want it.
 **Who can take a creative down?** You can revoke your own. A **publisher** can
 reject/revoke for their inventory. A **moderator** can revoke globally.
 
-**What is the verified domain badge?** Off-chain proof that the publisher
-controls `SlotSpec.domain` (DNS TXT or meta tag). Not enforced on-chain.
+**What is the verified domain badge?** Off-chain proof that the publisher controls
+`SlotSpec.domain`. The web app supports the meta-tag method today; DNS TXT is documented as a
+future method, not yet available. Not enforced on-chain.
 
 **Does OpenAd custody funds?** No. Lease proceeds move in the buy. CPC remaining
 sits in the **campaign vault** contract until settle or close — not in the API

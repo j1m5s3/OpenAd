@@ -17,6 +17,7 @@
 ## Advertiser
 
 * [Overview](advertiser/README.md)
+* [Getting USDC on Base](advertiser/getting-usdc-on-base.md)
 * [Creatives](advertiser/creatives.md)
 * [Approvals](advertiser/approvals.md)
 * [Buy a period](advertiser/buy-a-period.md)

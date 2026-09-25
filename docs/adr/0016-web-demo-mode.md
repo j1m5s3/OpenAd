@@ -57,11 +57,12 @@ misleading.
 8. **No persistence, by design.** The demo store and the simulated wallet live in memory only:
    a full page reload re-seeds the fixtures and disconnects the wallet. There is nothing to
    persist and nothing to leak. Navigate with in-app links to keep a session's state.
-9. **Font-offline.** The demo build makes no outside request, fonts included: a
-   `transformIndexHtml` plugin in `web/vite.config.ts` drops the Google Fonts `preconnect` and
-   stylesheet links when `VITE_DEMO_MODE=1` (the CSS stack falls back to system fonts) and adds an
-   empty inline favicon so the browser's `/favicon.ico` probe cannot 404. Normal builds keep
-   `index.html` unchanged. The wallet connector is `injected` over the simulator (item 4).
+9. **Font-offline.** No build loads Google Fonts: `index.html` carries no Google Fonts links —
+   they were removed outright (ROADMAP 6.11) rather than stripped per build — so the CSS stack
+   falls back to system fonts everywhere. In demo builds only, a `transformIndexHtml` plugin in
+   `web/vite.config.ts` adds an empty inline favicon so the browser's `/favicon.ico` probe cannot
+   404 on a static host with no server-side fallback; normal builds keep `index.html` unchanged.
+   The wallet connector is `injected` over the simulator (item 4).
 10. **Verification.** `npm run test:demo -w e2e` (`e2e/demo/`) builds the demo, serves it with
     `vite preview`, drives both personas end to end (buy with permit, CPC campaign open/top
     up/pause, mint + calendar + terms, approval, house ad, domain verification, pricing

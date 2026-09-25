@@ -69,13 +69,13 @@ ad-network approval gate, no third-party tracking, and on-chain proof of spend.
 
 ## Adoption blockers → ROADMAP mapping
 
-| #   | Blocker                                                                                                                        | Addressed by                                                                            |
-| --- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| 1   | Nobody can see it work without running Anvil + Postgres + a wallet; no demo, landing page, or value proposition in the README. | 6.2 (demo mode + static showcase), 6.7 (README rewrite)                                 |
-| 2   | Publisher onboarding ends at "mint a slot"; no copy-paste embed code, no shareable slot page, no CMS instructions.             | 6.3 (publisher growth: embed code panel, share page, guide)                             |
-| 3   | Advertisers and publishers see no performance numbers (CTR, eCPM, spend/earnings trend) — the first question every buyer asks. | 6.4 (analytics read model + UI)                                                         |
-| 4   | Run scripts are PowerShell-only; no production hosting config.                                                                 | 6.5 (cross-platform scripts), 6.6 (GCP deploy)                                          |
-| 5   | USDC-only with no fiat onramp.                                                                                                 | Accepted as out of scope (see below); mitigated by onramp guide links in 6.7, not code. |
+| #   | Blocker                                                                                                                        | Addressed by                                                                            | Status (2026-09-25)                                                                                                                                                |
+| --- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Nobody can see it work without running Anvil + Postgres + a wallet; no demo, landing page, or value proposition in the README. | 6.2 (demo mode + static showcase), 6.7 (README rewrite)                                 | Shipped — demo mode PR #8; README rewrite PR #11, extended in PR #16.                                                                                              |
+| 2   | Publisher onboarding ends at "mint a slot"; no copy-paste embed code, no shareable slot page, no CMS instructions.             | 6.3 (publisher growth: embed code panel, share page, guide)                             | Shipped — embed code panel and share page PR #10; slot listings and category filter PR #13.                                                                        |
+| 3   | Advertisers and publishers see no performance numbers (CTR, eCPM, spend/earnings trend) — the first question every buyer asks. | 6.4 (analytics read model + UI)                                                         | Shipped — PR #9.                                                                                                                                                   |
+| 4   | Run scripts are PowerShell-only; no production hosting config.                                                                 | 6.5 (cross-platform scripts), 6.6 (GCP deploy)                                          | Shipped — cross-platform scripts PR #5; GCP deploy artifacts PR #7 (the live deploy is user-run, ROADMAP 6.10).                                                    |
+| 5   | USDC-only with no fiat onramp.                                                                                                 | Accepted as out of scope (see below); mitigated by onramp guide links in 6.7, not code. | Mitigated, not solved — onramp guide added in PR #16 (`docs/guide/advertiser/getting-usdc-on-base.md`); the protocol is unchanged and remains USDC-only by design. |
 
 ## Earning model
 
@@ -134,7 +134,8 @@ recorded above as future work needing a spec and an ADR first.
   without needing real counterparties first, and by targeting a beachhead ICP small enough to
   seed manually.
 - **USDC-only friction.** Advertisers without USDC on Base must bridge/onramp first. Accepted as
-  out of scope for this plan; mitigate with guide links to onramps, not new custody code.
+  out of scope for this plan; mitigated by `docs/guide/advertiser/getting-usdc-on-base.md`
+  (PR #16), not new custody code.
 - **Invalid traffic (IVT) on CPC.** Payable-click charges depend on IVT detection quality; weak
   detection either overcharges advertisers or lets click fraud through.
 - **Regulatory and brand-safety.** On-chain, cookieless ad payments and NFT_REF creatives sit in

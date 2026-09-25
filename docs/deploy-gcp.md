@@ -107,15 +107,39 @@ gcloud sql instances create openad-<ENV> \
 
 gcloud sql databases create openad --instance=openad-<ENV>
 
-# Generates its own password; do not type one into this shell's history.
-gcloud sql users create openad \
-  --instance=openad-<ENV> --password="$(openssl rand -base64 32)"
+# Generate the password once into a shell variable: never echo it, never type it into a gcloud
+# argument as a literal, and it never lands in this shell's history as plain text. openssl
+# -hex (not -base64) avoids the `+`, `/`, `=` characters base64 can produce, which would
+# otherwise need percent-encoding inside the connection-string URL below. Chained with `&&`,
+# in this same shell, so a failed user-create never writes a secret for a user that doesn't
+# exist — never print `DB_PASS`, and never put it in a plain Cloud Run env var.
+DB_PASS="$(openssl rand -hex 32)"
+gcloud sql users create openad --instance=openad-<ENV> --password="${DB_PASS}" \
+  && printf '%s' "postgresql+asyncpg://openad:${DB_PASS}@/openad?host=/cloudsql/<PROJECT_ID>:<REGION>:openad-<ENV>" \
+    | gcloud secrets create openad-database-url-<ENV> --data-file=-
+unset DB_PASS
 ```
 
-Build the connection string as
-`postgresql+asyncpg://openad:<PASSWORD>@/openad?host=/cloudsql/<PROJECT_ID>:<REGION>:openad-<ENV>`
-(Cloud SQL Auth Proxy / unix socket — no public IP) and store it in Secret Manager (step 5);
-never in a plain Cloud Run env var.
+This is the Unix-socket form. If a later step shows it can't reach this instance (see the
+verify-first note above), the `openad` user already exists and `DB_PASS` is gone, so re-running
+this block fails at `gcloud sql users create`: use the **Recovery** paragraph below instead, with
+the private-IP TCP host in its connection string.
+
+**Recovery** (password lost, or a rotation): generate a new one the same way, set it, then add a
+new secret version — never reusing the old value. `gcloud sql users set-password` takes the
+username positionally (there is no `--user` flag), and the two commands are chained with `&&` so
+a failed password change never writes a new secret version:
+
+```bash
+DB_PASS="$(openssl rand -hex 32)"
+gcloud sql users set-password openad --instance=openad-<ENV> --password="${DB_PASS}" \
+  && printf '%s' "postgresql+asyncpg://openad:${DB_PASS}@/openad?host=/cloudsql/<PROJECT_ID>:<REGION>:openad-<ENV>" \
+    | gcloud secrets versions add openad-database-url-<ENV> --data-file=-
+unset DB_PASS
+```
+
+Redeploy `openad-api`, `openad-indexer` and `openad-settler` afterward so each picks up the
+`:latest` secret version.
 
 ### Connection budget
 
@@ -141,12 +165,12 @@ budget = api_maxScale × (api pool + overflow)
 **This tier's numbers** (`infra/gcp/services/*.yaml`, `infra/gcp/jobs/migrate.yaml`):
 
 | Process                | Max instances / tasks | Pool + overflow | Connections |
-| ----------------------- | ---------------------: | ----------------: | -----------: |
-| `openad-api`            | 4 (`maxScale`)         | 4 + 2             | 24           |
-| `openad-indexer`        | 1 (pinned)             | 2 + 1             | 3            |
-| `openad-settler`        | 1 (pinned)             | 2 + 1             | 3            |
-| `openad-migrate` (job)  | 1 (one execution)      | n/a (see above)   | 1            |
-| **Steady-state total**  |                        |                   | **31**       |
+| ---------------------- | --------------------: | --------------: | ----------: |
+| `openad-api`           |        4 (`maxScale`) |           4 + 2 |          24 |
+| `openad-indexer`       |            1 (pinned) |           2 + 1 |           3 |
+| `openad-settler`       |            1 (pinned) |           2 + 1 |           3 |
+| `openad-migrate` (job) |     1 (one execution) | n/a (see above) |           1 |
+| **Steady-state total** |                       |                 |      **31** |
 
 Postgres also holds back `superuser_reserved_connections` slots (default **3**) out of
 `max_connections` for superuser roles only **(Postgres's default; inferred for Cloud SQL —
@@ -164,7 +188,7 @@ and the check further down verifies it before every deploy.
 one revision; Cloud Run's default rolling deploy briefly runs the old and new revisions of
 `openad-api`, `openad-indexer` and `openad-settler` side by side while traffic shifts, so those
 three processes' connections can roughly double for that window: `(24 + 3 + 3) × 2 = 60`, plus
-`openad-migrate`'s 1 (it runs to completion *before* traffic shifts, per this runbook's
+`openad-migrate`'s 1 (it runs to completion _before_ traffic shifts, per this runbook's
 ordering, so it is not itself doubled) and the 3 reserved connections, **≈ 64 worst case**.
 Confirm this against Cloud Run's actual rollout behavior for this project before relying on it.
 
@@ -257,11 +281,10 @@ done
 
 ## 5. Secrets
 
-```bash
-# Database URL (built in step 3), one secret per env.
-printf '%s' 'postgresql+asyncpg://openad:<PASSWORD>@/openad?host=/cloudsql/<PROJECT_ID>:<REGION>:openad-<ENV>' \
-  | gcloud secrets create openad-database-url-<ENV> --data-file=-
+`openad-database-url-<ENV>` is already created in step 3, in the same shell that generated the
+password, so it is never typed here. The remaining secrets:
 
+```bash
 # Settler key — ONLY this secret's IAM binding names the settler service account.
 # The dedicated, gas-only settler EOA's key (docs/deploy-sepolia.md), never the deployer's or
 # the owner's. Create it out of band; never echo it here.
@@ -276,9 +299,13 @@ printf '%s' "$(openssl rand -hex 32)" | gcloud secrets create openad-click-hmac-
 ```
 
 Grant `roles/secretmanager.secretAccessor` on `openad-database-url-<ENV>`,
-`openad-session-secret-<ENV>` and `openad-click-hmac-secret-<ENV>` to the `openad-api-<ENV>`,
-`openad-migrate-<ENV>` service accounts (and `openad-indexer-<ENV>` for the database URL only —
-it never needs the session or click secrets).
+`openad-session-secret-<ENV>` and `openad-click-hmac-secret-<ENV>` to the `openad-api-<ENV>`
+service account, since `infra/gcp/services/api.yaml` is the only manifest that mounts all three.
+Grant `openad-database-url-<ENV>` only — not the session or click secrets — to
+`openad-migrate-<ENV>`, `openad-indexer-<ENV>` and `openad-settler-<ENV>` too:
+`infra/gcp/jobs/migrate.yaml` and `infra/gcp/services/{indexer,settler}.yaml` each mount only
+`OPENAD_DATABASE_URL`, and none of the three needs the session or click secrets (the settler-key
+grant above is still the only IAM binding naming the settler service account for that secret).
 
 ## 6-8. Build, migrate, deploy — the primary path: `scripts/deploy-gcp.sh`
 
@@ -343,7 +370,7 @@ that is set).
 
 ```bash
 gcloud builds submit --config infra/gcp/cloudbuild.yaml --project <PROJECT_ID> \
-  --substitutions=_REGION=<REGION>,_REPO=openad,_ENV=<ENV>,_API_URL=https://api.<ENV>.example.com,_CHAIN_ID=<CHAIN_ID>,_WALLETCONNECT_PROJECT_ID=<WC_PROJECT_ID>,_GUIDE_URL=<GUIDE_URL>,_DEMO_URL=<DEMO_URL> \
+  --substitutions=_REGION=<REGION>,_REPO=openad,_ENV=<ENV>,_API_URL=https://api.<domain>,_CHAIN_ID=<CHAIN_ID>,_WALLETCONNECT_PROJECT_ID=<WC_PROJECT_ID>,_GUIDE_URL=<GUIDE_URL>,_DEMO_URL=<DEMO_URL> \
   --gcs-source-staging-dir=gs://<PROJECT_ID>-openad-builds/source
 ```
 
@@ -420,7 +447,7 @@ gcloud run deploy openad-api \
   --network=<VPC_NETWORK> --subnet=<VPC_SUBNET> --vpc-egress=private-ranges-only \
   --service-account=openad-api-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com \
   --set-cloudsql-instances=<PROJECT_ID>:<REGION>:openad-<ENV> \
-  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=<MEDIA_BUCKET>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_PUBLIC_URL=https://api.<ENV>.example.com,OPENAD_CORS_ORIGINS=https://<ENV>.example.com,OPENAD_DB_POOL_SIZE=4,OPENAD_DB_MAX_OVERFLOW=2 \
+  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=<MEDIA_BUCKET>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_PUBLIC_URL=https://api.<domain>,OPENAD_CORS_ORIGINS=https://app.<domain>,OPENAD_DB_POOL_SIZE=4,OPENAD_DB_MAX_OVERFLOW=2,OPENAD_SERVE_ENFORCE_ORIGIN=true \
   --set-secrets=OPENAD_DATABASE_URL=openad-database-url-<ENV>:latest,OPENAD_SESSION_SECRET=openad-session-secret-<ENV>:latest,OPENAD_CLICK_HMAC_SECRET=openad-click-hmac-secret-<ENV>:latest
 
 # No --port here: Cloud Run injects $PORT (default 8080) into every container regardless of
@@ -451,7 +478,7 @@ gcloud run deploy openad-settler \
 gcloud run deploy openad-web \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/web:latest \
   --region=<REGION> --platform=managed --allow-unauthenticated --max-instances=10 \
-  --set-env-vars="CSP_CONNECT_SRC='self' https://api.<ENV>.example.com <RPC_ORIGINS> https://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.com wss://*.walletconnect.org,CSP_IMG_SRC='self' data: https://api.<ENV>.example.com https:"
+  --set-env-vars="CSP_CONNECT_SRC='self' https://api.<domain> <RPC_ORIGINS> https://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.com wss://*.walletconnect.org,CSP_IMG_SRC='self' data: https://api.<domain> https:"
 ```
 
 Without that last flag, the image's demo-safe CSP defaults (`web/Dockerfile`) stay in force and
@@ -505,6 +532,16 @@ Then point the api's CORS allowlist and the web build's api URL at those same ho
 `VITE_API_URL=https://api.<domain>` for the web build. `scripts/deploy-gcp.sh`'s same-site guard
 (below) checks these same `API_URL`/`WEB_URL` values.
 
+**Web-origin host rule.** SIWE signs the host the web app is actually served from
+(`window.location.host`, `useSiwe.ts`) — not `VITE_API_URL`, which only points the web build's
+fetches at the API. Viem's `createSiweMessage` (ADR-0009 amendment) rejects an IPv6 literal host
+and any single-label host other than `localhost`, so that web-app host must be `localhost`, an
+IPv4 address, or a dotted hostname. A dotted hostname like `app.<domain>` above always satisfies
+this. The API must recognize the same host too: it has to appear in `OPENAD_CORS_ORIGINS` (and
+in `OPENAD_SIWE_ALLOWED_ORIGINS`, if that's set separately — see `.env.example`), which must
+follow the same rule (`docs/ARCHITECTURE.md` §3.3). The API itself does not validate its origin
+lists against this rule; setting them correctly is an operator responsibility.
+
 Domain mappings aren't available in every region (see `gcloud run domain-mappings create
 --help`, or the Cloud Run docs, for the current region list). Where they aren't, front both
 services with a global external Application Load Balancer using serverless NEGs instead — one
@@ -518,13 +555,13 @@ look same-site (both default `*.run.app` hosts, or their last two DNS labels dif
 heuristic, not real Public Suffix List logic). Pass `--allow-cross-site-auth` only when that's
 genuinely fine, e.g. deploying `--only stack` before any web build points at it.
 
-The last-two-labels heuristic is a false-*reject* risk in one direction (it can refuse a
-genuinely same-site pair it doesn't recognize) but a false-*accept* risk in the other, for any
+The last-two-labels heuristic is a false-_reject_ risk in one direction (it can refuse a
+genuinely same-site pair it doesn't recognize) but a false-_accept_ risk in the other, for any
 public suffix longer than one label: `last_two_labels` reduces both `api.foo.co.uk` and
 `app.bar.co.uk` to the same `co.uk` (the real registrable domains are `foo.co.uk` and
 `bar.co.uk` — not same-site), and reduces both `foo.web.app` and `bar.web.app` to the same
 `web.app` (itself a multi-part public suffix like `run.app` — also not same-site), so the guard
-can wrongly *accept* a genuinely cross-site pair on domains shaped like these.
+can wrongly _accept_ a genuinely cross-site pair on domains shaped like these.
 `--allow-cross-site-auth` exists for the documented false-reject case above, not for this
 false-accept gap — a domain on a multi-label public suffix should be checked by hand rather than
 trusted to this heuristic.
@@ -544,8 +581,8 @@ only one with Cloud CDN enabled, and a URL-map route rule (a path template such 
 `/v1/serve/*/media`) that sends media to that one and every other path to the other. Never
 use the `FORCE_CACHE_ALL` cache mode on the backend that serves `/v1/serve/{slot_id}`: it
 caches responses whatever their `Cache-Control` says (all inferred; verify before deploy). The
-load balancer adds `X-Forwarded-For` entries: re-run § 11's hop check before you rely on
-`OPENAD_TRUSTED_PROXY_HOPS`.
+load balancer adds `X-Forwarded-For` entries (inferred; verify before deploy): re-run § 11's hop
+check before you rely on `OPENAD_TRUSTED_PROXY_HOPS`.
 
 ## 10. Workload Identity Federation for GitHub Actions (no JSON keys)
 
@@ -587,7 +624,7 @@ gcloud storage buckets add-iam-policy-binding gs://<PROJECT_ID>-openad-builds \
   --role="roles/storage.admin"
 ```
 
-`roles/iam.serviceAccountUser` lets the deployer SA deploy Cloud Run revisions *as*
+`roles/iam.serviceAccountUser` lets the deployer SA deploy Cloud Run revisions _as_
 `openad-api-<ENV>` / `openad-indexer-<ENV>` / `openad-settler-<ENV>` without itself gaining
 access to those service accounts' secrets (it is `actAs`, not `secretAccessor`).
 
@@ -659,7 +696,7 @@ Each check below is a real serve, so it records one impression.
   them.)
 
   ```bash
-  curl -s -o /dev/null -D - "https://api.<ENV>.example.com/v1/serve/<CPC_SLOT_ID>" \
+  curl -s -o /dev/null -D - "https://api.<domain>/v1/serve/<CPC_SLOT_ID>" \
     | grep -i '^cache-control'
   ```
 
@@ -672,7 +709,7 @@ Each check below is a real serve, so it records one impression.
   ```bash
   for ORIGIN in https://not-the-slot-domain.example null; do
     curl -s -H "Origin: ${ORIGIN}" \
-      "https://api.<ENV>.example.com/v1/serve/<LEASED_SLOT_ID>" | grep -o '"status":"[a-z]*"'
+      "https://api.<domain>/v1/serve/<LEASED_SLOT_ID>" | grep -o '"status":"[a-z]*"'
   done
   ```
 
@@ -688,8 +725,8 @@ Each check below is a real serve, so it records one impression.
   `OPENAD_TRUSTED_PROXY_HOPS`, the rule keys on that same entry and the warning stops. The
   one-time token and the hourly per-campaign cap apply either way.
 - **Behind a load balancer, every api request must take the same proxies.** A load balancer
-  (§ 9) adds its own `X-Forwarded-For` entry, so the hop count usually becomes `2`. Close
-  every path around it:
+  (§ 9) adds its own `X-Forwarded-For` entry, so the hop count usually becomes `2` (inferred;
+  verify before deploy). Close every path around it:
   - set `API_INGRESS=internal-and-cloud-load-balancing` for `scripts/deploy-gcp.sh` (it takes
     `all`, the default, or `internal-and-cloud-load-balancing`, and renders it into `api.yaml`'s
     `run.googleapis.com/ingress` annotation), but only once the load balancer already serves
@@ -712,7 +749,7 @@ Each check below is a real serve, so it records one impression.
 the TCP peer (hops `0`) or by the N-th `X-Forwarded-For` entry from the right (hops `N`).
 
 - **Why it is off.** It is only safe once you know which `X-Forwarded-For` entry Google's front
-  end writes. The Cloud Run functions request-header reference says only that the *first*
+  end writes. The Cloud Run functions request-header reference says only that the _first_
   entry is "generally" the client
   (https://docs.cloud.google.com/functions/docs/reference/headers).
   The first entry is the one a client can forge. The Cloud Run container contract
@@ -739,7 +776,7 @@ To verify and enable:
 2. From one machine, send four requests, each with a different forged header:
 
    ```bash
-   API=https://api.staging.example.com
+   API=https://api.<domain>
    for spoof in 198.51.100.1 198.51.100.2 198.51.100.3 198.51.100.4; do
      curl -s -o /dev/null -w '%{http_code}\n' -X POST -H "X-Forwarded-For: ${spoof}" "${API}/v1/auth/nonce"
    done
@@ -748,6 +785,7 @@ To verify and enable:
 
    Expect `200 200 200 429`, then a `Retry-After` line. If the fourth request is not refused,
    the key comes from an entry the client controls: stop, and keep the limiter off.
+
 3. Straight away, from a **different network** (for example a phone hotspot), send one
    request. Expect `200`: with a single instance, that means a different bucket, so the key
    is the caller's own address. A `429` means the key is a shared proxy address, not the
@@ -796,11 +834,18 @@ cold starts) to cut cost; production should not, per this ADR's `min-instances=1
 
 ## 14. Teardown
 
+`gcloud run services delete` and `gcloud secrets delete` each take exactly one resource name, so
+loop over the names rather than listing them all on one command line:
+
 ```bash
-gcloud run services delete openad-api openad-indexer openad-settler openad-web --region=<REGION>
+for svc in openad-api openad-indexer openad-settler openad-web openad-web-demo; do
+  gcloud run services delete "$svc" --region=<REGION>
+done
 gcloud run jobs delete openad-migrate --region=<REGION>
 gcloud sql instances delete openad-<ENV>
-gcloud storage rm --recursive gs://openad-media-<ENV>
-gcloud secrets delete openad-database-url-<ENV> openad-settler-key-<ENV> \
-  openad-session-secret-<ENV> openad-click-hmac-secret-<ENV>
+gcloud storage rm --recursive gs://<MEDIA_BUCKET>
+for secret in openad-database-url-<ENV> openad-settler-key-<ENV> \
+  openad-session-secret-<ENV> openad-click-hmac-secret-<ENV>; do
+  gcloud secrets delete "$secret"
+done
 ```

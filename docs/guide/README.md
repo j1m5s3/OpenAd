@@ -21,3 +21,10 @@ current creative.
 - [Advertiser](advertiser/README.md) — register a creative, get approval, buy a period or fund a campaign.
 
 New to the vocabulary? Start with [Concepts](marketplace/concepts.md).
+
+## Try the demo
+
+**[Live demo →](https://claude.ai/artifact/AzkEcWfmUT23GCo2qkWxE7)** walks both paths above with
+simulated data and a simulated wallet — no wallet, USDC, or local stack needed to look around.
+It is private until the owner shares it; if the link asks you to sign in or request access, ask
+the OpenAd team for access.

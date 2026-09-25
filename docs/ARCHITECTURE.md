@@ -14,7 +14,7 @@ OpenAd/
 │                CampaignVault (ADR-0014).   → deployments/<chainId>.json
 ├── api/         Python (FastAPI).  Four processes from one package `openad`:
 │                  • api      – read API + auth + publisher/advertiser write helpers (off-chain data only)
-│                  • serve    – GET /v1/serve/{slot_id} and /media  (may later move to a CDN worker)
+│                  • serve    – GET /v1/serve/{slot_id} and /media  (a CDN may cache /media only)
 │                  • indexer  – event → Postgres worker
 │                  • settler  – CPC `settle_batch` signer (ADR-0014). Not the HTTP API.
 ├── web/         Vite + React + TypeScript + Tailwind + RainbowKit + wagmi. Discover, Supply, Campaigns.
@@ -113,30 +113,30 @@ api/src/openad/
 
 Chain-derived (rebuildable):
 
-| Table                 | Key                                         | Source events                                                                                 |
-| --------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `slots`               | `slot_id`                                   | `SlotMinted`, `Transfer` (owner), `CalendarSet` (version, period_seconds, first_period_start) |
-| `terms`               | `slot_id`                                   | `TermsSet` (`sale_mode`, `floor_cpc`, prices), `PausedSet`                                    |
-| `leases`              | `(slot_id, calendar_version, period_index)` | `LeaseSet` + `Purchased` (price, fee, approval_mode, tx hash)                                 |
-| `creatives`           | `creative_id`                               | `CreativeRegistered`, `NftCreativeRegistered`, `CreativeRevoked`                              |
-| `approvals`           | `(publisher, creative_id)`                  | `ApprovalRequested`, `ApprovalSet`                                                            |
-| `allowed_advertisers` | `(publisher, advertiser)`                   | `AdvertiserAllowed`                                                                           |
-| `protocol_config`     | singleton per chain                         | `MarketSet`, `FeeSet`, `TreasurySet`, `ModeratorSet`, `CampaignVaultSet`, vault owner events  |
-| `campaigns`           | `campaign_id`                               | `CampaignOpened` + top-up / max CPC / pause / close / finalize                                |
-| `campaign_settlements`| `batch_id`                                  | `Settled`                                                                                     |
-| `indexer_cursor`      | `(chain_id, contract)`                      | last processed block number + hash; one row with `contract = "protocol"` covers all contracts |
+| Table                  | Key                                         | Source events                                                                                 |
+| ---------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `slots`                | `slot_id`                                   | `SlotMinted`, `Transfer` (owner), `CalendarSet` (version, period_seconds, first_period_start) |
+| `terms`                | `slot_id`                                   | `TermsSet` (`sale_mode`, `floor_cpc`, prices), `PausedSet`                                    |
+| `leases`               | `(slot_id, calendar_version, period_index)` | `LeaseSet` + `Purchased` (price, fee, approval_mode, tx hash)                                 |
+| `creatives`            | `creative_id`                               | `CreativeRegistered`, `NftCreativeRegistered`, `CreativeRevoked`                              |
+| `approvals`            | `(publisher, creative_id)`                  | `ApprovalRequested`, `ApprovalSet`                                                            |
+| `allowed_advertisers`  | `(publisher, advertiser)`                   | `AdvertiserAllowed`                                                                           |
+| `protocol_config`      | singleton per chain                         | `MarketSet`, `FeeSet`, `TreasurySet`, `ModeratorSet`, `CampaignVaultSet`, vault owner events  |
+| `campaigns`            | `campaign_id`                               | `CampaignOpened` + top-up / max CPC / pause / close / finalize                                |
+| `campaign_settlements` | `batch_id`                                  | `Settled`                                                                                     |
+| `indexer_cursor`       | `(chain_id, contract)`                      | last processed block number + hash; one row with `contract = "protocol"` covers all contracts |
 
 Off-chain only:
 
-| Table                     | Purpose                                                                                                                                       |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `house_ads`               | Publisher fallback creative per slot (`media_url`, `click_url`). Set via authenticated API.                                                   |
+| Table                     | Purpose                                                                                                                                                                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `house_ads`               | Publisher fallback creative per slot (`media_url`, `click_url`). Set via authenticated API.                                                                                                                                        |
 | `slot_listings`           | Publisher-provided audience description (`summary`, `audience`, `categories`) per slot (ROADMAP 6.3). Self-described, not verified. Set via authenticated API (owner-only). Off-chain and not rebuildable from chain — back it up. |
-| `domain_verifications`    | `(slot_id, method, token, verified_at)`. See § 3.6.                                                                                           |
-| `creative_verifications`  | `(creative_id, status, checked_at, cached_path, resolved_image_url, error)`. See § 3.5.                                                       |
-| `serve_events`            | Append-only: `(slot_id, lease key or campaign_id or null, served_kind, origin_ok, at, gsp_cpc?)`. No IPs, no user agents, no cookies. |
-| `click_events`            | Token hash, campaign_id, payable flag, IVT reason, GSP, optional settle batch. No raw IPs. |
-| `auth_nonces`, `sessions` | SIWE login state. Used or expired nonces and expired sessions are pruned from `POST /v1/auth/nonce`, at most once a minute per process (§ 3.3). |
+| `domain_verifications`    | `(slot_id, method, token, verified_at)`. See § 3.6.                                                                                                                                                                                |
+| `creative_verifications`  | `(creative_id, status, checked_at, cached_path, resolved_image_url, error)`. See § 3.5.                                                                                                                                            |
+| `serve_events`            | Append-only: `(slot_id, lease key or campaign_id or null, served_kind, origin_ok, at, gsp_cpc?)`. No IPs, no user agents, no cookies.                                                                                              |
+| `click_events`            | Token hash, campaign_id, payable flag, IVT reason, GSP, optional settle batch. No raw IPs.                                                                                                                                         |
+| `auth_nonces`, `sessions` | SIWE login state. Used or expired nonces and expired sessions are pruned from `POST /v1/auth/nonce`, at most once a minute per process (§ 3.3).                                                                                    |
 
 Migrations: Alembic, one revision per PR that touches models. Postgres in dev/prod, SQLite in
 unit tests.
@@ -146,7 +146,9 @@ unit tests.
 Public reads:
 
 - `GET /v1/health` — liveness; includes indexer lag in blocks.
-- `GET /v1/slots?domain=&kind=&verified=` — list slots with terms, next open periods, indicative prices.
+- `GET /v1/slots?domain=&kind=&category=&limit=&offset=` — list slots (`kind` 0-3; `limit` 1-200,
+  default 50; `offset` ≥ 0, default 0). Returns `{items, total}`: slots with their terms and
+  listing. Periods and indicative prices come from `/periods` below.
 - `GET /v1/slots/{slot_id}` — slot detail; also serves as ERC-721 `tokenURI` metadata JSON when `Accept: application/json` (this is what `AdSlot.base_uri` points at).
 - `GET /v1/slots/{slot_id}/periods?from=&to=` — period calendar with lease status and quote
   inputs. Capped at 60 periods per request (`to − from + 1 ≤ 60`); a wider window gets a
@@ -154,22 +156,27 @@ Public reads:
   uint256, so an out-of-range index gets FastAPI's normal 422 instead of a 500. Leases in the
   window are read with one query, not one per period index.
 - `GET /v1/creatives/{creative_id}` — creative + verification status.
-- `GET /v1/publishers/{address}/…`, `GET /v1/advertisers/{address}/…` — dashboards' read models.
+- `GET /v1/publishers/{address}/…` (except `pricing-suggestion`, below), `GET
+  /v1/advertisers/{address}/…` — dashboards' read models.
 - `GET /v1/analytics/slots/{slot_id}`, `GET /v1/analytics/advertisers/{address}` — CTR/eCPM/
   spend/earnings read model; see § 3.10.
 
-Serving (public, cacheable):
+Serving (public; campaign responses are never cached, § 3.4):
 
 - `GET /v1/serve/{slot_id}` — JSON described in § 3.4.
-- `GET /v1/serve/{slot_id}/media` — the verified media bytes for the current lease, CPC winner, or house ad, with `Cache-Control` and `ETag`. Advertisers never see visitor traffic.
+- `GET /v1/serve/{slot_id}/media` — the verified media bytes for the current lease or CPC winner, with `Cache-Control` and `ETag`. Advertisers never see visitor traffic.
 - `GET /v1/c/{token}` — one-time click token → 302 to the creative `click_url` if valid; 404 otherwise. Not a media proxy.
 
 Authenticated (SIWE session; wallet must match the acting address):
 
 - `POST /v1/auth/nonce`, `POST /v1/auth/verify`, `POST /v1/auth/logout`.
 - `PUT /v1/slots/{slot_id}/house-ad` — slot owner only.
+- `PUT /v1/slots/{slot_id}/listing`, `DELETE /v1/slots/{slot_id}/listing` — slot owner only
+  (§3.2 `slot_listings`, ROADMAP 6.3).
 - `POST /v1/slots/{slot_id}/domain-verification` — start/refresh verification.
 - `POST /v1/creatives/{creative_id}/verify` — request (re)verification of media.
+- `GET /v1/publishers/{address}/pricing-suggestion?slot_id=` — the wallet must be the publisher
+  (`address`) and own `slot_id`.
 
 No endpoint ever accepts a private key or signs a chain transaction.
 
@@ -188,6 +195,11 @@ Sign-in rules (ADR-0009 and its 2026-09-25 amendment; threat model T15, T16):
     `OPENAD_CORS_ORIGINS`.
   - The web app signs with `window.location.host` and `window.location.origin`. The sim
     signs as `OPENAD_SIM_WEB_ORIGIN`. Neither ever signs as the API's own URL.
+  - **Web-origin host rule.** The web app and the sim build the SIWE message with viem's
+    `createSiweMessage`, which rejects an IPv6 literal host and any single-label host other
+    than `localhost` (for example `devbox:5173` or `LOCALHOST:5173`). So the web origin's host
+    must be `localhost`, an IPv4 address, or a dotted hostname — set `OPENAD_CORS_ORIGINS` (and
+    `OPENAD_SIWE_ALLOWED_ORIGINS`, if it differs) and the web build's own origin accordingly.
 - **Checks in order:** parse, bind, chain id (`OPENAD_CHAIN_ID`), time, signature.
   - `Issued At` must be within `[now − 10 min − 5 min, now + 5 min]` (5 minutes of skew).
   - `Expiration Time` and `Not Before` are honoured, with 5 minutes of skew for `Not Before`.
@@ -230,7 +242,8 @@ Pydantic model: `api/src/openad/schemas/serve.py`.
 ```
 
 Rules: `ttl` seconds is how long the embed may reuse the response before it asks again.
-`mediaUrl` is always same-origin to the API (verified cache), never the advertiser's URL.
+For a paid (`lease`/`campaign`) response, `mediaUrl` is always same-origin to the API (verified
+cache), never the advertiser's URL; a house ad's `mediaUrl` is the publisher's own URL instead.
 `status = "unknown"` → HTTP 404. `status = "campaign"`: `campaign` is set, `lease` is null,
 `clickUrl` is `{api}/v1/c/{token}` not the advertiser landing URL. House ads keep the
 publisher `clickUrl` and are never payable.
@@ -282,14 +295,14 @@ present, even for an origin outside its own allowlist).
 Triggered by the indexer on `CreativeRegistered` and re-run on a schedule
 (`OPENAD_VERIFY_INTERVAL_SECONDS`, default 6h) and on demand. Each indexer pass
 (`services.media.verify_pending`) processes pending creatives up to a wall-clock budget
-(`OPENAD_VERIFY_PASS_BUDGET_SECONDS`, default 20s, ROADMAP 6.9 step 39); creatives it doesn't
+(`OPENAD_VERIFY_PASS_BUDGET_SECONDS`, default 20s, ROADMAP 6.9, PR #17); creatives it doesn't
 reach stay `pending` for the next pass (creatives are attempted in `creative_id`, i.e. FIFO,
 order), so registering a creative is permissionless but a slow or malicious `uri` can never
 block block indexing for longer than one budget plus one fetch deadline (`docs/threat-model.md`
 T18). On demand (`POST /v1/creatives/{id}/verify`) and the indexer pass both call
 `services.media.verify_creative`, which reads what the fetch needs and commits — releasing the
 pooled DB connection — before the network call, then writes the result in a later transaction
-(fix round 1, T18). Registering is permissionless, and the on-demand route lets the creative's
+(PR #17, T18). Registering is permissionless, and the on-demand route lets the creative's
 advertiser (`require_advertiser`) re-run verification at any time, whatever the creative's
 status; with the connection released first, a slow `uri` or several concurrent verifies of the
 same creative no longer hold a connection out of the pool for the fetch's duration.
@@ -309,19 +322,20 @@ same creative no longer hold a connection out of the pool for the fetch's durati
    is unwrapped first. Dev/test skips these host checks entirely so local Anvil/sim creatives at
    `http://127.0.0.1:*` still verify (ADR-0012). Enforce `OPENAD_MAX_MEDIA_BYTES` (default 2 MiB),
    a 10 s per-read timeout, and an overall `OPENAD_MEDIA_FETCH_DEADLINE_SECONDS` deadline
-   (default 30s, step 39) around connect, every hop, and the whole body — a host that trickles a
+   (default 30s, PR #17) around connect, every hop, and the whole body — a host that trickles a
    few bytes at a time ("slow-drip") never trips the per-read timeout but is still cut off
    (`failed:timeout`) once the deadline passes (T18). The request sends `Accept-Encoding:
    identity` and the body is read raw (`aiter_raw()`, bypassing httpx's own content-decoding); a
-   response declaring any other `Content-Encoding` fails closed as `failed:fetch` (fix round 1,
+   response declaring any other `Content-Encoding` fails closed as `failed:fetch` (PR #17,
    T18) instead of being decoded, so `OPENAD_MAX_MEDIA_BYTES` bounds wire bytes actually
    received, not a much larger size a compressed ("gzip-bomb") body could expand into.
 2. `keccak256(bytes) == content_hash`, else `failed:hash_mismatch`.
 3. Sniff MIME; must equal `mime` and be in the allowlist (`image/png`, `image/jpeg`,
    `image/webp`, `image/gif`). Decode and check `width × height` equals the registered
    dimensions, else `failed:dimensions`.
-4. `click_url` must be `https://` and not on the phishing blocklist (`OPENAD_SAFE_BROWSING_KEY`,
-   optional in dev).
+4. `click_url` must be empty or `https://` (`check_click_url`). There is no phishing or malware
+   blocklist yet (ROADMAP 7.19); `OPENAD_SAFE_BROWSING_KEY` is reserved and nothing reads it.
+   Takedown today is the publisher's approval and the moderator's revoke.
 5. Store bytes at `cached_path` via `services/media_store.py`'s `MediaStore` (local disk in dev,
    GCS in prod behind `OPENAD_MEDIA_BACKEND`, ADR-0017). Mark `verified`.
 
@@ -348,8 +362,12 @@ publisher and advertiser see the failure reason in their dashboards.
 ### 3.6 Domain verification
 
 Off-chain badge, not a protocol rule. The slot owner requests a token via the API and proves
-control by either a DNS TXT record `openad-verification=<token>` at `_openad.<domain>` or a
-`<meta name="openad-site-verification" content="<token>">` tag on `https://<domain>/`. Re-checked
+control with a `<meta name="openad-site-verification" content="<token>">` tag on
+`https://<domain>/` — the only method the web UI offers today, and the only one that can
+currently succeed. The API also accepts a DNS TXT record `openad-verification=<token>` at
+`_openad.<domain>` as a documented alternative, but `dnspython` is not a project dependency, so
+that check always returns "not verified" (an `ImportError` is treated the same as a missing
+record); adding the dependency, or dropping the method, is Phase 7 (`docs/ROADMAP.md`). Re-checked
 weekly. The marketplace UI shows unverified slots with a warning.
 
 The on-demand check (`POST .../domain-verification?check=true`) fetches `https://<domain>/` with
@@ -365,8 +383,8 @@ cooldown), then the endpoint claims a per-slot 30 s cooldown window with one ato
 let concurrent calls all see "no cooldown" and all proceed) and commits — releasing the pooled DB
 connection — before the network call runs; a call that loses the claim gets `429 rate_limited`
 with `Retry-After` instead of triggering another fetch, and the claim persists across a restart
-and is shared across api instances, since it lives in the database, not in process memory (fix
-round 1, step 39, T18). The result is written back in a further transaction guarded by the token
+and is shared across api instances, since it lives in the database, not in process memory (PR
+#17, T18). The result is written back in a further transaction guarded by the token
 read before the fetch, so a check that outlives a token that `start_domain_verification`
 re-issues mid-flight cannot mark the slot verified under the new one.
 
@@ -454,7 +472,7 @@ path (§3.4), so serve-path latency is unaffected.
     `block_number` — so this is a **total only**, not part of the daily series): `charged` is
     spend, `charged − fee` is earnings, `fee` is the fee.
   - CPC accrued: Σ `click_events.gsp_cpc` of payable clicks, bucketed by `click_events.at` day.
-    Reported as `accrued_cpc_spend` and labelled *accrued* because it is unsettled and
+    Reported as `accrued_cpc_spend` and labelled _accrued_ because it is unsettled and
     fee-inclusive (the settler has not yet netted out its fee).
   - Settled and accrued CPC spend are never added into one field.
 - **eCPM:** `ecpm = earnings_or_spend * 1000 // impressions`, integer USDC base units per 1000
@@ -562,14 +580,15 @@ web/src/
   sessions) installs `window.ethereum` as a JSON-RPC forwarder to Vite `/anvil` → Anvil.
   Addresses only in `web/`; Anvil unlocked accounts sign. Production builds omit the module.
 - **Demo mode (ADR-0016).** `VITE_DEMO_MODE=1` builds boot `web/src/demo/install.ts` instead of
-  the real providers: in-memory seeded fixtures answer reads (`lib/api.ts` request resolver,
-  6.2 in progress), a wagmi `mock` connector + in-memory EIP-1193 simulator answers writes (6.2
-  in progress), a network guard rejects/throws on `fetch`, `XMLHttpRequest`, `WebSocket`,
-  `EventSource` and `navigator.sendBeacon` for any URL that is not a same-origin static asset
-  (same-origin `/v1` and `/anvil` paths and the configured `VITE_API_URL` origin are denied
-  too), and a persistent `DemoBanner` renders. Never opens an RPC connection, never calls the
-  API, never signs with a real wallet. Tree-shaken out of normal builds; `npm run build:demo`
-  (6.2, in progress) will produce static `web/dist-demo` (SPA fallback).
+  the real providers: in-memory seeded fixtures answer reads (`lib/api.ts` request resolver), a
+  wagmi `mock` connector + in-memory EIP-1193 simulator answers writes, a network guard
+  rejects/throws on `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource` and
+  `navigator.sendBeacon` for any URL that is not a same-origin static asset (same-origin `/v1`
+  and `/anvil` paths and the configured `VITE_API_URL` origin are denied too), and a persistent
+  `DemoBanner` renders. Never opens an RPC connection, never calls the API, never signs with a
+  real wallet. Tree-shaken out of normal builds; `npm run build:demo` produces a static
+  `web/dist-demo` (hash router, relative base — no server-side fallback needed, ADR-0016 hosting
+  amendment).
 - **QA loop.** Headed SME/UX critique lives in `docs/qa/` and `.cursor/skills/sandbox-*-critique/`.
   Playwright MCP is configured in `.cursor/mcp.json` beside `openad-sim`. Scripted YAML stays in `e2e/`.
 
@@ -595,22 +614,29 @@ web/src/
 
 ## 7. Environments
 
-|             | Anvil (local)                                         | Base Sepolia (staging)   | Base (production)       | Demo (static)             |
-| ----------- | ----------------------------------------------------- | ------------------------ | ----------------------- | -------------------------- |
-| Chain       | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC               | public RPC              | none (in-memory simulator) |
-| USDC        | `MockUSDC`                                            | Circle testnet USDC      | native USDC             | none (fixture math only)   |
-| DB          | `docker compose up postgres`                          | managed Postgres         | managed Postgres        | none (in-memory fixtures)  |
-| Media cache | local `./.cache/media`                                | GCS (`OPENAD_MEDIA_BACKEND=gcs`) | GCS + CDN in front of serve | none (bundled assets) |
-| Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` (committed) | `8453.json` (committed) | none (not read)            |
-| Build       | `npm run dev:web`                                     | `npm run build -w web`   | `npm run build -w web`  | `npm run build:demo` → `web/dist-demo` (hash router, relative base, no server fallback needed; ADR-0016) |
-| Production (GCP, ADR-0017) | n/a (Compose is the local target) | Cloud Run (`api`/`indexer`/`settler`/`web`) + Cloud SQL, one GCP project | same topology, separate project/instance, manual promotion | any static host, or the `web-demo` image |
+|             | Anvil (local)                                         | Base Sepolia (staging)                                          | Base (production)                                             | Demo (static)                                                                                            |
+| ----------- | ----------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Chain       | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC                                                      | public RPC                                                    | none (in-memory simulator)                                                                               |
+| USDC        | `MockUSDC`                                            | Circle testnet USDC                                             | native USDC                                                   | none (fixture math only)                                                                                 |
+| DB          | `docker compose up postgres`                          | managed Postgres                                                | managed Postgres                                              | none (in-memory fixtures)                                                                                |
+| Media cache | local `./.cache/media`                                | GCS (`OPENAD_MEDIA_BACKEND=gcs`)                                | GCS, plus an optional CDN on `/v1/serve/*/media` only (ADR-0017) | none (bundled assets)                                                                                    |
+| Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` — committed once deployed (none yet; ROADMAP 6.10) | `8453.json` — committed once deployed (none yet; ROADMAP 4.6) | none (not read)                                                                                          |
+| Build       | `npm run dev:web`                                     | `npm run build -w web`                                          | `npm run build -w web`                                        | `npm run build:demo` → `web/dist-demo` (hash router, relative base, no server fallback needed; ADR-0016) |
+
+The hosted demo linked from the root `README.md` is exactly the Demo column above: a static
+`web/dist-demo` build with no backend, chain, or API — private until the owner shares it.
 
 Local loop (canonical on Windows: `.\scripts\setup.cmd`, `.\scripts\dev-up.cmd`, `.\scripts\dev-down.cmd`;
 `npm run stack:*` is the same if PowerShell can load `npm.ps1`; bash twins on Linux/macOS/WSL
 per the ADR-0007 amendment). CI is `.github/workflows/ci.yml` (contracts; api, whose pytest
 also runs against a Postgres 16 service with `OPENAD_TEST_PG_URL`; web/embed; Playwright;
-`check:sh`). Production hosting is GCP Cloud Run (ADR-0017, `docs/deploy-gcp.md`);
-CI's deploy job (step 27+28) is gated on GCP secrets and never broadcasts to Base mainnet.
+`check:sh`; a `docker` job that builds the `api`, `web` and `web-demo` images and boot-checks
+each, ROADMAP 6.11). Production hosting is GCP Cloud Run (ADR-0017, `docs/deploy-gcp.md`):
+staging is Cloud Run (`api`/`indexer`/`settler`/`web`) plus Cloud SQL in one GCP project;
+production is the same topology in a separate project and instance, promoted manually; the demo
+build runs from any static host, including the `web-demo` Cloud Run image. CI's deploy job is
+gated on GCP secrets and never broadcasts to Base mainnet (ROADMAP 6.10 is the live deploy,
+user-run).
 
 ```text
 .\scripts\setup.cmd                      # .env, docker, protocol deploy, alembic upgrade, npm install

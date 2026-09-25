@@ -15,3 +15,5 @@ A **remainder** buy is a late purchase of leftover time in an already-started
 period, when the protocol allows it.
 
 The **lease** expires at period end. Renewal is a new buy, not an escrow.
+
+No USDC on Base in your wallet yet? See [Getting USDC on Base](getting-usdc-on-base.md).

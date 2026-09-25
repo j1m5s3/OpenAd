@@ -1,15 +1,16 @@
 # Threat model (ROADMAP 4.3)
 
-Scope: OpenAd v1 protocol (`AdSlot`, `Marketplace`, `CreativeRegistry`), the indexer/API
-serve path, and the Vite web app. Specified (not implemented): `CampaignVault` + settler
-(ADR-0014). Out of scope: GCP, live Base mainnet ops, English occupancy auctions.
+Scope: the v1 protocol including `AdSlot`, `Marketplace`, `CreativeRegistry` and `CampaignVault`,
+the indexer and API serve path, the CPC settler process (ADR-0014), the web app, and the GCP
+deploy configuration (ADR-0017, `infra/gcp/`). Out of scope: live Base mainnet operations, GCP
+organization and account security, and English occupancy auctions.
 
 ## Assets
 
 - Publisher slot NFTs and calendar/terms configuration
 - Advertiser USDC and registered creatives (LEASE `buy` and CPC campaign `remaining`)
 - Lease table (who may occupy a period)
-- Campaign table and payable click log (Specified ADR-0014)
+- Campaign table and payable click log (ADR-0014)
 - Verified media cache (what visitors see)
 - SIWE sessions (off-chain house ads / domain verification only)
 
@@ -87,6 +88,11 @@ serve path, and the Vite web app. Specified (not implemented): `CampaignVault` +
   of any of their own media creatives, whatever its status (`verify_creative` re-fetches a
   verified or failed creative as well as a pending one) — each one bounded and
   connection-releasing, but not rate limited.
+- Click URLs are checked for `https://` only, with no phishing or malware blocklist yet
+  (ROADMAP 7.19). A publisher that waives approval accepts any landing page a creative's
+  `click_url` points to; takedown is after the fact: the publisher's `set_approval(id, False)` or
+  `revoke_approval(id)` on its own slots (blocked under WAIVED too — `is_blocked_for` checks
+  REJECTED/REVOKED before the waiver), or the moderator's `moderator_revoke` everywhere.
 
 ## Review artifacts
 

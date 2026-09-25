@@ -41,13 +41,18 @@ customer names, quotes, or traction are claimed — the deck is honest about cur
 
 ## Slide 4 — Demo
 
-- Live demo: publisher mints a slot, sets terms, advertiser buys a period, embed updates.
-- CPC path: advertiser funds a campaign, serve picks a winner, click settles in a batch.
+- LEASE: a publisher mints a slot and sets its calendar and terms. An advertiser buys a period in
+  one simulated transaction and gets the receipt: price, publisher/fee split and tx hash.
+- CPC: an advertiser funds a campaign, whose budget sits in escrow. The embed shows the top
+  campaign's creative, and the publisher's earnings include seeded batch settlements. The demo
+  has no live click traffic and no settler.
+- The `<open-ad>` embed renders each slot's current creative without reading the chain.
 - https://claude.ai/artifact/AzkEcWfmUT23GCo2qkWxE7 — private until the owner shares it; if the
   link asks you to sign in or request access, ask the OpenAd team for access.
 
-> Speaker notes: Run the demo live if possible; otherwise walk the linked recording. Demo mode
-> uses simulated data and a simulated wallet — say so explicitly, it's not a live chain.
+> Speaker notes: Run the demo live if possible; if it can't run live, use the screenshots in
+> `docs/business/assets/`. Demo mode uses simulated data and a simulated wallet — say so
+> explicitly, it's not a live chain.
 
 ## Slide 5 — How it works
 
@@ -109,26 +114,35 @@ customer names, quotes, or traction are claimed — the deck is honest about cur
 
 ## Slide 10 — Go-to-market
 
-- Beachhead: direct outreach to crypto-native publishers and advertisers, hackathon
-  sponsorships, Base ecosystem channels, open-source maintainer communities.
-- A GitHub README badge and shareable slot pages turn every activated publisher into a
-  distribution surface for the next one.
-- 0–30/30–60/60–90 day plan in `docs/business/gtm-marketing.md`.
+- **"Every publisher recruits the next one."**
+- **Days 0–30 — Go live:** Launch on Base Sepolia and Google Cloud. Hand-recruit pilot publishers
+  with the demo and the embed tag.
+- **Days 30–60 — Prove it:** Pilots' CTR, eCPM and spend from the built-in dashboards go into
+  advertiser outreach. First hackathon sponsorship.
+- **Days 60–90 — Scale it:** Audit, then Base mainnet. Grant applications and direct outreach
+  with this deck.
+- Channels: Base ecosystem, Farcaster and X, newsletter-operator communities, open-source
+  maintainers, and an "Advertise here" README badge.
 
-> Speaker notes: Keep this to channels and mechanics — the detailed plan lives in the linked doc,
-> don't read the whole GTM doc from the slide.
+> Speaker notes: Keep this to channels and mechanics — the detailed plan lives in
+> `docs/business/gtm-marketing.md`, don't read the whole GTM doc from the slide. The product work
+> behind each phase is already built; what remains is the launch itself, pilots, and the audit
+> before mainnet.
 
 ## Slide 11 — Traction and roadmap
 
-- Current stage: protocol and off-chain stack implemented and tested on local Anvil; Base
-  Sepolia deployment pending (ROADMAP 1.5); no production deployment or customers yet.
-- Near-term roadmap: zero-friction demo mode, publisher growth tooling (embed code, share page),
-  analytics, cross-platform scripts, production (GCP) deployment.
-- Honest framing: this is a pre-launch, testnet-ready product — traction claims will follow
-  activation, not precede it.
+- **Built:** the protocol and off-chain stack, tested end to end on local Anvil; a zero-friction
+  demo mode; publisher growth tooling (embed code, shareable slot page, slot listings with
+  category filters); analytics (CTR, eCPM, spend/earnings); cross-platform run scripts; and
+  production deploy artifacts (Cloud Run configs, migration job, nginx image) plus auth, capacity
+  and request-bound hardening, and deploy and click-integrity fixes.
+- **Pending:** the live GCP deployment (ROADMAP 6.10, a user-run step), a Base Sepolia contract
+  deployment, and an independent security audit before any mainnet deploy.
+- Honest framing: this is a pre-launch, testnet-ready product — no customers, users, or traction
+  metrics exist yet; claims will follow activation, not precede it.
 
 > Speaker notes: Do not overstate this slide. If pressed, say plainly: no customers yet, this is
-> the plan to get the first ones.
+> the plan to get the first ones and the runbook to go live.
 
 ## Slide 12 — Team
 
