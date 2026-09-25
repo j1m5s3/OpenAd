@@ -70,13 +70,26 @@ async def test_slot_periods_range_is_capped_at_60(
     assert too_wide.json()["error"] == "invalid_window"
 
 
-async def test_slot_periods_index_above_uint256_max_gets_422(
+async def test_slot_periods_from_and_to_are_each_bounded_to_uint256_max(
     client: AsyncClient, session: AsyncSession
 ) -> None:
-    """A width of 1 (`from == to`) slips past the range cap, so `to` alone must still be bounded
-    to a valid uint256 — otherwise the Uint256 bind raises and the request 500s instead of 422."""
+    """A width of 1 or 2 slips past the range cap, so `from` and `to` must each be bounded to a
+    valid uint256 on their own — otherwise the Uint256 bind raises and the request 500s instead
+    of 422. Sending both out of range at once would pass even if only one had a bound, so `from`
+    and `to` are each pushed out of range independently; the boundary value itself
+    (`UINT256_MAX`, for both) must still be accepted.
+    """
     session.add_all([make_slot(), make_terms()])
     await session.commit()
 
-    resp = await client.get(f"/v1/slots/1/periods?from={UINT256_MAX + 1}&to={UINT256_MAX + 1}")
-    assert resp.status_code == 422
+    from_out_of_range = await client.get(f"/v1/slots/1/periods?from={UINT256_MAX + 1}")
+    assert from_out_of_range.status_code == 422
+
+    to_out_of_range = await client.get(
+        f"/v1/slots/1/periods?from={UINT256_MAX}&to={UINT256_MAX + 1}"
+    )
+    assert to_out_of_range.status_code == 422
+
+    at_the_boundary = await client.get(f"/v1/slots/1/periods?from={UINT256_MAX}&to={UINT256_MAX}")
+    assert at_the_boundary.status_code == 200
+    assert len(at_the_boundary.json()["items"]) == 1
