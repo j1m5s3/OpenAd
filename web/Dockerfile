@@ -37,8 +37,11 @@ RUN uv sync --no-dev --directory api
 # fine — 84532.json/8453.json are committed only once a chain is actually deployed to).
 COPY contracts/deployments contracts/deployments
 
-# embed source: web/vite.config.ts (or a resolve.alias, once demo mode's @openad/embed import
-# lands) resolves straight to embed/src, so no prebuilt embed/dist is required here.
+# embed source: `web/vite.config.ts`'s `@openad/embed` alias resolves straight to embed/src for
+# the app's own bundle (e.g. `/embed-demo`), but `npm run build -w web`'s own `prebuild` hook
+# (`npm --prefix ../embed run build`, ROADMAP 6.3) also builds `embed/dist` here — required so
+# `vite.config.ts`'s `embedScriptCopy` plugin has a `embed/dist/open-ad.js` to copy into the web
+# build's own output as the versioned, publisher-facing `embed/open-ad.v1.js` script.
 COPY embed embed
 COPY web web
 

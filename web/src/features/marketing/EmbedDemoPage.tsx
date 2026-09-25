@@ -4,12 +4,13 @@
  * serve responder (`demo/networkGuard.ts` + `demo/demoServe.ts`) answers `GET /v1/serve/{id}`
  * in-process. In a normal build it points at the real `API_URL` and talks to the real API. */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 
 import { routes } from '../../app/paths';
 import { DEMO_MODE } from '../../demo/flag';
 import { API_URL } from '../../lib/api';
 import { withDevWalletParam } from '../../lib/devWalletQuery';
+import { buildSnippet, defaultEmbedScriptUrl } from '../../lib/embedSnippet';
 import { useSlots } from '../marketplace/api';
 
 /** Standard placement sizes shown side by side, all serving the same selected slot. */
@@ -30,17 +31,16 @@ function embedApiBase(): string {
   return new URL('.', document.baseURI).href.replace(/\/$/, '');
 }
 
-/** Matches `SupplyPage.tsx`'s own embed snippet: just the `<open-ad>` element, plus a placeholder
- * comment for the script tag — there is no hosted, versioned URL for `embed/dist/open-ad.js` to
- * point at yet (it ships from npm and from the repo's own `embed/` package), so the snippet must
- * not invent one. */
+/** Matches `EmbedCodePanel.tsx`'s own snippet builder (`lib/embedSnippet.ts`): the versioned
+ * embed script `web`'s own build ships at `embed/open-ad.v1.js` (ADR-0017 amendment). */
 function snippet(slotId: string, width: number, height: number): string {
-  const api = embedApiBase();
-  return [
-    '<!-- Host embed/dist/open-ad.js (npm: @openad/embed) yourself, or from your CDN, and load it once: -->',
-    '<script type="module" src="/path/to/open-ad.js"></script>',
-    `<open-ad slot-id="${slotId}" api="${api}" width="${width}" height="${height}"></open-ad>`,
-  ].join('\n');
+  return buildSnippet({
+    slotId,
+    apiUrl: embedApiBase(),
+    scriptUrl: defaultEmbedScriptUrl(),
+    width,
+    height,
+  });
 }
 
 /** Renders `<open-ad>` with its attributes set imperatively via `setAttribute`, not as JSX props.
@@ -79,7 +79,9 @@ function OpenAdEmbed({
 
 export function EmbedDemoPage() {
   const slots = useSlots();
-  const [slotId, setSlotId] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+  const preselectedSlotId = searchParams.get('slot');
+  const [slotId, setSlotId] = useState<string | null>(preselectedSlotId);
   const [ready, setReady] = useState(false);
   const [copied, setCopied] = useState(false);
 

@@ -199,3 +199,12 @@ itself, never an advertiser URL.
 - `AGENTS.md` non-custodial invariants; ADR-0014 (settler key scope, `CampaignVault`).
 - `docs/deploy-sepolia.md`, `docs/deploy-mainnet.md` — the contract-side deploy runbooks this
   ADR's `staging`/`prod` environments line up with.
+
+## Amendment (step 14+15, ROADMAP 6.3): the web origin hosts the versioned embed script
+
+`openad-web` also serves the versioned embed script at `embed/open-ad.v1.js`: `web/vite.config.ts`'s
+`embedScriptCopy` plugin copies `embed/dist/open-ad.js` there on every build (normal and demo), and
+`web/nginx/default.conf.template` caches `/embed/*` with `Cache-Control: public, max-age=86400`. A
+publisher's `<script type="module" src="…">` snippet (`lib/embedSnippet.ts`) therefore points at
+the same origin as the app by default, with no separate hosting step. A CDN or an `@openad/embed`
+npm publish is a later option (`docs/business/*` backlog), not required to ship.

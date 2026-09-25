@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const webDir = fileURLToPath(new URL('..', import.meta.url));
+const embedDir = fileURLToPath(new URL('../../embed', import.meta.url));
 const require = createRequire(import.meta.url);
 
 // Resolved bin scripts, run directly with this same `node` (`process.execPath`), instead of
@@ -39,9 +40,9 @@ const demoEnv = {
   VITE_API_URL: 'http://demo.invalid',
 };
 
-function run(label, args) {
+function run(label, args, cwd = webDir) {
   const result = spawnSync(process.execPath, args, {
-    cwd: webDir,
+    cwd,
     env: demoEnv,
     stdio: 'inherit',
     shell: false,
@@ -55,6 +56,14 @@ function run(label, args) {
     process.exit(result.status ?? 1);
   }
 }
+
+// `npm run build:demo` invokes this script with `node`, not `npm run`, so `web`'s own
+// `prebuild` hook (which builds `embed`) never fires here; build `embed` explicitly, the same
+// way its own `npm run build` does, so the versioned embed script (vite.config.ts's
+// `embedScriptCopy` plugin) has a `dist/open-ad.js` to copy from.
+run('embed tsc --noEmit', [tscBin, '--noEmit', '-p', join(embedDir, 'tsconfig.json')], embedDir);
+run('embed vite build', [viteBin, 'build'], embedDir);
+run('embed check-size', [join(embedDir, 'scripts', 'check-size.mjs')], embedDir);
 
 run('sync-deployments', [fileURLToPath(new URL('sync-deployments.mjs', import.meta.url))]);
 run('sync-openapi', [fileURLToPath(new URL('sync-openapi.mjs', import.meta.url))]);
