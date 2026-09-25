@@ -51,7 +51,10 @@ interface, and a Cloud Run Job for migrations.**
   `python -m openad.settler`. Its service account is the only one bound to the
   `OPENAD_SETTLER_KEY` secret (Secret Manager IAM, not a repo-level grant), and per ADR-0014
   this process may only ever call `settle_batch`. `api` and `web` service accounts get no
-  access to that secret.
+  access to that secret. The secret holds a dedicated, gas-only settler EOA's key, never the
+  contracts' owner (deploy) key, which stays in the contracts environment (Moccasin wallet, or
+  the Safe on Base); off Anvil the process refuses to start if its key owns `CampaignVault` or
+  is the deployer.
 - `openad-web` — a static site (nginx serving the Vite build; step 27+28 adds the
   `web/Dockerfile` and service YAML) behind Cloud Run or a bucket + load balancer. The demo
   build (`VITE_DEMO_MODE=1`, ADR-0016) is a **separate** Cloud Run service or a separate bucket
@@ -145,7 +148,10 @@ itself, never an advertiser URL.
 ### Everything else
 
 - Artifact Registry holds the `api` (also used, with different `CMD`s, for `indexer`,
-  `settler` and `openad-migrate`) and `web` images.
+  `settler` and `openad-migrate`) and `web` images. The `api` image carries
+  `contracts/deployments` at `/app/contracts/deployments` and sets `OPENAD_DEPLOYMENTS_DIR` to
+  that absolute path (`REPO_ROOT` resolves to `/` inside the image), so `indexer` and `settler`
+  can `load_deployment` without the compose-only `/deployments` bind mount.
 - Secret Manager holds `OPENAD_DATABASE_URL`, `OPENAD_SETTLER_KEY`, `OPENAD_SESSION_SECRET`,
   `OPENAD_CLICK_HMAC_SECRET`, and the Cloud SQL password. Every other `OPENAD_*` / `VITE_*`
   variable in `.env.example` is a plain Cloud Run env var.
@@ -158,9 +164,13 @@ itself, never an advertiser URL.
   instance, bucket and secrets. Promotion to `prod` is a manual approval step, matching
   `docs/deploy-mainnet.md`'s "do not broadcast until an explicit request" posture extended to
   deploys.
-- A load balancer / CDN sits in front of `openad-api` for `/v1/serve/*` and `/v1/serve/*/media`
-  specifically, since those responses are already `Cache-Control: public` and read-heavy;
-  everything else (writes-adjacent reads, health) can go straight to Cloud Run's own front end.
+- A global load balancer may front `openad-api`. If it does, it fronts every api path on the
+  `API_URL` host and nothing reaches the api around it (`docs/deploy-gcp.md` § 9 and § 11):
+  click and media URLs share `OPENAD_PUBLIC_URL`, and the click burst rule's key needs every
+  request to pass the same proxies. Cloud CDN on it caches `/v1/serve/*/media` only (verified
+  bytes, `Cache-Control: public`, read-heavy), never `/v1/serve/{slot_id}`: a campaign
+  response carries a one-time click token and is `private, no-store`, and every serve is an
+  impression (ARCHITECTURE §3.4).
 
 ## Alternatives considered
 
@@ -192,8 +202,9 @@ itself, never an advertiser URL.
   `read_cached`/`MediaStore` now has two code paths to keep in sync with any future third
   backend; a Cloud Run Job adds one more deploy-pipeline step versus "the container migrates
   itself."
-- **Must be revisited:** the CDN-in-front-of-serve piece is sized as "when serve traffic
-  justifies it," not day one — revisit once there's real publisher traffic. The `staging`/`prod`
+- **Must be revisited:** the CDN in front of serve media (`/v1/serve/*/media` only) is sized
+  as "when serve traffic justifies it," not day one — revisit once there's real publisher
+  traffic. The `staging`/`prod`
   project split (one project each vs. one project with two Cloud SQL instances) should be
   revisited once billing/ownership boundaries are clearer; this ADR does not mandate either.
 - Step 27+28 implements the `api/Dockerfile` `CMD` change, the `web/Dockerfile`, the Cloud Run

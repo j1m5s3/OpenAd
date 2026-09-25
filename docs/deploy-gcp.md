@@ -263,7 +263,8 @@ printf '%s' 'postgresql+asyncpg://openad:<PASSWORD>@/openad?host=/cloudsql/<PROJ
   | gcloud secrets create openad-database-url-<ENV> --data-file=-
 
 # Settler key — ONLY this secret's IAM binding names the settler service account.
-# Generate/import the deployer/settler EOA's private key out of band; never echo it here.
+# The dedicated, gas-only settler EOA's key (docs/deploy-sepolia.md), never the deployer's or
+# the owner's. Create it out of band; never echo it here.
 gcloud secrets create openad-settler-key-<ENV> --data-file=/path/to/local/key/file
 gcloud secrets add-iam-policy-binding openad-settler-key-<ENV> \
   --member="serviceAccount:openad-settler-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com" \
@@ -336,14 +337,38 @@ URLs (the demo at `WEB_DEMO_URL` once that is set).
 
 ```bash
 gcloud builds submit --config infra/gcp/cloudbuild.yaml --project <PROJECT_ID> \
-  --substitutions=_REGION=<REGION>,_REPO=openad,_ENV=<ENV>,_API_URL=https://api.<ENV>.example.com,_CHAIN_ID=<CHAIN_ID>
+  --substitutions=_REGION=<REGION>,_REPO=openad,_ENV=<ENV>,_API_URL=https://api.<ENV>.example.com,_CHAIN_ID=<CHAIN_ID>,_WALLETCONNECT_PROJECT_ID=<WC_PROJECT_ID>,_GUIDE_URL=<GUIDE_URL>,_DEMO_URL=<DEMO_URL> \
+  --gcs-source-staging-dir=gs://<PROJECT_ID>-openad-builds/source
 ```
 
-Or build one image directly, e.g. `gcloud builds submit --tag
-<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest -f api/Dockerfile --build-arg
-UV_EXTRAS=gcs .` (and `-f web/Dockerfile`, with `--build-arg VITE_DEMO_MODE=1` for the demo
-variant). `indexer` and `settler` reuse the `api` image with a different Cloud Run `command`
-(`python -m openad.indexer` / `python -m openad.settler`), so nothing extra to build there.
+`_WALLETCONNECT_PROJECT_ID`, `_GUIDE_URL` and `_DEMO_URL` each default to `""` (unset) when
+omitted — a real, working build with injected (browser) wallets only and the guide/demo links
+hidden (`web/src/lib/wagmi.ts`, `lib/copy.ts`, `features/marketing/WhyPage.tsx`). A made-up
+WalletConnect id doesn't throw the way an empty one used to — RainbowKit only throws on a falsy
+`projectId` — but it boots a page whose WalletConnect-based wallets fail as soon as a visitor
+tries to connect through one (inferred). Set a real id only, or leave it unset. A real id also
+lists RainbowKit's default wallets, whose SDKs call hosts beyond the `*.walletconnect.com` and
+`*.walletconnect.org` entries in `CSP_CONNECT_SRC` (`infra/gcp/services/web.yaml`, and §8's
+`openad-web` command). Add those hosts to `CSP_CONNECT_SRC` only: `https://api.web3modal.org`
+for WalletConnect's modal (AppKit), `https://*.coinbase.com` for Coinbase's Base Account SDK and
+`wss://metamask-sdk.api.cx.metamask.io` for MetaMask's SDK (inferred; verify in the browser
+console before deploy). `img-src` already allows `https:`. Leave `style-src` and `font-src` as
+the nginx template fixes them (no build loads Google Fonts): AppKit's web font (Inter, from Google
+Fonts) stays blocked, and AppKit falls back to system fonts.
+
+Or build and push one image directly:
+
+```bash
+docker build -f api/Dockerfile --build-arg UV_EXTRAS=gcs \
+  -t <REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest .
+docker push <REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest
+```
+
+(and `-f web/Dockerfile`, with `--build-arg VITE_DEMO_MODE=1` for the demo variant, or
+`--build-arg VITE_WALLETCONNECT_PROJECT_ID=<id> --build-arg VITE_GUIDE_URL=<url> --build-arg
+VITE_DEMO_URL=<url>` for the real one). `indexer` and `settler` reuse the `api` image with a
+different Cloud Run `command` (`python -m openad.indexer` / `python -m openad.settler`), so
+nothing extra to build there.
 
 ### 7. Run the migration job (manual fallback)
 
@@ -373,7 +398,11 @@ first (`infra/gcp/README.md` lists every placeholder); `scripts/deploy-gcp.sh` d
 rendering into a throwaway temp directory automatically. Env vars below are the non-secret
 subset of `.env.example`; adjust per environment (`OPENAD_CHAIN_ID`, `OPENAD_RPC_URL`,
 `OPENAD_DEPLOYMENTS_DIR` point at the committed
-`84532.json`/`8453.json` baked into the image, or an external RPC URL).
+`84532.json`/`8453.json` baked into the image, or an external RPC URL). That baking happens at
+image-build time (`api/Dockerfile` copies `contracts/deployments` to
+`/app/contracts/deployments` and sets `OPENAD_DEPLOYMENTS_DIR` to match — the same image serves
+`api`, `indexer` and `settler` below), so rebuild and redeploy the `api` image itself after
+committing a new `84532.json` or `8453.json`, not just this deploy step.
 
 ```bash
 # --network/--subnet/--vpc-egress give each service Direct VPC egress, the route into the VPC
@@ -415,8 +444,15 @@ gcloud run deploy openad-settler \
 
 gcloud run deploy openad-web \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/web:latest \
-  --region=<REGION> --platform=managed --allow-unauthenticated --max-instances=10
+  --region=<REGION> --platform=managed --allow-unauthenticated --max-instances=10 \
+  --set-env-vars="CSP_CONNECT_SRC='self' https://api.<ENV>.example.com <RPC_ORIGINS> https://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.com wss://*.walletconnect.org,CSP_IMG_SRC='self' data: https://api.<ENV>.example.com https:"
 ```
+
+Without that last flag, the image's demo-safe CSP defaults (`web/Dockerfile`) stay in force and
+the deployed app can't reach its own API; `infra/gcp/services/web.yaml` sets the same two vars
+for the scripted path. The origins above are inferred from what WalletConnect's SDK is known to
+open — check the browser console for CSP violations in staging before setting a real project id
+in prod (see §6 for what a real id also pulls in beyond these).
 
 `--max-instances` on `openad-api` matches the connection budget above; on `openad-web` (and
 `openad-web-demo`, not shown here since §8 only covers the stack — see
@@ -426,7 +462,9 @@ connection.
 `openad-settler` is the **only** service with `OPENAD_SETTLER_KEY` bound, and its service
 account is the only one with `secretAccessor` on that secret (step 5) — matches ADR-0014 and
 `AGENTS.md`'s non-custodial invariant. Confirm with
-`gcloud secrets get-iam-policy openad-settler-key-<ENV>` before going further.
+`gcloud secrets get-iam-policy openad-settler-key-<ENV>` before going further. The service
+refuses to start if its key owns `CampaignVault` or is the deployer (it logs
+`settler.key_is_owner` or `settler.key_is_deployer` and exits).
 
 ## 9. Domain mapping: web and api must share a registrable domain (required)
 
@@ -485,10 +523,23 @@ can wrongly *accept* a genuinely cross-site pair on domains shaped like these.
 false-accept gap — a domain on a multi-label public suffix should be checked by hand rather than
 trusted to this heuristic.
 
-Optional: put a global HTTPS load balancer + Cloud CDN in front of `openad-api` scoped to
-`/v1/serve/*` and `/v1/serve/*/media`, since those responses are already
-`Cache-Control: public, max-age=<ttl>` (ARCHITECTURE §3.4). Everything else can go straight
-through Cloud Run's own HTTPS endpoint.
+Optional: put a global HTTPS load balancer in front of `openad-api`, with Cloud CDN for serve
+media. The load balancer fronts **every** api path on the `API_URL` host, and nothing reaches
+the api around it. Click and media URLs share that host (`OPENAD_PUBLIC_URL`), and the click
+burst rule's key needs every request to pass the same proxies: § 11 ("Click integrity") has
+the ingress and `API_URL` steps. Cache only `/v1/serve/*/media`: verified bytes, already
+`Cache-Control: public, max-age=<ttl>`. Never let the CDN cache `/v1/serve/{slot_id}`. A
+campaign response there carries a one-time click token and is `private, no-store`, and every
+serve is counted as an impression, so a shared copy would 404 every click after the first and
+undercount impressions (ARCHITECTURE §3.4). Lease, house and empty responses are
+`public, max-age=<ttl>`, so a CDN that follows origin headers would cache them too: scope
+caching by path, not by headers. One way: two backend services on the same serverless NEG,
+only one with Cloud CDN enabled, and a URL-map route rule (a path template such as
+`/v1/serve/*/media`) that sends media to that one and every other path to the other. Never
+use the `FORCE_CACHE_ALL` cache mode on the backend that serves `/v1/serve/{slot_id}`: it
+caches responses whatever their `Cache-Control` says (all inferred; verify before deploy). The
+load balancer adds `X-Forwarded-For` entries: re-run § 11's hop check before you rely on
+`OPENAD_TRUSTED_PROXY_HOPS`.
 
 ## 10. Workload Identity Federation for GitHub Actions (no JSON keys)
 
@@ -591,6 +642,60 @@ only if its `domain` is the `host:port`, and its `URI` the origin, of an allowed
 is unset. Open the web app, connect a wallet and sign in. A 401 `domain not allowed` from
 `/v1/auth/verify` means the page's exact origin (scheme, host, port) is not in that list. If
 users reach the web app on more than one origin, list each one in both variables.
+
+### Click integrity
+
+Each check below is a real serve, so it records one impression.
+
+- **Campaign responses are never cached.** Once a CPC campaign is serving on a slot, read the
+  headers of a GET. (The serve route answers `HEAD` with `405`, so `curl -I` doesn't show
+  them.)
+
+  ```bash
+  curl -s -o /dev/null -D - "https://api.<ENV>.example.com/v1/serve/<CPC_SLOT_ID>" \
+    | grep -i '^cache-control'
+  ```
+
+  Expect `cache-control: private, no-store`. Lease, house and empty responses stay
+  `public, max-age=30` (`OPENAD_SERVE_TTL_SECONDS`).
+- **Browsers get paid creatives only on the slot's domain.** `api.yaml` sets
+  `OPENAD_SERVE_ENFORCE_ORIGIN=true`. Ask for a leased slot as another site would, then as an
+  opaque-origin page (a sandboxed iframe that sends no referrer):
+
+  ```bash
+  for ORIGIN in https://not-the-slot-domain.example null; do
+    curl -s -H "Origin: ${ORIGIN}" \
+      "https://api.<ENV>.example.com/v1/serve/<LEASED_SLOT_ID>" | grep -o '"status":"[a-z]*"'
+  done
+  ```
+
+  Expect `"status":"house"` or `"status":"empty"` twice, never `"lease"`. With the slot's own
+  domain as `Origin`, the same request gets `"lease"`, and so does one with no `Origin` and
+  no `Referer`: a script can send any header, so this check binds browsers only
+  (ARCHITECTURE §3.4).
+- **The click burst rule stays off until the hop count is verified.** It keys on the same
+  client key as the auth rate limit below. While `OPENAD_TRUSTED_PROXY_HOPS` is unset (`0`),
+  that key is the address of Google's front end, shared by every visitor (inferred; verify
+  before deploy), so the api skips the rule and logs `clicks.burst_rule_disabled` once at
+  startup. Once the next subsection's steps have verified the hop count and `api.yaml` sets
+  `OPENAD_TRUSTED_PROXY_HOPS`, the rule keys on that same entry and the warning stops. The
+  one-time token and the hourly per-campaign cap apply either way.
+- **Behind a load balancer, every api request must take the same proxies.** A load balancer
+  (§ 9) adds its own `X-Forwarded-For` entry, so the hop count usually becomes `2`. Close
+  every path around it:
+  - set the api service's ingress to `internal-and-cloud-load-balancing` (the
+    `run.googleapis.com/ingress` annotation in `api.yaml`, `all` today; inferred; verify
+    before deploy);
+  - make `API_URL` the load balancer's host. It becomes `OPENAD_PUBLIC_URL`, the host of every
+    click and media URL the api hands out, and the web build's `VITE_API_URL`.
+
+  Closing ingress is the fix. While the `run.app` URL is still open, a client that goes there
+  directly can add one forged `X-Forwarded-For` entry, and with hops `2` that entry becomes
+  its own burst key, so it can pick a new key for every click. A request there without a
+  forged entry has a chain shorter than the hop count, and its key falls back to the TCP
+  peer, which everyone on that path shares. That fallback stops no one. It only keeps a short
+  chain from switching the rule off unnoticed: honest visitors on that path share one bucket,
+  and their repeat clicks show up as `burst`.
 
 ### Auth rate limit: verify the X-Forwarded-For chain in staging, then enable
 

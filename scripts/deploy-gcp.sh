@@ -530,10 +530,49 @@ fi
 
 echo "Deploying OpenAd: env=${ENV} only=${ONLY} project=${PROJECT} region=${REGION} tag=${TAG}"
 
+# Web build inputs that reach Cloud Build as-is (infra/gcp/cloudbuild.yaml's
+# _WALLETCONNECT_PROJECT_ID/_GUIDE_URL/_DEMO_URL -> web/Dockerfile's matching VITE_* build args ->
+# web/src/lib/wagmi.ts / lib/copy.ts / features/marketing/WhyPage.tsx). Each defaults to unset
+# rather than a fake value: an empty WalletConnect id means injected (browser) wallets only, and
+# an empty guide/demo URL hides that link — never a placeholder that would silently mislead.
+WALLETCONNECT_PROJECT_ID="${WALLETCONNECT_PROJECT_ID:-}"
+GUIDE_URL="${GUIDE_URL:-https://pam-2.gitbook.io/open-ad-docs}"
+DEMO_URL="${DEMO_URL:-}"
+
+# gcloud splits --substitutions on commas: a comma inside any of these three would silently
+# corrupt every substitution after it, so refuse rather than mis-build.
+case "$WALLETCONNECT_PROJECT_ID" in
+    *,*)
+        echo "Refusing: WALLETCONNECT_PROJECT_ID contains a comma, which breaks --substitutions (gcloud splits on it)." >&2
+        exit 1
+        ;;
+esac
+case "$GUIDE_URL" in
+    *,*)
+        echo "Refusing: GUIDE_URL contains a comma, which breaks --substitutions (gcloud splits on it)." >&2
+        exit 1
+        ;;
+esac
+case "$DEMO_URL" in
+    *,*)
+        echo "Refusing: DEMO_URL contains a comma, which breaks --substitutions (gcloud splits on it)." >&2
+        exit 1
+        ;;
+esac
+
+# Without --gcs-source-staging-dir, gcloud stages source to the default <PROJECT>_cloudbuild
+# bucket and checks its ownership by listing the project's buckets, which a bucket-scoped grant
+# doesn't allow (inferred). Point it at gs://<project>-openad-builds instead, a bucket this
+# deployer can be scoped to (created and documented as BUILD_STAGING_BUCKET elsewhere in infra
+# setup). The inline default (rather than a WALLETCONNECT_PROJECT_ID-style block above) means
+# this works whether or not BUILD_STAGING_BUCKET is exported. `$PROJECT`, not a `PROJECT_ID` env
+# var: this script never sets one at this point (the `render()` step below sets `PROJECT_ID`
+# only in envsubst's own environment, after this step has already run).
 step "Cloud Build: api/web/web-demo images" run gcloud builds submit \
     --project "$PROJECT" \
     --config infra/gcp/cloudbuild.yaml \
-    --substitutions="_REGION=${REGION},_REPO=openad,_ENV=${ENV},_API_URL=${API_URL},_CHAIN_ID=${CHAIN_ID},_TAG=${TAG}"
+    --substitutions="_REGION=${REGION},_REPO=openad,_ENV=${ENV},_API_URL=${API_URL},_CHAIN_ID=${CHAIN_ID},_TAG=${TAG},_WALLETCONNECT_PROJECT_ID=${WALLETCONNECT_PROJECT_ID},_GUIDE_URL=${GUIDE_URL},_DEMO_URL=${DEMO_URL}" \
+    --gcs-source-staging-dir="gs://${BUILD_STAGING_BUCKET:-${PROJECT}-openad-builds}/source"
 
 # Render infra/gcp/*.yaml into a throwaway temp dir; the source files under infra/gcp/ are
 # never modified. Skipped under --dry-run (nothing downstream reads the rendered files then).

@@ -128,6 +128,14 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
         db = database or Database(settings.database_url, settings)
         app.state.db = db
         log.info("api.start", env=settings.env, chain_id=settings.chain_id)
+        if not clicks.burst_rule_active(settings):
+            # 0 proxy hops outside dev/test: the client key is the proxy's address, shared by
+            # every visitor, so the click burst rule is skipped (docs/deploy-gcp.md section 11).
+            log.warning(
+                "clicks.burst_rule_disabled",
+                env=settings.env,
+                trusted_proxy_hops=settings.trusted_proxy_hops,
+            )
         try:
             yield
         finally:

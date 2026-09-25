@@ -8,8 +8,20 @@ COPY api/pyproject.toml api/README.md api/uv.lock ./
 COPY api/src ./src
 COPY api/alembic ./alembic
 COPY api/alembic.ini ./
+# Deployment addresses + ABIs per chain (the only contracts -> off-chain hand-off, PROTOCOL /
+# ARCHITECTURE §3.8): whatever `<chainId>.json` is committed at build time (e.g. `84532.json`
+# once Sepolia is deployed). Without this, `indexer`/`settler` (this same image, different CMD)
+# call `load_deployment` before their liveness listener starts and exit before Cloud Run ever
+# sees a healthy revision. `deploy-gcp.sh --only stack` already refuses to build without a
+# deployments file for the target chain.
+COPY contracts/deployments /app/contracts/deployments
 
 ENV UV_COMPILE_BYTECODE=1 PYTHONPATH=/app/src
+# REPO_ROOT (config.py) resolves to `/` in this image, so the default relative
+# `deployments_dir` ("contracts/deployments") would resolve to `/contracts/deployments`, which
+# doesn't exist. Point it at the absolute path copied above. `docker-compose.stack.yml` mounts
+# `/deployments` and sets `OPENAD_DEPLOYMENTS_DIR` itself, which overrides this default.
+ENV OPENAD_DEPLOYMENTS_DIR=/app/contracts/deployments
 # Pass --build-arg UV_EXTRAS=gcs to include google-cloud-storage (ADR-0017, OPENAD_MEDIA_BACKEND=gcs).
 # Unset (default) keeps the image identical to before this extra existed.
 ARG UV_EXTRAS=""

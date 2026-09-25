@@ -3,20 +3,26 @@
 Usage
     uv run mox run deploy                      # pyevm (in-process), used by tests
     uv run mox run deploy --network anvil      # local Anvil (docker compose up -d anvil)
-    uv run mox run deploy --network base-sepolia
+    OPENAD_SETTLER_ADDRESS=0x... uv run mox run deploy --network base-sepolia
 
 Order and parameters are normative in docs/PROTOCOL.md section 10:
     CreativeRegistry -> AdSlot -> Marketplace(USDC, AdSlot, CreativeRegistry)
     -> CampaignVault(USDC, AdSlot, CreativeRegistry, Marketplace)
     -> AdSlot.set_market -> Marketplace.set_campaign_vault
     -> Marketplace.set_treasury / set_fee_bps
-    -> CampaignVault.set_treasury / set_fee_bps / set_settler
+    -> CampaignVault.set_treasury / set_fee_bps / set_settler(<dedicated settler EOA>)
     -> CreativeRegistry.set_moderator
+
+The settler is OPENAD_SETTLER_ADDRESS (script/settler.py): a dedicated, gas-only EOA, required
+off Anvil and pyevm and never the deployer there; only Anvil and pyevm default it to the
+deployer. It is resolved before the first transaction, so a bad value spends no gas. Rotate
+it later with script/set_settler.py.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import urllib.request
 import warnings
 from pathlib import Path
@@ -27,6 +33,7 @@ from moccasin.boa_tools import VyperContract
 from moccasin.config import get_active_network
 
 from script.artifacts import ContractRecord, build_artifact, write_artifact
+from script.settler import SETTLER_ADDRESS_ENV, resolve_settler
 from src import AdSlot, CreativeRegistry, Marketplace, CampaignVault
 from src.mocks import MockUSDC
 
@@ -253,12 +260,20 @@ def _seed_demo(usdc: VyperContract, registry: VyperContract, ad_slot: VyperContr
     )
 
 
-def deploy_protocol(usdc: VyperContract) -> dict[str, VyperContract]:
-    """Deploy and wire CreativeRegistry, AdSlot, Marketplace (ROADMAP 1.4)."""
+def deploy_protocol(usdc: VyperContract, settler: str) -> dict[str, VyperContract]:
+    """Deploy and wire CreativeRegistry, AdSlot, Marketplace, CampaignVault (ROADMAP 1.4).
+
+    `settler` is the address `resolve_settler` (script/settler.py) returned. The treasury and
+    the moderator stay the deployer: they are owner-side roles (PROTOCOL section 10), not hot
+    keys.
+    """
     try:
         network_name = get_active_network().name
     except ValueError:
         network_name = "pyevm"
+    # Re-applied here, before the first deploy, so no caller can make the deployer the settler
+    # off Anvil and pyevm.
+    settler = resolve_settler(network_name, str(boa.env.eoa), settler)
     base_uri = LOCAL_BASE_URI
     if network_name == "base-sepolia":
         base_uri = SEPOLIA_BASE_URI
@@ -275,7 +290,7 @@ def deploy_protocol(usdc: VyperContract) -> dict[str, VyperContract]:
     market.set_fee_bps(DEFAULT_FEE_BPS)
     vault.set_treasury(boa.env.eoa)
     vault.set_fee_bps(DEFAULT_FEE_BPS)
-    vault.set_settler(boa.env.eoa)
+    vault.set_settler(settler)
     registry.set_moderator(boa.env.eoa)
     if network_name in {"anvil", "pyevm"}:
         _seed_demo(usdc, registry, ad_slot, market)
@@ -302,9 +317,15 @@ def deploy() -> dict[str, VyperContract]:
     if network_name == "anvil":
         _purge_anvil_fork_cache()
         _patch_anvil_boa()
+    # After the Anvil patch binds the deployer, before the first transaction: a missing or
+    # bad OPENAD_SETTLER_ADDRESS fails here, before any gas is spent.
+    configured = os.environ.get(SETTLER_ADDRESS_ENV)
+    settler = resolve_settler(network_name, str(boa.env.eoa), configured)
+    source = SETTLER_ADDRESS_ENV if (configured or "").strip() else "the deployer, local only"
+    print(f"[deploy] settler {settler} ({source})")
     start_block = _current_block_number(network) if network is not None else 0
     deployed: dict[str, VyperContract] = {"USDC": deploy_usdc()}
-    deployed.update(deploy_protocol(deployed["USDC"]))
+    deployed.update(deploy_protocol(deployed["USDC"], settler))
     artifact = build_artifact(
         chain_id=chain_id,
         network=network_name,
