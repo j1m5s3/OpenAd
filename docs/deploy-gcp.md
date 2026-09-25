@@ -269,11 +269,14 @@ hidden (`web/src/lib/wagmi.ts`, `lib/copy.ts`, `features/marketing/WhyPage.tsx`)
 WalletConnect id doesn't throw the way an empty one used to — RainbowKit only throws on a falsy
 `projectId` — but it boots a page whose WalletConnect-based wallets fail as soon as a visitor
 tries to connect through one (inferred). Set a real id only, or leave it unset. A real id also
-pulls in WalletConnect's own relay and Coinbase Wallet's SDK, which reach further origins than
-the CSP above allows for — in a built bundle, `api.web3modal.org`, `*.coinbase.com` and (from
-WalletConnect's AppKit UI) `fonts.googleapis.com` (inferred) — so extend `CSP_CONNECT_SRC` (and
-`img-src`/`font-src` for AppKit's own assets) to match, and confirm against the browser console's
-CSP violation reports in staging before it reaches prod.
+lists RainbowKit's default wallets, whose SDKs call hosts beyond the `*.walletconnect.com` and
+`*.walletconnect.org` entries in `CSP_CONNECT_SRC` (`infra/gcp/services/web.yaml`, and §8's
+`openad-web` command). Add those hosts to `CSP_CONNECT_SRC` only: `https://api.web3modal.org`
+for WalletConnect's modal (AppKit), `https://*.coinbase.com` for Coinbase's Base Account SDK and
+`wss://metamask-sdk.api.cx.metamask.io` for MetaMask's SDK (inferred; verify in the browser
+console before deploy). `img-src` already allows `https:`. Leave `style-src` and `font-src` as
+the nginx template fixes them (no build loads Google Fonts): AppKit's web font (Inter, from Google
+Fonts) stays blocked, and AppKit falls back to system fonts.
 
 Or build and push one image directly:
 

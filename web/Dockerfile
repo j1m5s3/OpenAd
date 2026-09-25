@@ -4,8 +4,8 @@
 #   docker build -f web/Dockerfile .                                   # normal build
 #   docker build -f web/Dockerfile --build-arg VITE_DEMO_MODE=1 .      # demo build (ADR-0016)
 #
-# Every VITE_* build arg below defaults to "" (empty), and every consumer of it treats that the
-# same as unset, never as a literal empty value baked into the bundle:
+# Every VITE_* build arg below defaults to "" (empty). The web app reads an empty value as unset
+# for all of them except VITE_API_URL, where empty means same-origin requests (see its note):
 #   VITE_DEMO_MODE                 "1" builds the demo bundle (ADR-0016): in-memory fixtures, a
 #                                   simulated wallet, no RPC/API call ever leaves the browser.
 #   VITE_API_URL, VITE_CHAIN_ID     the api origin and target chain for a normal build.
