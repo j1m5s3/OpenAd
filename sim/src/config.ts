@@ -1,8 +1,12 @@
 import { SIM_CHAIN_ID } from './accounts.js';
+import { DEFAULT_WEB_ORIGIN } from './siwe.js';
 
 export type SimConfig = {
   rpcUrl: string;
   apiUrl: string;
+  /** Origin the personas sign in as. The API binds SIWE messages to its allowed web origins
+   *  (ADR-0009 amendment), so this is the web app's origin, never the API's. */
+  webOrigin: string;
   chainId: number;
   tickSeconds: number;
   controlPort: number;
@@ -21,6 +25,7 @@ export function loadConfig(): SimConfig {
   return {
     rpcUrl: env('OPENAD_SIM_RPC_URL', 'http://127.0.0.1:8545'),
     apiUrl: env('OPENAD_SIM_API_URL', 'http://localhost:8000').replace(/\/$/, ''),
+    webOrigin: new URL(env('OPENAD_SIM_WEB_ORIGIN', DEFAULT_WEB_ORIGIN)).origin,
     chainId,
     tickSeconds: Number(env('OPENAD_SIM_TICK_SECONDS', '20')),
     controlPort: Number(env('OPENAD_SIM_CONTROL_PORT', '8610')),

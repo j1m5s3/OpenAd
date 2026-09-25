@@ -9,6 +9,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -16,8 +18,9 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from openad import __version__
 from openad.config import Settings, get_settings
 from openad.db.session import Database
-from openad.errors import DomainError
+from openad.errors import DomainError, InvalidRequestError
 from openad.logging import configure_logging, get_logger
+from openad.ratelimit import TokenBucketLimiter
 from openad.routers import (
     advertisers,
     analytics,
@@ -33,6 +36,7 @@ from openad.routers import (
 log = get_logger(__name__)
 
 SERVE_PATH_PREFIX = "/v1/serve"
+AUTH_PATH_PREFIX = "/v1/auth"
 
 
 def _is_serve_path(path: str) -> bool:
@@ -47,6 +51,11 @@ def _is_serve_path(path: str) -> bool:
     this check disagree with what actually gets served.
     """
     return path == SERVE_PATH_PREFIX or path.startswith(SERVE_PATH_PREFIX + "/")
+
+
+def _is_auth_path(path: str) -> bool:
+    """True for ``/v1/auth`` and its sub-paths, matched like :func:`_is_serve_path`."""
+    return path == AUTH_PATH_PREFIX or path.startswith(AUTH_PATH_PREFIX + "/")
 
 
 class ServeCorsMiddleware:
@@ -134,6 +143,12 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
         openapi_url="/v1/openapi.json",
     )
     app.state.settings = settings
+    # One limiter per process, so the auth rate limit is per instance (ADR-0009 amendment).
+    app.state.auth_rate_limiter = (
+        TokenBucketLimiter(settings.auth_rate_limit_per_minute)
+        if settings.auth_rate_limit_per_minute > 0
+        else None
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -150,8 +165,21 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     @app.exception_handler(DomainError)
     async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
         return JSONResponse(
-            status_code=exc.status_code, content={"error": exc.code, "message": exc.message}
+            status_code=exc.status_code,
+            content={"error": exc.code, "message": exc.message},
+            headers=exc.headers,
         )
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        # The auth routes answer a body that fails validation (a SIWE message over
+        # MAX_MESSAGE_LENGTH, a missing field, broken JSON) in the house style, like their other
+        # errors. Every other route keeps FastAPI's default 422 body.
+        if _is_auth_path(request.scope["path"]):
+            return await domain_error_handler(request, InvalidRequestError("invalid request body"))
+        return await request_validation_exception_handler(request, exc)
 
     app.include_router(health.router, prefix="/v1")
     app.include_router(serve.router, prefix="/v1")

@@ -210,6 +210,26 @@ protocol contract changes in this phase (anything that would need one is recorde
       quickstart, docs map; demo script (5-min/15-min talk tracks) and launch checklist added,
       including onramp guide links for USDC-only friction (blocker 5, no onramp code); ROADMAP
       6.x fully ticked; GitBook guide `SUMMARY` updated.
+- [x] **6.8 Auth hardening (SIWE binding, nonce/session hygiene).** _Done 2026-09-25._
+      Pointers: ADR-0009 (2026-09-25 amendment) · `docs/threat-model.md` T15, T16 ·
+      `api/src/openad/{siwe,ratelimit}.py` · `api/src/openad/services/auth.py` ·
+      `web/src/features/auth/useSiwe.ts` · `web/src/lib/permit.ts` · `sim/src/{api,siwe}.ts` ·
+      `.github/workflows/ci.yml` (api job) · `docs/deploy-gcp.md` §11.
+      Acceptance: a strict EIP-4361 parser (the exact ABNF layout, EIP-55 addresses, nonces of
+      8 to 64 alphanumerics, messages of at most 4096 characters); the SIWE `domain` must be
+      the authority of an allowed origin (`OPENAD_SIWE_ALLOWED_ORIGINS`, else
+      `OPENAD_CORS_ORIGINS`) and its `URI` that same origin, so a message relayed from another
+      domain gets 401 and its nonce stays unused; chain id and an `Issued At` window with
+      5 minutes of skew; the nonce is consumed atomically (one conditional `UPDATE`) only
+      after the signature checks out; used or expired nonces and expired sessions are pruned
+      from `POST /v1/auth/nonce` at most once a minute per process (migration `0005` indexes,
+      parity on SQLite and Postgres, which CI now runs as a `postgres:16` service); an opt-in
+      per-instance rate limit on nonce and verify (`OPENAD_AUTH_RATE_LIMIT_PER_MINUTE`,
+      default off, `OPENAD_TRUSTED_PROXY_HOPS`); the web app and the sim build the message
+      with viem's `createSiweMessage`, the web app with `window.location.host` and the sim as
+      the web origin (`OPENAD_SIM_WEB_ORIGIN`). Tests: `api/tests/test_auth_hardening.py`.
+      Deferred: the limiter stays off on Cloud Run until the `X-Forwarded-For` chain is
+      verified in staging (`docs/deploy-gcp.md` §11); Cloud Armor for a global limit.
 - [x] **6.9 Capacity and deploy hardening (DB pool budget, Cloud Run scale caps, same-site
       domain, media redirect hops).** _Done 2026-09-25._
       Pointers: `api/src/openad/db/session.py` · `api/src/openad/config.py` ·

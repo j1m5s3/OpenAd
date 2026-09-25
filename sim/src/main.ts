@@ -22,7 +22,7 @@ async function main(): Promise<void> {
 
   const catalog = buildCatalog(cfg.seed);
   const mediaBase = `http://127.0.0.1:${cfg.controlPort}`;
-  const api = new ApiClient(cfg.apiUrl);
+  const api = new ApiClient(cfg.apiUrl, fetch, cfg.webOrigin);
   const state = createEngineState();
   const rng = mulberry32(cfg.seed);
   const rt = { ctx, api, catalog, mediaBase, rng };

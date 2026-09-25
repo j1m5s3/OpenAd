@@ -445,6 +445,81 @@ curl -sf https://api.<ENV>.example.com/v1/serve/1
 curl -sf https://<ENV>.example.com/embed-demo   # or /demo/ for the demo build
 ```
 
+### Sign-in origin
+
+Sign-in is bound to the web app's origin (ADR-0009 amendment). The API accepts a SIWE message
+only if its `domain` is the `host:port`, and its `URI` the origin, of an allowed origin:
+`OPENAD_SIWE_ALLOWED_ORIGINS`, or `OPENAD_CORS_ORIGINS` (`${WEB_URL}` in `api.yaml`) when that
+is unset. Open the web app, connect a wallet and sign in. A 401 `domain not allowed` from
+`/v1/auth/verify` means the page's exact origin (scheme, host, port) is not in that list. If
+users reach the web app on more than one origin, list each one in both variables.
+
+### Auth rate limit: verify the X-Forwarded-For chain in staging, then enable
+
+`infra/gcp/services/api.yaml` leaves `OPENAD_AUTH_RATE_LIMIT_PER_MINUTE` and
+`OPENAD_TRUSTED_PROXY_HOPS` unset, so the limiter is **off**. The limiter keys each client by
+the TCP peer (hops `0`) or by the N-th `X-Forwarded-For` entry from the right (hops `N`).
+
+- **Why it is off.** It is only safe once you know which `X-Forwarded-For` entry Google's front
+  end writes. The Cloud Run functions request-header reference says only that the *first*
+  entry is "generally" the client
+  (https://docs.cloud.google.com/functions/docs/reference/headers).
+  The first entry is the one a client can forge. The Cloud Run container contract
+  (https://docs.cloud.google.com/run/docs/container-contract) says nothing about the header.
+- **Never enable it with hops `0` on Cloud Run.** The container's TCP peer is Google's proxy,
+  not the visitor, so every client would share one bucket (inferred; verify before deploy).
+- **Leave uvicorn's `FORWARDED_ALLOW_IPS` unset.** Set to `*`, uvicorn replaces the peer with
+  the left-most `X-Forwarded-For` entry, which the client controls.
+
+To verify and enable:
+
+1. Turn the limiter on in **staging only**, at a low rate with one trusted hop, and cap the
+   staging api at **one instance** (`--max-instances=1`) for the test. Buckets live in each
+   instance's memory, so with more than one instance the checks below prove nothing: the
+   fourth request in step 2 can pass because it reached an instance whose bucket is still
+   full, and a `200` in step 3 can come from another instance's fresh bucket rather than
+   from a different client key.
+
+   ```bash
+   gcloud run services update openad-api --region=<REGION> --max-instances=1 \
+     --update-env-vars=OPENAD_AUTH_RATE_LIMIT_PER_MINUTE=3,OPENAD_TRUSTED_PROXY_HOPS=1
+   ```
+
+2. From one machine, send four requests, each with a different forged header:
+
+   ```bash
+   API=https://api.staging.example.com
+   for spoof in 198.51.100.1 198.51.100.2 198.51.100.3 198.51.100.4; do
+     curl -s -o /dev/null -w '%{http_code}\n' -X POST -H "X-Forwarded-For: ${spoof}" "${API}/v1/auth/nonce"
+   done
+   curl -si -X POST "${API}/v1/auth/nonce" | grep -i '^retry-after'
+   ```
+
+   Expect `200 200 200 429`, then a `Retry-After` line. If the fourth request is not refused,
+   the key comes from an entry the client controls: stop, and keep the limiter off.
+3. Straight away, from a **different network** (for example a phone hotspot), send one
+   request. Expect `200`: with a single instance, that means a different bucket, so the key
+   is the caller's own address. A `429` means the key is a shared proxy address, not the
+   client, so the hop count is wrong.
+4. Only when both checks pass, add the variables to the `env` list in
+   `infra/gcp/services/api.yaml`, with the verified hop count and the production rate (for
+   example `OPENAD_AUTH_RATE_LIMIT_PER_MINUTE=30`), and redeploy with
+   `scripts/deploy-gcp.sh`. It applies that file with `gcloud run services replace`, so values
+   set only with `gcloud run services update`, including the test's one-instance cap, do not
+   survive it (inferred; verify before deploy). If a check failed, redeploy the same way
+   without the variables: the limiter goes back off and the cap is lifted.
+5. Repeat the checks whenever the path in front of `openad-api` changes, such as adding a load
+   balancer (§ 9). A load balancer adds its own `X-Forwarded-For` entries, so the hop count
+   usually becomes `2` (inferred; verify before deploy).
+
+**Per instance, not global.** Each `openad-api` instance keeps its own buckets, so the real
+limit is the setting times the number of instances, and a restart resets it. It only slows
+nonce flooding and signature spraying from one address. For a global limit, put Cloud Armor
+rate limiting on `/v1/auth/*` on an external Application Load Balancer in front of
+`openad-api`. Cloud Armor policies attach to a load balancer's backend service, not to a bare
+`run.app` URL, and the rate-limit rule actions are `throttle` and `rate_based_ban` (both
+inferred; verify before deploy).
+
 ## 12. Rollback
 
 ```bash
