@@ -59,6 +59,14 @@ describe('createDemoRequestHandler', () => {
     const advertiser = await api.advertiser(DEMO_PERSONAS.advertiserWallet.address);
     expect(advertiser.creativeIds.length).toBeGreaterThan(0);
 
+    const slotAnalytics = await api.slotAnalytics('0');
+    expect(slotAnalytics.slotId).toBe('0');
+
+    const advertiserAnalytics = await api.advertiserAnalytics(
+      DEMO_PERSONAS.advertiserWallet.address,
+    );
+    expect(advertiserAnalytics.address).toBe(DEMO_PERSONAS.advertiserWallet.address.toLowerCase());
+
     const nonce = await api.authNonce();
     expect(nonce.nonce.length).toBeGreaterThan(0);
 

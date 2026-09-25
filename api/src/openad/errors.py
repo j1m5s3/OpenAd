@@ -22,6 +22,10 @@ class NotFoundError(DomainError):
     code = "not_found"
 
 
+class SlotNotFoundError(NotFoundError):
+    code = "slot_not_found"
+
+
 class ForbiddenError(DomainError):
     status_code = 403
     code = "forbidden"
@@ -30,3 +34,8 @@ class ForbiddenError(DomainError):
 class ConflictError(DomainError):
     status_code = 409
     code = "conflict"
+
+
+class InvalidWindowError(DomainError):
+    status_code = 422
+    code = "invalid_window"

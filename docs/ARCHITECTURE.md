@@ -148,6 +148,8 @@ Public reads:
 - `GET /v1/slots/{slot_id}/periods?from=&to=` — period calendar with lease status and quote inputs.
 - `GET /v1/creatives/{creative_id}` — creative + verification status.
 - `GET /v1/publishers/{address}/…`, `GET /v1/advertisers/{address}/…` — dashboards' read models.
+- `GET /v1/analytics/slots/{slot_id}`, `GET /v1/analytics/advertisers/{address}` — CTR/eCPM/
+  spend/earnings read model; see § 3.10.
 
 Serving (public, cacheable):
 
@@ -295,6 +297,65 @@ Fourth process from package `openad`: `python -m openad.settler`. Reads payable 
 signs `CampaignVault.settle_batch`. Must not run inside the HTTP API process. `web/` never
 loads this key. Indexer has no spending key. `OPENAD_SETTLER_KEY` is loaded only by
 `openad.settler.settings`.
+
+### 3.10 Analytics read model (ROADMAP 6.4)
+
+`api/src/openad/schemas/analytics.py` + `api/src/openad/services/analytics.py`, mounted by
+`api/src/openad/routers/analytics.py` as `GET /v1/analytics/slots/{slot_id}` and
+`GET /v1/analytics/advertisers/{address}`. Both are public reads, like the publisher/advertiser
+dashboards (§3.3) — there is no visitor data to protect. This model only reads `serve_events`,
+`click_events` and the indexed chain-derived tables (`leases`, `campaigns`,
+`campaign_settlements`); it never reads the chain, and computing it does not touch the serve
+path (§3.4), so serve-path latency is unaffected.
+
+**Definitions:**
+
+- **Impressions:** `serve_events` rows with `served_kind ∈ {lease, campaign}` and
+  `origin_ok = true`. House (`served_kind = "house"`) and empty (`served_kind = "empty"`) serves
+  are reported separately as `house_serves` and never counted as paid impressions.
+  `origin_ok = false` rows are excluded from every serve count above and reported once, on their
+  own, as `invalid_origin_serves`.
+- **Clicks:** `click_events` rows, split into `clicks_payable` (`payable = true`) and
+  `clicks_invalid` (`payable = false`), the latter also broken out by `ivt_reason` in
+  `clicks_invalid_by_reason`. CTR uses payable clicks only.
+- **CTR:** `ctr_bps = clicks_payable * 10000 // impressions` (integer floor, basis points);
+  `null` when `impressions = 0`. Raw counts are always returned alongside so a client can
+  recompute.
+- **Spend and earnings** — integer USDC base units, returned as decimal strings:
+  - LEASE: `Lease.price` is advertiser spend, `price − fee` is publisher earnings, `fee` is the
+    platform fee. Attributed to the day of the leased period's `start` (not the buy tx time).
+  - CPC settled: from `CampaignSettlement` (no timestamp — `Settled` carries only a
+    `block_number` — so this is a **total only**, not part of the daily series): `charged` is
+    spend, `charged − fee` is earnings, `fee` is the fee.
+  - CPC accrued: Σ `click_events.gsp_cpc` of payable clicks, bucketed by `click_events.at` day.
+    Reported as `accrued_cpc_spend` and labelled *accrued* because it is unsettled and
+    fee-inclusive (the settler has not yet netted out its fee).
+  - Settled and accrued CPC spend are never added into one field.
+- **eCPM:** `ecpm = earnings_or_spend * 1000 // impressions`, integer USDC base units per 1000
+  impressions, `null` when `impressions = 0`. The slot (publisher) endpoint uses realized
+  earnings (`lease_earnings + cpc_settled_earnings`); the advertiser endpoint uses spend
+  (`lease_spend + cpc_settled_spend`) — accrued CPC spend is excluded from both, since it is
+  unsettled.
+- **Buckets:** UTC days. `day_start = at - (at % 86400)`, Unix seconds. The window is
+  `from`/`to` query params (Unix seconds), defaulting to the last 30 days and rejected with
+  HTTP 422 if it spans more than 90 days or `to < from`. Days with no events are included in
+  `daily` with all counts and money fields zeroed, so a chart never has to fill gaps itself.
+- **Advertiser scope:** leases where `Lease.user = address` (their own spend, and their leases'
+  `(slot_id, lease_period_index)` pairs for serve counts); campaigns where
+  `Campaign.advertiser = address` (their campaigns' `campaign_id`s for serve, click and
+  settlement rows). `by_slot` is the top 10 slots by total spend (lease + settled CPC),
+  descending.
+- Address comparisons use the same lower-case normalisation as the existing dashboard services
+  (`services/creatives.py`).
+- An unknown `slot_id` is a 404 (`errors.SlotNotFoundError`, code `slot_not_found`), in the same
+  `DomainError` style as the other routers.
+
+A composite `(slot_id, at)` index on `serve_events` and `click_events`, declared in
+`__table_args__` on both models and in `alembic/versions/20260924_0003_analytics_indexes.py`
+(`CREATE INDEX IF NOT EXISTS`, so it is a no-op on a database the `0001_baseline` revision
+already built with the up-to-date models), backs the per-slot day-range scans this model runs;
+the individual `slot_id` and `at` indexes already existed but were not enough for a combined
+range scan on Postgres.
 
 ---
 

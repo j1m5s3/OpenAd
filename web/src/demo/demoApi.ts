@@ -8,6 +8,7 @@
  */
 import type { ApprovalOut, CreativeOut, HealthResponse, RequestHandler } from '../lib/api';
 import { ApiError } from '../lib/api';
+import { advertiserAnalytics, slotAnalytics } from './analytics';
 import { demoNow } from './clock';
 import { computePeriod, buildAdvertiserOut, buildPublisherOut, suggestPrices } from './fixtures';
 import type { DemoState } from './fixtures';
@@ -224,6 +225,23 @@ export function createDemoRequestHandler(store: Store): RequestHandler {
       const address = segment(rest, 1, path);
       const state = store.get();
       return json(buildAdvertiserOut(state, address));
+    }
+
+    // GET /v1/analytics/slots/{id}, GET /v1/analytics/advertisers/{addr}
+    if (method === 'GET' && rest[0] === 'analytics' && rest.length === 3) {
+      const state = store.get();
+      const fromParam = url.searchParams.get('from');
+      const toParam = url.searchParams.get('to');
+      const from = fromParam === null ? undefined : Number(fromParam);
+      const to = toParam === null ? undefined : Number(toParam);
+      if (rest[1] === 'slots') {
+        const slotId = segment(rest, 2, path);
+        return json(slotAnalytics(state, slotId, from, to, now));
+      }
+      if (rest[1] === 'advertisers') {
+        const address = segment(rest, 2, path);
+        return json(advertiserAnalytics(state, address, from, to, now));
+      }
     }
 
     // /v1/auth/*

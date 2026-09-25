@@ -80,7 +80,7 @@ jobs:
       - name: Run web-demo container
         run: docker run -d --name web-demo -p 8080:8080 openad-web-demo:ci
       - name: Wait for /healthz
-        run: curl --fail --silent --show-error --retry 10 --retry-delay 2 --retry-connrefused
+        run: curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors
           http://localhost:8080/healthz
       - name: Check / returns 200
         run: |

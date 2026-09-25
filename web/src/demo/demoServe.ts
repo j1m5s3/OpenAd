@@ -42,7 +42,7 @@ function activeLease(
 /** The campaign with the highest `maxCpc` among this slot's open, unpaused campaigns — a
  * documented simplification of the protocol's GSP matching (real matching happens at serve time
  * against payable clicks, which the demo has no traffic to simulate). */
-function topCampaign(state: DemoState, slotId: string): DemoCampaign | null {
+export function topCampaign(state: DemoState, slotId: string): DemoCampaign | null {
   let best: DemoCampaign | null = null;
   for (const campaign of Object.values(state.campaigns)) {
     if (campaign.slotId !== slotId || campaign.closed || campaign.paused) continue;
