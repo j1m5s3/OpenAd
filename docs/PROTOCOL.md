@@ -428,16 +428,27 @@ Property tests (`contracts/tests/`) must cover each of these.
 | `fee_bps`              | 250                                               | 250                                                                                          | TBD by platform                                                                      |
 | `treasury`             | deployer                                          | platform testnet wallet                                                                      | platform multisig                                                                    |
 | `moderator`            | deployer                                          | platform testnet wallet                                                                      | platform ops wallet                                                                  |
+| `settler`              | deployer, or `OPENAD_SETTLER_ADDRESS`             | dedicated, gas-only EOA in `OPENAD_SETTLER_ADDRESS` (required; never the deployer)           | dedicated, gas-only EOA (`OPENAD_SETTLER_ADDRESS`); never the Safe or a signer       |
 | `AdSlot` name / symbol | `OpenAd Slot` / `OASLT`                           | same                                                                                         | same                                                                                 |
 | `base_uri`             | `http://localhost:8000/v1/slots/`                 | testnet API URL + `/v1/slots/`                                                               | production API URL + `/v1/slots/`                                                    |
 
 Deploy order: `CreativeRegistry` → `AdSlot` → `Marketplace(USDC, AdSlot, CreativeRegistry)` →
 `CampaignVault(USDC, AdSlot, CreativeRegistry, Marketplace)` → `AdSlot.set_market(Marketplace)` →
 `Marketplace.set_campaign_vault(CampaignVault)` → `Marketplace.set_treasury`, `set_fee_bps` →
-`CampaignVault.set_treasury`, `set_fee_bps`, `set_settler` (optional `set_close_delay`) →
-`CreativeRegistry.set_moderator`. Marketplace cannot take the vault in its constructor (vault
-needs `MARKETPLACE` to read `terms_of`). The deploy script writes
+`CampaignVault.set_treasury`, `set_fee_bps`, `set_settler(<dedicated settler EOA>)` (optional
+`set_close_delay`) → `CreativeRegistry.set_moderator`. Marketplace cannot take the vault in its
+constructor (vault needs `MARKETPLACE` to read `terms_of`). The deploy script writes
 `contracts/deployments/<chainId>.json` (see `ARCHITECTURE.md` § Deployments artifact).
+
+The settler is a dedicated, gas-only EOA. The settler process holds its key
+(`OPENAD_SETTLER_KEY`, ADR-0014), and its only protocol role is `settle_batch`. Off Anvil and
+pyevm, it is never the deployer or an owner key: `contracts/script/deploy.py` requires its
+address in `OPENAD_SETTLER_ADDRESS` and refuses the deployer. Only Anvil and pyevm default the
+settler to the deployer. `contracts/script/set_settler.py` rotates it, refusing both the
+deployer that the artifact records and the vault's current `owner()`; on Base, where the owner
+is a Safe, it prints the Safe transaction instead of sending one. Off chain 31337 the settler
+process refuses to start if its key owns `CampaignVault` or is the deployer (`ARCHITECTURE.md`
+§ 3.9). Runbook: `docs/deploy-sepolia.md`; threat model T20.
 
 ---
 

@@ -215,7 +215,8 @@ printf '%s' 'postgresql+asyncpg://openad:<PASSWORD>@/openad?host=/cloudsql/<PROJ
   | gcloud secrets create openad-database-url-<ENV> --data-file=-
 
 # Settler key — ONLY this secret's IAM binding names the settler service account.
-# Generate/import the deployer/settler EOA's private key out of band; never echo it here.
+# The dedicated, gas-only settler EOA's key (docs/deploy-sepolia.md), never the deployer's or
+# the owner's. Create it out of band; never echo it here.
 gcloud secrets create openad-settler-key-<ENV> --data-file=/path/to/local/key/file
 gcloud secrets add-iam-policy-binding openad-settler-key-<ENV> \
   --member="serviceAccount:openad-settler-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com" \
@@ -341,7 +342,9 @@ connection.
 `openad-settler` is the **only** service with `OPENAD_SETTLER_KEY` bound, and its service
 account is the only one with `secretAccessor` on that secret (step 5) — matches ADR-0014 and
 `AGENTS.md`'s non-custodial invariant. Confirm with
-`gcloud secrets get-iam-policy openad-settler-key-<ENV>` before going further.
+`gcloud secrets get-iam-policy openad-settler-key-<ENV>` before going further. The service
+refuses to start if its key owns `CampaignVault` or is the deployer (it logs
+`settler.key_is_owner` or `settler.key_is_deployer` and exits).
 
 ## 9. Domain mapping: web and api must share a registrable domain (required)
 

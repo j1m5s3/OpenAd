@@ -384,7 +384,17 @@ directly outside `config.py` (the settler process uses `openad.settler.settings`
 Fourth process from package `openad`: `python -m openad.settler`. Reads payable `click_events`,
 signs `CampaignVault.settle_batch`. Must not run inside the HTTP API process. `web/` never
 loads this key. Indexer has no spending key. `OPENAD_SETTLER_KEY` is loaded only by
-`openad.settler.settings`.
+`openad.settler.settings`. That key belongs to a dedicated EOA that holds gas only, and it is
+never the contracts' owner: off Anvil, `contracts/script/deploy.py` requires
+`OPENAD_SETTLER_ADDRESS` and refuses the deployer (PROTOCOL.md § 10). At startup, before its
+liveness listener, the process reads the RPC's chain id, the vault's `owner()`, `settler()` and
+`treasury()`, and the artifact's `deployer` (`openad.settler.identity`). It exits if that read
+fails, or if the RPC's chain id isn't `OPENAD_CHAIN_ID` (`settler.chain_mismatch`). Off chain
+31337 it also exits if its key is the owner (`settler.key_is_owner`) or the deployer
+(`settler.key_is_deployer`, which still holds after the vault's ownership moves to a Safe); on
+31337, where the deploy makes Anvil #0 both, it only warns. It warns, too, if its key isn't
+`settler()` (a rotation in progress: batches revert with "not settler" and are retried) or is the
+treasury (fees would sit on a hot key).
 
 ### 3.10 Analytics read model (ROADMAP 6.4)
 
@@ -605,7 +615,7 @@ docker compose -f docker-compose.yml -f docker-compose.stack.yml up --build
 
 ## 8. Security and privacy posture
 
-- No custodial keys. The deploy key exists only in the contracts environment (Moccasin encrypted wallet).
+- No custodial keys. The owner (deploy) key never leaves the contracts environment (Moccasin encrypted wallet, or the Safe on Base). The settler holds a separate, gas-only key that can only call `settle_batch` (§ 3.9).
 - Serving never reads the chain and never proxies to advertiser URLs at request time.
 - Visitors are never exposed to advertisers: media is served from the verified cache; no third-party requests from the embed.
 - No cookies, IPs, or user agents are stored by the serving edge.
