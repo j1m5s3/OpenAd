@@ -3,7 +3,7 @@
 Chain-derived tables (rebuildable from events): Slot, Terms, Lease, Creative, Approval,
 AllowedAdvertiser, ProtocolConfig, IndexerCursor, Campaign, CampaignSettlement.
 Off-chain-only tables: HouseAd, DomainVerification, CreativeVerification, ServeEvent,
-ClickEvent, AuthNonce, Session.
+ClickEvent, AuthNonce, Session, SlotListing.
 See docs/ARCHITECTURE.md section 3.2.
 """
 
@@ -17,6 +17,7 @@ from openad.models.offchain import (
     DomainVerification,
     HouseAd,
     ServeEvent,
+    SlotListing,
 )
 from openad.models.slot import Lease, Slot, Terms
 
@@ -37,5 +38,6 @@ __all__ = [
     "ServeEvent",
     "Session",
     "Slot",
+    "SlotListing",
     "Terms",
 ]

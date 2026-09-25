@@ -6,6 +6,7 @@ import { auctionOpenAt, auctionState } from '../lib/auction';
 import { withDevWalletParam } from '../lib/devWalletQuery';
 import { formatDuration, formatTimeLeft, formatUsdc, shortAddress } from '../lib/format';
 import { kindLabel, SALE_CPC, saleModeLabel } from '../lib/labels';
+import { categoryLabel } from '../lib/listingTaxonomy';
 
 export function SlotCard({ slot }: { slot: SlotOut }) {
   const state = auctionState(slot);
@@ -50,6 +51,25 @@ export function SlotCard({ slot }: { slot: SlotOut }) {
             ? ` · period starts ${formatTimeLeft(slot.firstPeriodStart)}`
             : null}
         </p>
+        {slot.listing && (
+          <div className="space-y-1.5">
+            {slot.listing.summary && (
+              <p className="truncate text-sm text-ink">{slot.listing.summary}</p>
+            )}
+            {slot.listing.categories.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {slot.listing.categories.map((c) => (
+                  <span
+                    key={c}
+                    className="rounded-full border border-line px-2 py-0.5 text-xs text-muted"
+                  >
+                    {categoryLabel(c)}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Link>
   );

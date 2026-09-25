@@ -119,3 +119,30 @@ test('slot page shows the Share row with an absolute, copyable link', async ({ p
     /warpcast\.com\/~\/compose/,
   );
 });
+
+test('publisher edits a slot listing, and advertisers can filter Discover by its category', async ({
+  page,
+}) => {
+  await connectAsPublisher(page);
+  await nav(page, 'Supply');
+
+  const listing = page.locator('section', { hasText: 'Listing' }).first();
+  await expect(listing).toBeVisible();
+  await listing.getByLabel('Slot to describe').selectOption({ label: 'Slot #1' });
+  // Wait for slot #1's fixture listing (web/src/demo/fixtures.ts) to hydrate before typing: the
+  // controls stay disabled until then, and text typed earlier would be overwritten (L1).
+  const summary = listing.getByPlaceholder('One-line pitch for advertisers');
+  await expect(summary).toBeEnabled();
+  await expect(summary).toHaveValue('Newsletter sidebar, high-intent readers.');
+  await summary.fill('Sidebar reaching security-conscious devs');
+  await listing
+    .getByPlaceholder("Who reads this page, and what it's about")
+    .fill('Security researchers and auditors reading our weekly digest.');
+  await listing.getByRole('button', { name: 'Security' }).click();
+  await listing.getByRole('button', { name: 'Save' }).click();
+  await expect(listing.getByText('Listing saved')).toBeVisible();
+
+  await nav(page, 'Discover');
+  await page.getByRole('button', { name: 'Security' }).click();
+  await expect(page.getByText('Sidebar reaching security-conscious devs')).toBeVisible();
+});

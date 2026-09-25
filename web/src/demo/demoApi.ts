@@ -6,12 +6,15 @@
  * error semantics, without depending on the API package (that would pull the API into the web
  * bundle, which `networkGuard` and the leak test forbid regardless).
  */
-import type { ApprovalOut, CreativeOut, HealthResponse, RequestHandler } from '../lib/api';
+import type { ApprovalOut, CreativeOut, HealthResponse, RequestHandler, SlotOut } from '../lib/api';
 import { ApiError } from '../lib/api';
+import { LISTING_CATEGORIES, MAX_LISTING_CATEGORIES } from '../lib/listingTaxonomy';
+
+const LISTING_CATEGORY_VALUES = new Set(LISTING_CATEGORIES.map((c) => c.value));
 import { advertiserAnalytics, slotAnalytics } from './analytics';
 import { demoNow } from './clock';
 import { computePeriod, buildAdvertiserOut, buildPublisherOut, suggestPrices } from './fixtures';
-import type { DemoState } from './fixtures';
+import type { DemoListing, DemoState } from './fixtures';
 import type { demoStore } from './store';
 
 type Store = Pick<typeof demoStore, 'get' | 'update'>;
@@ -37,6 +40,25 @@ function routeNotFound(path: string): never {
 
 function findSlot(state: DemoState, slotId: string) {
   return state.slots.find((s) => s.slot.slotId === slotId);
+}
+
+/** Merges the slot's current listing (if any) onto its `SlotOut`, mirroring the real API's
+ * `services/slots.py::_to_out`. The static fixture in `fixtures.ts` never carries `listing`
+ * itself — it is joined in at read time so a `PUT`/`DELETE` shows up immediately. */
+function withListing(state: DemoState, slot: SlotOut): SlotOut {
+  const listing = state.listings[slot.slotId];
+  return {
+    ...slot,
+    listing: listing
+      ? {
+          slotId: listing.slotId,
+          summary: listing.summary,
+          audience: listing.audience,
+          categories: listing.categories,
+          updatedAt: listing.updatedAt,
+        }
+      : null,
+  };
 }
 
 /** `path.split('/')` segments are `string | undefined` under `noUncheckedIndexedAccess`; every
@@ -120,11 +142,13 @@ export function createDemoRequestHandler(store: Store): RequestHandler {
         const domain = url.searchParams.get('domain');
         const kindParam = url.searchParams.get('kind');
         const kind = kindParam === null ? null : Number(kindParam);
+        const category = url.searchParams.get('category');
         const limit = Number(url.searchParams.get('limit') ?? '50');
         const offset = Number(url.searchParams.get('offset') ?? '0');
-        let items = state.slots.map((s) => s.slot);
+        let items = state.slots.map((s) => withListing(state, s.slot));
         if (domain) items = items.filter((s) => s.domain === domain);
         if (kind !== null) items = items.filter((s) => s.kind === kind);
+        if (category) items = items.filter((s) => s.listing?.categories.includes(category));
         const total = items.length;
         items = items.slice(offset, offset + limit);
         return json({ items, total });
@@ -134,7 +158,7 @@ export function createDemoRequestHandler(store: Store): RequestHandler {
         const state = store.get();
         const fixture = findSlot(state, slotId);
         if (!fixture) notFound('slot', slotId);
-        return json(fixture.slot);
+        return json(withListing(state, fixture.slot));
       }
       if (method === 'GET' && rest.length === 3 && rest[2] === 'periods') {
         const slotId = segment(rest, 1, path);
@@ -166,6 +190,58 @@ export function createDemoRequestHandler(store: Store): RequestHandler {
           s.houseAds[slotId] = houseAd;
         });
         return json(houseAd);
+      }
+      if (method === 'PUT' && rest.length === 3 && rest[2] === 'listing') {
+        const slotId = segment(rest, 1, path);
+        requireSlotOwner(store.get(), slotId);
+        const body = init?.body
+          ? (JSON.parse(String(init.body)) as {
+              summary: string;
+              audience: string;
+              categories: string[];
+            })
+          : null;
+        if (!body) throw new ApiError(422, 'validation_error', 'missing listing body');
+        // The full text validation (control characters, URLs) is security-relevant server logic
+        // (api/src/openad/services/offchain.py) that the demo does not duplicate beyond
+        // whitespace normalisation; the taxonomy and the 3-category cap are cheap and
+        // user-visible enough (an unknown category or a too-long list is a real mistake, not an
+        // attack) that the demo enforces them the same way the real API does — dedupe first,
+        // then check the cap, so 4 raw entries that collapse to 2 valid categories are not
+        // rejected as "too many".
+        const deduped = Array.from(new Set(body.categories.map((c) => c.toLowerCase())));
+        if (deduped.length > MAX_LISTING_CATEGORIES) {
+          throw new ApiError(
+            422,
+            'invalid_listing',
+            `at most ${MAX_LISTING_CATEGORIES} categories`,
+          );
+        }
+        for (const cat of deduped) {
+          if (!LISTING_CATEGORY_VALUES.has(cat)) {
+            throw new ApiError(422, 'invalid_listing', `unknown category: ${cat}`);
+          }
+        }
+        const categories = deduped.sort();
+        const listing: DemoListing = {
+          slotId,
+          summary: body.summary.trim().replace(/\s+/g, ' '),
+          audience: body.audience.trim().replace(/\s+/g, ' '),
+          categories,
+          updatedAt: now,
+        };
+        store.update((s) => {
+          s.listings[slotId] = listing;
+        });
+        return json(listing);
+      }
+      if (method === 'DELETE' && rest.length === 3 && rest[2] === 'listing') {
+        const slotId = segment(rest, 1, path);
+        requireSlotOwner(store.get(), slotId);
+        store.update((s) => {
+          delete s.listings[slotId];
+        });
+        return undefined;
       }
       if (method === 'POST' && rest.length === 3 && rest[2] === 'domain-verification') {
         const slotId = segment(rest, 1, path);

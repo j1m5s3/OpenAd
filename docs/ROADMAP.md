@@ -160,8 +160,14 @@ protocol contract changes in this phase (anything that would need one is recorde
       `lib/embedSnippet.ts`), `EmbedCodePanel` (platform tabs + "Advertise here" badge) replaces
       Supply's old snippet, `SlotPage` has a Share row (copy link + X/Farcaster), static
       `og:*`/`twitter:card` defaults on `index.html`, and `docs/guide/publisher/embed-code.md`.
-      Per-slot OG previews need server rendering — not done here (backlog). Publisher off-chain
-      profile (step 16) next.
+      Per-slot OG previews need server rendering — not done here (backlog).
+      Progress (step 16): publisher off-chain profile shipped as **listings** —
+      `slot_listings` table (migration `0004`), `openad/listing_taxonomy.py` (fixed category
+      taxonomy), `PUT`/`DELETE /v1/slots/{id}/listing` (SIWE + owner-only, validated: control
+      characters, URLs in the summary, unknown/too-many categories), `SlotOut.listing` (additive)
+      and `GET /v1/slots?category=`, `ListingEditor` on Supply, a Discover category filter, and
+      `SlotCard`/`SlotPage` badges. `docs/guide/publisher/listing.md`. 17+18 finishes this item
+      (guide index, `[x]`, ship).
 - [x] **6.4 Analytics read model (API + UI).** _Done 2026-09-25._
       Pointers: `ARCHITECTURE.md` §3.1, §3.10 · `api/src/openad/schemas/analytics.py` ·
       `api/src/openad/services/analytics.py` · `web/src/lib/analytics.ts` ·

@@ -4,17 +4,40 @@ import { useSearchParams } from 'react-router';
 import { SlotCard } from '../../components/SlotCard';
 import { auctionState } from '../../lib/auction';
 import { kindLabel } from '../../lib/labels';
+import { LISTING_CATEGORIES } from '../../lib/listingTaxonomy';
 import { useSlots } from './api';
 
 const FILTERS = ['all', 'live', 'upcoming', 'remainder', 'cpc', 'paused', 'ended'] as const;
 const KINDS = [0, 1, 2, 3] as const;
 
+const LISTING_CATEGORY_VALUES = new Set(LISTING_CATEGORIES.map((c) => c.value));
+
 export function DiscoverPage() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const q = params.get('q') ?? '';
+  // An unknown `?category=` (a stale link, a typo, a value from a future taxonomy) is treated as
+  // no filter rather than sent to the API — the query param is an enum server-side, and an
+  // invalid value there means every slot with no matching listing, not "show everything".
+  const rawCategory = params.get('category') ?? '';
+  const category = LISTING_CATEGORY_VALUES.has(rawCategory) ? rawCategory : '';
   const [kind, setKind] = useState<number | 'all'>('all');
-  const slots = useSlots(q ? { domain: q } : kind === 'all' ? {} : { kind });
+  const slots = useSlots({
+    ...(q ? { domain: q } : kind === 'all' ? {} : { kind }),
+    ...(category ? { category } : {}),
+  });
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('all');
+
+  function setCategory(next: string) {
+    setParams(
+      (prev) => {
+        const np = new URLSearchParams(prev);
+        if (next) np.set('category', next);
+        else np.delete('category');
+        return np;
+      },
+      { replace: true },
+    );
+  }
 
   const items = useMemo(() => {
     const list = slots.data?.items ?? [];
@@ -38,8 +61,8 @@ export function DiscoverPage() {
         <p className="text-sm text-accent">Marketplace</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Discover slots</h1>
         <p className="mt-2 max-w-2xl text-muted">
-          Periods sell by Dutch auction in USDC (one transaction to buy). CPC slots run campaigns
-          at a publisher floor CPC — matching is at serve, not a period buy.
+          Periods sell by Dutch auction in USDC (one transaction to buy). CPC slots run campaigns at
+          a publisher floor CPC — matching is at serve, not a period buy.
         </p>
       </div>
 
@@ -78,6 +101,32 @@ export function DiscoverPage() {
             }`}
           >
             {kindLabel(k)}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setCategory('')}
+          className={`rounded-full border px-3 py-1 text-sm ${
+            category === '' ? 'border-accent bg-accent text-accent-ink' : 'border-line text-muted'
+          }`}
+        >
+          All categories
+        </button>
+        {LISTING_CATEGORIES.map((c) => (
+          <button
+            key={c.value}
+            type="button"
+            onClick={() => setCategory(c.value)}
+            className={`rounded-full border px-3 py-1 text-sm ${
+              category === c.value
+                ? 'border-accent bg-accent text-accent-ink'
+                : 'border-line text-muted'
+            }`}
+          >
+            {c.label}
           </button>
         ))}
       </div>

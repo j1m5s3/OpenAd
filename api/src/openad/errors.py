@@ -39,3 +39,8 @@ class ConflictError(DomainError):
 class InvalidWindowError(DomainError):
     status_code = 422
     code = "invalid_window"
+
+
+class InvalidListingError(DomainError):
+    status_code = 422
+    code = "invalid_listing"

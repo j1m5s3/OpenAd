@@ -35,6 +35,27 @@ class HouseAd(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class SlotListing(Base):
+    """Publisher-provided audience description and categories (ROADMAP 6.3, step 16).
+
+    Self-described by the publisher, not verified — the UI must label it "Publisher-provided".
+    Off-chain only; not rebuildable from chain events. Back this up.
+    """
+
+    __tablename__ = "slot_listings"
+
+    slot_id: Mapped[int] = mapped_column(Uint256, ForeignKey("slots.slot_id"), primary_key=True)
+    summary: Mapped[str] = mapped_column(String(140))
+    audience: Mapped[str] = mapped_column(Text)
+    # Comma-joined, sorted, lower-case category slugs (at most `listing_taxonomy.MAX_CATEGORIES`).
+    # Stored with no leading/trailing comma; the category filter (services/slots.py) wraps this
+    # in commas at query time (`','||categories||','` LIKE `'%,cat,%'`) so a match can't cross a
+    # prefix boundary (e.g. "defi" must not match "defi-x"). An index on this column would not
+    # help that LIKE pattern, so none is declared.
+    categories: Mapped[str] = mapped_column(String(200), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class DomainVerification(Base):
     __tablename__ = "domain_verifications"
 

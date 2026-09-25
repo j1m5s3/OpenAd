@@ -10,6 +10,7 @@ import { SALE_CPC, approvalStatusLabel, datetimeLocalToUnix } from '../../lib/la
 import { targetChainId } from '../../lib/wagmi';
 import { approvalActionLabel } from './components/ApproveDialog';
 import { EmbedCodePanel } from './components/EmbedCodePanel';
+import { ListingEditor } from './components/ListingEditor';
 import { SlotPerformance } from './components/SlotPerformance';
 import { SlotSetupWizard } from './components/SlotSetupWizard';
 import { usePublisher, usePublisherApprovals } from './api';
@@ -243,6 +244,8 @@ export function SupplyPage() {
         <Field name="mediaUrl" label="Media URL" placeholder="https://" hintKey="houseMediaUrl" />
         <Field name="clickUrl" label="Click URL" placeholder="https://" hintKey="houseClickUrl" />
       </FormCard>
+
+      <ListingEditor slotIds={pub.data?.slotIds ?? ['1']} />
 
       <FormCard title="Domain verification" onSubmit={(e) => void verifyDomain(e)} pending={false}>
         <Field name="slotId" label="Slot id" defaultValue="1" hintKey="verifyDomain" />
