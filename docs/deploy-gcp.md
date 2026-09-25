@@ -120,8 +120,10 @@ gcloud sql users create openad --instance=openad-<ENV> --password="${DB_PASS}" \
 unset DB_PASS
 ```
 
-This is the Unix-socket form. If it can't reach this instance (see the verify-first note above),
-rebuild the same command with the private-IP TCP form instead.
+This is the Unix-socket form. If a later step shows it can't reach this instance (see the
+verify-first note above), the `openad` user already exists and `DB_PASS` is gone, so re-running
+this block fails at `gcloud sql users create`: use the **Recovery** paragraph below instead, with
+the private-IP TCP host in its connection string.
 
 **Recovery** (password lost, or a rotation): generate a new one the same way, set it, then add a
 new secret version — never reusing the old value. `gcloud sql users set-password` takes the
@@ -579,8 +581,8 @@ only one with Cloud CDN enabled, and a URL-map route rule (a path template such 
 `/v1/serve/*/media`) that sends media to that one and every other path to the other. Never
 use the `FORCE_CACHE_ALL` cache mode on the backend that serves `/v1/serve/{slot_id}`: it
 caches responses whatever their `Cache-Control` says (all inferred; verify before deploy). The
-load balancer adds `X-Forwarded-For` entries: re-run § 11's hop check before you rely on
-`OPENAD_TRUSTED_PROXY_HOPS`.
+load balancer adds `X-Forwarded-For` entries (inferred; verify before deploy): re-run § 11's hop
+check before you rely on `OPENAD_TRUSTED_PROXY_HOPS`.
 
 ## 10. Workload Identity Federation for GitHub Actions (no JSON keys)
 
@@ -723,8 +725,8 @@ Each check below is a real serve, so it records one impression.
   `OPENAD_TRUSTED_PROXY_HOPS`, the rule keys on that same entry and the warning stops. The
   one-time token and the hourly per-campaign cap apply either way.
 - **Behind a load balancer, every api request must take the same proxies.** A load balancer
-  (§ 9) adds its own `X-Forwarded-For` entry, so the hop count usually becomes `2`. Close
-  every path around it:
+  (§ 9) adds its own `X-Forwarded-For` entry, so the hop count usually becomes `2` (inferred;
+  verify before deploy). Close every path around it:
   - set `API_INGRESS=internal-and-cloud-load-balancing` for `scripts/deploy-gcp.sh` (it takes
     `all`, the default, or `internal-and-cloud-load-balancing`, and renders it into `api.yaml`'s
     `run.googleapis.com/ingress` annotation), but only once the load balancer already serves

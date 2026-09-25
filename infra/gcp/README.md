@@ -64,7 +64,7 @@ may hold `OPENAD_SETTLER_KEY`).
 - It smoke-checks `openad-api` at its own `*.run.app` URL while `API_INGRESS` is `all`, and at
   `API_URL` (the load balancer's host) when it's `internal-and-cloud-load-balancing`. Set
   `API_INGRESS=internal-and-cloud-load-balancing` only once the load balancer already serves
-  `API_URL` — switching earlier fails that smoke check.
+  `API_URL` — switching earlier fails that smoke check (inferred; verify before deploy).
 
 ## What is not here
 

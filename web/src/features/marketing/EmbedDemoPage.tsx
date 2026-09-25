@@ -198,7 +198,7 @@ export function EmbedDemoPage() {
             If nothing is leased or a campaign isn&apos;t winning, it falls back to the
             publisher&apos;s house ad, or renders nothing at all.
             {!DEMO_MODE &&
-              " Paid creatives show only on the slot's own domain, so on this page a leased slot shows its house ad, or nothing."}
+              " Where the API enforces origins (staging and production), paid creatives show only on the slot's own domain, so on this page a leased slot shows its house ad, or nothing."}
           </li>
         </ul>
       </div>

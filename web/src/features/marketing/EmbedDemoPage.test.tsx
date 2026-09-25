@@ -30,7 +30,7 @@ describe('EmbedDemoPage', () => {
   // The page runs in the test build with VITE_DEMO_MODE unset, i.e. !DEMO_MODE — the same
   // branch a real (non-demo) web build takes. Outside demo mode, origin enforcement (ROADMAP
   // 6.14) means a leased slot only shows its paid creative on the slot's own domain, not here,
-  // so the "nothing is leased" copy alone would be misleading (ROADMAP 47 item 7).
+  // so the "nothing is leased" copy alone would be misleading (ROADMAP 6.14).
   it("notes that paid creatives need the slot's own domain outside demo mode", async () => {
     renderPage();
     expect(

@@ -328,15 +328,14 @@ protocol contract changes in this phase (anything that would need one is recorde
       Pointers: `contracts/script/{settler.py,set_settler.py,deploy.py}` ·
       `api/src/openad/settler/identity.py` · `docs/PROTOCOL.md` §10 · `docs/deploy-sepolia.md` ·
       `docs/deploy-mainnet.md` · `docs/threat-model.md` T20.
-      Acceptance: the settler is a dedicated, gas-only EOA, never the contracts' deployer or
-      owner; `deploy.py` requires `OPENAD_SETTLER_ADDRESS` off Anvil and pyevm, and refuses the
-      deployer, a malformed, zero or bad-checksum address, or any forbidden role;
-      `set_settler.py` rotates it, refusing the deployer and the vault's current `owner()`
-      (ownership can move to a Safe while the deployer key still exists) and sending from the
-      checked owner, or, on `base`, printing the Safe transaction instead of sending; the settler
-      process refuses to start, before its liveness listener, if its key owns `CampaignVault` or
-      is the artifact's deployer off chain 31337, and a chain id mismatch is always fatal; threat
-      model **T20**.
+      Acceptance: the settler is a dedicated, gas-only EOA, never the contracts' deployer or owner;
+      `deploy.py` requires `OPENAD_SETTLER_ADDRESS` off Anvil and pyevm, and refuses the deployer, a
+      malformed, zero or bad-checksum address; `set_settler.py` rotates it, refusing the deployer
+      and the vault's current `owner()` (ownership can move to a Safe while the deployer key still
+      exists) and sending from the checked owner, or, on `base`, printing the Safe transaction
+      instead of sending; the settler process refuses to start, before its liveness listener, if its
+      key owns `CampaignVault` or is the artifact's deployer off chain 31337, and a chain id
+      mismatch is always fatal; threat model **T20**.
 - [x] **6.14 CPC click integrity (ADR-0014).** _Done 2026-09-25 (PR #21)._
       Pointers: `api/src/openad/routers/serve.py`, `api/src/openad/routers/clicks.py`,
       `api/src/openad/services/clicks.py`, `api/src/openad/serve/origin.py` ·
