@@ -6,6 +6,7 @@ from typing import Literal
 from fastapi import APIRouter, Query, Request
 
 from openad.db.session import SessionDep
+from openad.db.types import UINT256_MAX
 from openad.listing_taxonomy import Category
 from openad.schemas.dashboard import HouseAdIn
 from openad.schemas.slot import PeriodListOut, SlotListingIn, SlotListingOut, SlotListOut, SlotOut
@@ -41,8 +42,8 @@ async def get_slot(slot_id: int, session: SessionDep) -> SlotOut:
 async def list_periods(
     slot_id: int,
     session: SessionDep,
-    from_index: int = Query(default=0, ge=0, alias="from"),
-    to_index: int = Query(default=7, ge=0, alias="to"),
+    from_index: int = Query(default=0, ge=0, le=UINT256_MAX, alias="from"),
+    to_index: int = Query(default=7, ge=0, le=UINT256_MAX, alias="to"),
 ) -> PeriodListOut:
     end = max(from_index, to_index)
     return await periods_service.list_periods(
@@ -98,7 +99,9 @@ async def domain_verification(
     rec = await auth_service.get_session(session, request.cookies.get(auth_service.COOKIE_NAME))
     await auth_service.require_slot_owner(session, slot_id, rec.address)
     if check:
-        row = await offchain_service.check_domain_verification(session, slot_id)
+        row = await offchain_service.check_domain_verification(
+            session, slot_id, request.app.state.settings
+        )
     else:
         row = await offchain_service.start_domain_verification(session, slot_id, method=method)
     return {

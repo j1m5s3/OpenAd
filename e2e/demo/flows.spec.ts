@@ -112,8 +112,11 @@ async function buyFirstPeriod(page: Page): Promise<{ price: bigint; periodIndex:
   const periodIndex = (
     (await page.locator('tbody tr', { has: buyButton }).locator('td').first().textContent()) ?? ''
   ).trim();
-  // Rows list periods 0..n in order, so the row stays addressable after its button changes.
-  const row = page.locator('tbody tr').nth(Number(periodIndex));
+  // Found by its period-index cell, not DOM position (PLAN step 40): the periods window now
+  // starts at the slot's current period, not always 0, so row position and period index diverge.
+  const row = page
+    .locator('tbody tr', { has: page.getByRole('cell', { name: periodIndex, exact: true }) })
+    .first();
   await buyButton.click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.locator('p.text-2xl')).toContainText('USDC');
@@ -138,6 +141,10 @@ test('advertiser: discover → slot → buy a Dutch period with permit → lease
   await page.getByRole('button', { name: 'CPC', exact: true }).click();
   await expect(page.locator('a[href="#/slots/1"]')).toBeVisible();
   await expect(page.locator('a[href="#/slots/0"]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'live', exact: true }).click();
+  // PLAN step 40 (the reviewer's case): slot 0's auction status follows the open-ended calendar,
+  // not just its first period, so the "live" filter includes it instead of reading "Ended".
+  await expect(page.locator('a[href="#/slots/0"]')).toBeVisible();
   await page.getByRole('button', { name: 'paused', exact: true }).click();
   await expect(page.locator('a[href="#/slots/5"]')).toBeVisible();
   await page.getByRole('button', { name: 'all', exact: true }).click();

@@ -5,11 +5,16 @@ Live quote still happens in the browser.
 
 from __future__ import annotations
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openad.errors import NotFoundError
+from openad.errors import InvalidWindowError, NotFoundError
 from openad.models import Lease, Slot, Terms
 from openad.schemas.slot import PeriodListOut, PeriodOut
+
+# One unauthenticated request must not be able to hold a pooled DB connection, or build an
+# unbounded response, indefinitely (threat model T19).
+_MAX_PERIODS = 60
 
 
 def dutch_price(terms: Terms, start: int, end: int, now: int) -> tuple[bool, str, int]:
@@ -40,13 +45,25 @@ async def list_periods(
     slot = await session.get(Slot, slot_id)
     if slot is None:
         raise NotFoundError(f"slot {slot_id} not found")
+    if to_index - from_index + 1 > _MAX_PERIODS:
+        raise InvalidWindowError(f"window exceeds {_MAX_PERIODS} periods")
     terms = await session.get(Terms, slot_id)
     items: list[PeriodOut] = []
     if slot.calendar_version == 0 or slot.period_seconds is None:
         return PeriodListOut(items=items)
+    leases = (
+        await session.execute(
+            select(Lease).where(
+                Lease.slot_id == slot.slot_id,
+                Lease.calendar_version == slot.calendar_version,
+                Lease.period_index.between(from_index, to_index),
+            )
+        )
+    ).scalars()
+    leases_by_index: dict[int, Lease] = {lease.period_index: lease for lease in leases}
     for idx in range(from_index, to_index + 1):
         start, end = slot.period_window(idx)
-        lease = await session.get(Lease, (slot.slot_id, slot.calendar_version, idx))
+        lease = leases_by_index.get(idx)
         sellable, reason, price = (False, "no terms", 0)
         if terms is not None and terms.lead_seconds > 0:
             if terms.paused:

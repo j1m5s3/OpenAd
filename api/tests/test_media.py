@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
+import gzip
+from collections.abc import AsyncIterator, Callable
 from io import BytesIO
 from pathlib import Path
 
@@ -12,6 +14,7 @@ from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openad.config import Settings
+from openad.models import CreativeVerification
 from openad.models.offchain import (
     VERIFY_FAILED_CLICK_URL,
     VERIFY_FAILED_DIMENSIONS,
@@ -20,6 +23,7 @@ from openad.models.offchain import (
     VERIFY_FAILED_MIME,
     VERIFY_FAILED_SIZE,
     VERIFY_FAILED_TIMEOUT,
+    VERIFY_PENDING,
     VERIFY_VERIFIED,
 )
 from openad.services.media import fetch_media, keccak_hex, verify_bytes
@@ -43,6 +47,29 @@ def _mock_client(handler: Callable[[httpx.Request], httpx.Response]) -> type[htt
             super().__init__(*args, **kwargs)
 
     return _Client
+
+
+class _BytesStream(httpx.AsyncByteStream):
+    """Wraps fixed bytes as a genuine, not-yet-consumed stream.
+
+    `httpx.Response(200, content=b"...")` looks convenient, but httpx treats a response built
+    from `content=` as already fully read and buffered: `aiter_bytes()` still works (it falls
+    back to the cached `.content`), but `fetch_media` now reads with `aiter_raw()` (fix round 1,
+    ROADMAP 6.9 step 39, decompression-bomb guard), which raises `httpx.StreamConsumed` against
+    that pre-consumed state. A real stream, even a one-chunk one, doesn't have this problem.
+    """
+
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        yield self._data
+
+
+def _content_response(
+    status_code: int, content: bytes, *, headers: dict[str, str] | None = None
+) -> httpx.Response:
+    return httpx.Response(status_code, headers=headers, stream=_BytesStream(content))
 
 
 def tiny_png(width: int = 300, height: int = 250) -> bytes:
@@ -92,6 +119,34 @@ async def test_fetch_timeout(settings: Settings, monkeypatch: pytest.MonkeyPatch
     assert data is None and status == VERIFY_FAILED_TIMEOUT
 
 
+async def test_fetch_media_slow_drip_times_out(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A host that trickles a few bytes at a time, always well inside a single httpx read,
+    never trips `FETCH_TIMEOUT_S` — only the OVERALL deadline around the whole fetch catches it
+    (ROADMAP 6.9 step 39; docs/threat-model.md T18). The drip is a finite 10 chunks (0.8s of
+    real sleep), so this stays fast and deterministic: with the small deadline below it always
+    times out well before finishing, and removing that deadline (the mutation check for this
+    test) doesn't hang, it just finishes — successfully — instead of timing out."""
+
+    class _SlowDripStream(httpx.AsyncByteStream):
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            for _ in range(10):
+                await asyncio.sleep(0.08)
+                yield b"a"
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=_SlowDripStream())
+
+    import openad.services.media as media
+
+    monkeypatch.setattr(media.httpx, "AsyncClient", _mock_client(handler))
+    fast = settings.model_copy(update={"media_fetch_deadline_seconds": 0.3})
+    data, status = await fetch_media("https://ads.example/drip.png", settings=fast)
+    assert data is None
+    assert status == VERIFY_FAILED_TIMEOUT
+
+
 async def test_fetch_media_redirect_to_http_refused(
     settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -106,7 +161,7 @@ async def test_fetch_media_redirect_to_http_refused(
         requested.append(str(request.url))
         if str(request.url) == "https://ads.example/start.png":
             return httpx.Response(302, headers={"location": "http://ads.example/next.png"})
-        return httpx.Response(200, content=png)
+        return _content_response(200, png)
 
     import openad.services.media as media
 
@@ -132,7 +187,7 @@ async def test_fetch_media_redirect_to_private_ip_refused(
         requested.append(str(request.url))
         if str(request.url) == "https://ads.example/start.png":
             return httpx.Response(302, headers={"location": "https://10.0.0.1/internal"})
-        return httpx.Response(200, content=png)
+        return _content_response(200, png)
 
     import openad.services.media as media
 
@@ -155,7 +210,7 @@ async def test_fetch_media_relative_redirect_accepted(
         if path == "/start.png":
             return httpx.Response(302, headers={"location": "/final.png"})
         if path == "/final.png":
-            return httpx.Response(200, content=png)
+            return _content_response(200, png)
         raise AssertionError(f"unexpected path {path}")
 
     import openad.services.media as media
@@ -178,7 +233,7 @@ async def test_fetch_media_protocol_relative_redirect_to_private_ip_refused(
         requested.append(str(request.url))
         if str(request.url) == "https://ads.example/start.png":
             return httpx.Response(302, headers={"location": "//10.0.0.1/x"})
-        return httpx.Response(200, content=png)
+        return _content_response(200, png)
 
     import openad.services.media as media
 
@@ -208,7 +263,7 @@ async def test_fetch_media_dev_loopback_accepted(
     png = tiny_png()
 
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=png)
+        return _content_response(200, png)
 
     import openad.services.media as media
 
@@ -254,7 +309,7 @@ async def test_fetch_media_blocks_hostname_and_numeric_ip_forms(
 
     def handler(request: httpx.Request) -> httpx.Response:
         requested.append(str(request.url))
-        return httpx.Response(200, content=png)
+        return _content_response(200, png)
 
     import openad.services.media as media
 
@@ -283,7 +338,7 @@ async def test_fetch_media_nul_in_host_fails_closed(
 
     def handler(request: httpx.Request) -> httpx.Response:
         requested.append(str(request.url))
-        return httpx.Response(200, content=tiny_png())
+        return _content_response(200, tiny_png())
 
     monkeypatch.setattr(media.httpx, "AsyncClient", _mock_client(handler))
     prod_settings = settings.model_copy(update={"env": "prod"})
@@ -306,7 +361,7 @@ async def test_fetch_media_two_hop_redirect_accepted(
         if path == "/hop1.png":
             return httpx.Response(302, headers={"location": "https://ads.example/final.png"})
         if path == "/final.png":
-            return httpx.Response(200, content=png)
+            return _content_response(200, png)
         raise AssertionError(f"unexpected path {path}")
 
     import openad.services.media as media
@@ -334,6 +389,135 @@ async def test_fetch_media_too_many_redirects_refused(
     assert data is None
     assert status == VERIFY_FAILED_FETCH
     assert count["n"] == 4  # initial + 3 manual redirects; the 4th redirect is the one refused
+
+
+async def test_fetch_media_refuses_non_identity_content_encoding(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A gzip-bomb `uri` must be refused, not decoded: `max_media_bytes` is checked against wire
+    bytes read via `aiter_raw()`, so a compressed body would otherwise be free to expand far past
+    the cap in memory before the size check ever sees it (fix round 1, ROADMAP 6.9 step 39;
+    docs/threat-model.md T18 — the same OOM/crash-loop risk on a pending malicious creative).
+    `Content-Encoding` is trusted from the response, never the request's own `Accept-Encoding`,
+    since a malicious server can ignore what it was asked for. The request must still ask for
+    `identity`: the handler only records the header and the test asserts it after the call,
+    because an assertion raised inside the transport would be swallowed by `fetch_media`'s broad
+    `except Exception`, which returns the same `failed:fetch` this test expects (fix round 2)."""
+    compressed = gzip.compress(tiny_png() * 100)
+    accept_encodings: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        accept_encodings.append(request.headers.get("accept-encoding"))
+        return _content_response(200, compressed, headers={"content-encoding": "gzip"})
+
+    import openad.services.media as media
+
+    monkeypatch.setattr(media.httpx, "AsyncClient", _mock_client(handler))
+    data, status = await fetch_media("https://ads.example/bomb.png", settings=settings)
+    assert data is None
+    assert status == VERIFY_FAILED_FETCH
+    assert accept_encodings == ["identity"]
+
+
+async def test_verify_pending_pass_budget_leaves_rest_pending(
+    session: AsyncSession, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The indexer's verify pass has a time budget (ROADMAP 6.9 step 39): creatives it doesn't
+    reach in the budget stay `pending` for the next pass, so `CreativeRegistered` (permissionless)
+    plus a slow `uri` can never block block indexing for longer than one budget plus one fetch
+    deadline (docs/threat-model.md T18). An injected fake clock makes this deterministic instead
+    of depending on how long a real (mocked-out) `verify_creative` call takes."""
+    import openad.services.media as media
+
+    for cid in (1, 2, 3):
+        session.add(make_creative(creative_id=cid))
+        session.add(CreativeVerification(creative_id=cid, status=VERIFY_PENDING))
+    await session.commit()
+
+    calls: list[int] = []
+
+    async def fake_verify_creative(s: AsyncSession, creative_id: int, st: Settings) -> str:
+        calls.append(creative_id)
+        return VERIFY_FAILED_FETCH
+
+    monkeypatch.setattr(media, "verify_creative", fake_verify_creative)
+
+    # clock() is called once to set the deadline (0.0 + budget), then once per candidate id to
+    # decide whether there is still time: 0.0 and 5.0 are inside a 10s budget, 11.0 is past it,
+    # so id 3 is left pending for the next pass.
+    ticks = iter([0.0, 0.0, 5.0, 11.0])
+    budget_settings = settings.model_copy(update={"verify_pass_budget_seconds": 10})
+    count = await media.verify_pending(session, budget_settings, clock=lambda: next(ticks))
+
+    assert count == 2
+    assert calls == [1, 2]
+    still_pending = await session.get(CreativeVerification, 3)
+    assert still_pending is not None
+    assert still_pending.status == VERIFY_PENDING
+
+
+async def test_verify_pending_processes_in_creative_id_order(
+    session: AsyncSession, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FIFO by `creative_id` (roughly registration order, ROADMAP 6.9 step 39): a pass that runs
+    out of budget must always skip the same, highest-id creatives, not an arbitrary subset per
+    backend. The rows are added out of id order here, so a broken or missing `order_by` (e.g.
+    one that fell back to insertion order or an unordered scan) would still pass by accident on a
+    naive read; asserting the exact processing order catches that."""
+    import openad.services.media as media
+
+    for cid in (3, 1, 4, 2):
+        session.add(make_creative(creative_id=cid))
+        session.add(CreativeVerification(creative_id=cid, status=VERIFY_PENDING))
+    await session.commit()
+
+    calls: list[int] = []
+
+    async def fake_verify_creative(s: AsyncSession, creative_id: int, st: Settings) -> str:
+        calls.append(creative_id)
+        return VERIFY_FAILED_FETCH
+
+    monkeypatch.setattr(media, "verify_creative", fake_verify_creative)
+    count = await media.verify_pending(session, settings)
+
+    assert count == 4
+    assert calls == [1, 2, 3, 4]
+
+
+async def test_verify_creative_releases_connection_before_network_call(
+    session: AsyncSession, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`verify_creative` must not hold a DB transaction (and so a pooled connection) while the
+    media fetch is in flight: `register_creative` is permissionless and the sim verifies right
+    after registering (`sim/src/planner/execute.ts:180`), so a slow or malicious `uri` could
+    otherwise let one advertiser pin the api's whole connection pool — two concurrent verifies of
+    one creative previously made an unrelated `GET /v1/slots/1` time out (fix round 1, ROADMAP
+    6.9 step 39; docs/threat-model.md T18), the same risk `check_domain_verification` guards
+    against. Same pattern as `test_check_releases_connection_before_network_call`: replace the
+    network call itself (`fetch_media`, which `verify_creative` does not wrap in its own
+    `try`/`except`) so a failed assertion raises straight out of `verify_creative`, instead of
+    being swallowed by `fetch_media`'s own broad `except Exception` the way a transport-level
+    mock's assertion would be."""
+    import openad.services.media as media
+
+    png = tiny_png()
+    creative = make_creative(creative_id=1)
+    creative.content_hash = keccak_hex(png)
+    session.add(creative)
+    await session.commit()
+    assert session.in_transaction() is False
+
+    async def fake_fetch_media(uri: str, *, settings: Settings) -> tuple[bytes | None, str]:
+        assert session.in_transaction() is False
+        return png, VERIFY_VERIFIED
+
+    monkeypatch.setattr(media, "fetch_media", fake_fetch_media)
+    status = await media.verify_creative(session, 1, settings)
+    assert status == VERIFY_VERIFIED
+
+    row = await session.get(CreativeVerification, 1)
+    assert row is not None
+    assert row.status == VERIFY_VERIFIED
 
 
 async def test_serve_media_etag(
