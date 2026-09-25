@@ -5,6 +5,7 @@
   "type": "module",
   "description": "OpenAd web app: Discover, Supply, and Campaigns (Vite + React + Tailwind + RainbowKit + wagmi).",
   "scripts": {
+    "prebuild": "npm --prefix ../embed run build",
     "dev": "npm run sync:deployments && npm run sync:openapi && vite",
     "build": "npm run sync:deployments && npm run sync:openapi && tsc --noEmit -p tsconfig.json && vite build",
     "build:demo": "node scripts/build-demo.mjs",

@@ -90,6 +90,10 @@ jobs:
         run: |
           curl -sSI http://localhost:8080/ | tr -d '\r' \
             | grep -i '^content-security-policy:' | grep -qF "connect-src 'self'"
+      - name: Check embed script allows cross-origin script-tag loading
+        run: |
+          curl -sSI http://localhost:8080/embed/open-ad.v1.js | tr -d '\r' \
+            | grep -qi '^access-control-allow-origin: \*'
       - name: Container logs (always, for debugging)
         if: always()
         run: docker logs web-demo || true

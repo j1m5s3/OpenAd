@@ -14,13 +14,17 @@
 //          `const DEFAULT_API = "http://localhost:8000"`), used only when an `<open-ad>` element
 //          has no `api` attribute — never true in demo mode, where `EmbedDemoPage.tsx` always
 //          sets `api` explicitly (`demo/assetUrl.ts`, ADR-0016 hosting amendment). Restricted to
-//          the embed's own compiled chunk (`open-ad-*.js`), so the same literal appearing
-//          anywhere else still fails. `web/src/lib/api.ts`'s own equivalent fallback is avoided
-//          outright, not whitelisted: `build-demo.mjs` sets `VITE_API_URL` so that literal never
-//          bakes into `dist-demo` in the first place — sanity-checked by hand: temporarily
-//          commenting out that env var in `build-demo.mjs` and rebuilding makes this check fail
-//          with a denied "localhost:8000" host in an `index-*.js`/`App-*.js` chunk, not the
-//          `open-ad-*.js` one; reverted before committing.
+//          the embed's own compiled chunks: the app's own bundled copy (`open-ad-*.js`, from the
+//          `@openad/embed` alias) and the versioned static script `vite.config.ts`'s
+//          `embedScriptCopy` plugin ships at `embed/open-ad.v1.js` (ROADMAP 6.3) — dead weight in
+//          the demo build (nothing there fetches or executes it; `EmbedDemoPage.tsx` always uses
+//          the aliased import instead), so the same fallback literal appearing there is equally
+//          inert. Any other occurrence of the literal still fails. `web/src/lib/api.ts`'s own
+//          equivalent fallback is avoided outright, not whitelisted: `build-demo.mjs` sets
+//          `VITE_API_URL` so that literal never bakes into `dist-demo` in the first place —
+//          sanity-checked by hand: temporarily commenting out that env var in `build-demo.mjs`
+//          and rebuilding makes this check fail with a denied "localhost:8000" host in an
+//          `index-*.js`/`App-*.js` chunk, not one of the two above; reverted before committing.
 // (b) dist-demo/index.html's <script src>/<link href> are all relative (no leading "/" or a
 //     scheme), so the bundle runs unpacked under any sub-path with no server rewrite.
 // (c) dist (the normal build) carries no demo code or assets: none of the demo markers, and no
@@ -44,9 +48,12 @@ const FOUNDRY_RPC_URLS =
   /rpcUrls:\{default:\{http:\["http:\/\/127\.0\.0\.1:8545"\],webSocket:\["ws:\/\/127\.0\.0\.1:8545"\]\}\}/g;
 
 /** `@openad/embed`'s `DEFAULT_API` fallback literal (see header): the ONLY context where
- * `localhost:8000` may appear, and only inside the embed's own compiled chunk. */
+ * `localhost:8000` may appear, and only inside one of the embed's own compiled chunks —
+ * `open-ad-*.js` (the app's bundled copy) or `embed/open-ad.v1.js` (the shipped static script). */
 const EMBED_DEFAULT_API = /["']http:\/\/localhost:8000["']/g;
-const EMBED_CHUNK_NAME = /^open-ad-.*\.(js|mjs)$/;
+const EMBED_CHUNK_NAME = /^open-ad(-.*)?\.(v\d+\.)?(js|mjs)$/;
+/** Exactly one `open-ad-*.js` app chunk, plus exactly one `embed/open-ad.v1.js` static script. */
+const EMBED_DEFAULT_API_EXPECTED_COUNT = 2;
 
 const DEMO_MARKERS = ['openad-demo', 'DEMO_ABIS', 'PersonaSwitcher', 'demoServe', 'tour/steps'];
 
@@ -63,17 +70,20 @@ function walk(dir) {
 }
 
 /** Matches of `pattern` across every file in `files`, each as `[file, start, end]`, plus a
- * single failure appended to `failures` if the total count across all of them is not exactly 1
- * (covers viem/embed changing shape upstream, or the literal accidentally duplicating). */
-function anchorRanges(files, pattern, label) {
+ * single failure appended to `failures` if the total count across all of them is not exactly
+ * `expected` (covers viem/embed changing shape upstream, or the literal accidentally
+ * duplicating or disappearing). */
+function anchorRanges(files, pattern, label, expected = 1) {
   const found = [];
   for (const file of files) {
     for (const match of file.content.matchAll(pattern)) {
       found.push([file.path, match.index, match.index + match[0].length]);
     }
   }
-  if (found.length !== 1) {
-    failures.push(`expected exactly one ${label} literal in dist-demo, found ${found.length}`);
+  if (found.length !== expected) {
+    failures.push(
+      `expected exactly ${expected} ${label} literal(s) in dist-demo, found ${found.length}`,
+    );
   }
   return found;
 }
@@ -81,7 +91,12 @@ function anchorRanges(files, pattern, label) {
 function checkDeniedHosts(files) {
   const embedFiles = files.filter((f) => EMBED_CHUNK_NAME.test(basename(f.path)));
   const foundryRanges = anchorRanges(files, FOUNDRY_RPC_URLS, 'viem foundry rpcUrls');
-  const embedRanges = anchorRanges(embedFiles, EMBED_DEFAULT_API, '@openad/embed DEFAULT_API');
+  const embedRanges = anchorRanges(
+    embedFiles,
+    EMBED_DEFAULT_API,
+    '@openad/embed DEFAULT_API',
+    EMBED_DEFAULT_API_EXPECTED_COUNT,
+  );
   const rangesByFile = new Map();
   for (const [path, start, end] of [...foundryRanges, ...embedRanges]) {
     if (!rangesByFile.has(path)) rangesByFile.set(path, []);

@@ -10,6 +10,7 @@
 * [Terms](publisher/terms.md)
 * [Approvals](publisher/approvals.md)
 * [House ads and embed](publisher/house-ads-and-embed.md)
+* [Embed code](publisher/embed-code.md)
 * [Earnings](publisher/earnings.md)
 
 ## Advertiser

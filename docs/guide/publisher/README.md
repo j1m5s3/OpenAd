@@ -17,4 +17,4 @@ in order; it does not batch them.
 3. [Terms](terms.md) — **sale mode** (Lease Dutch or CPC), prices, **approval mode**.
 
 Then: [approvals](approvals.md), [house ad and embed](house-ads-and-embed.md),
-[earnings](earnings.md).
+[embed code](embed-code.md), [earnings](earnings.md).

@@ -26,6 +26,29 @@ server {
         return 200 "ok";
     }
 
+    # The versioned embed script (`web/vite.config.ts`'s `embedScriptCopy` plugin,
+    # ADR-0017 amendment): loaded via `<script type="module" src="...">` on publisher domains —
+    # a *cross-origin* request. Browsers fetch module scripts in CORS mode (unlike a classic
+    # `<script src>`, which needs no CORS header at all), so with no ACAO header here the
+    # browser blocks the response on every publisher domain except this one. `Access-Control-
+    # Allow-Origin: *` is safe: the file is public, static, and carries no credentials, the same
+    # reasoning as `/v1/serve/*`'s CORS (`docs/ARCHITECTURE.md` §3.4). `Cross-Origin-Resource-
+    # Policy: cross-origin` is required too, independently of CORS, so Chrome's CORP check (which
+    # blocks a cross-origin subresource fetch even when ACAO would allow it) doesn't also block
+    # this one. The path is versioned (`open-ad.v1.js`), so a day-long cache is safe; a future
+    # breaking change ships as `open-ad.v2.js` instead of overwriting this one.
+    location /embed/ {
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src ${CSP_CONNECT_SRC}; frame-ancestors 'none'; base-uri 'self'" always;
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Cross-Origin-Resource-Policy "cross-origin" always;
+        add_header Cache-Control "public, max-age=86400" always;
+        try_files $uri =404;
+    }
+
     location /assets/ {
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
