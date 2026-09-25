@@ -43,7 +43,8 @@ customer names, quotes, or traction are claimed — the deck is honest about cur
 
 - Live demo: publisher mints a slot, sets terms, advertiser buys a period, embed updates.
 - CPC path: advertiser funds a campaign, serve picks a winner, click settles in a batch.
-- <DEMO_URL>
+- https://claude.ai/artifact/AzkEcWfmUT23GCo2qkWxE7 — private until the owner shares it; if the
+  link asks you to sign in or request access, ask the OpenAd team for access.
 
 > Speaker notes: Run the demo live if possible; otherwise walk the linked recording. Demo mode
 > uses simulated data and a simulated wallet — say so explicitly, it's not a live chain.
@@ -103,8 +104,8 @@ customer names, quotes, or traction are claimed — the deck is honest about cur
 | Crypto-native ad networks | Varies, publicly listed rates differ by network | Varies                                                                          | Varies                            |
 | OpenAd                    | 2.5% today, capped at 10% on-chain              | Instant, atomic with the transaction (LEASE `buy`); at each settler batch (CPC) | None in the serve path            |
 
-> Speaker notes: See `docs/business/competitive.md` (a later step in this plan) for the full
-> sourced comparison table; this slide is a summary, not the full citation list.
+> Speaker notes: See `docs/business/competitive.md` for the full comparison table; this slide is
+> a summary, not the full citation list.
 
 ## Slide 10 — Go-to-market
 
