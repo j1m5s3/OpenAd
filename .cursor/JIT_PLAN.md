@@ -236,6 +236,15 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
       43's uncommitted work overlaps or touches #21's and #22's hunks.
     - 43 may also edit `api.yaml`'s service-level ingress annotation (L15), if its round 3
       renders it. No other step touches that line.
+  - **Amendments (2026-09-25 ~15:40 UTC; STEP_DONE 42).**
+    - As merged: 42 merged main (`5658fcb`) in as `d09712a`, then #20 (`e945590`) → `a7f95f7`,
+      with CI 5/5. Main now holds 42, 44 and 45.
+    - 43 is the last fix branch: it merges main (now with #20) in before its own merge. 42's R3
+      merge-tested its head against 43's working copy: clean in all 9 files both change, and the
+      merged `--only all` dry-run keeps D15's order (43's guards, then 42's comma checks, then
+      `builds submit`).
+    - `check-sh.sh`: 42's hunk is one insertion after base L115 (`@@ -115,0 +116,36 @@`). The
+      shared dry-run line, base L110, stays 43's (42's R2 L2).
 - **D15 — Fix rules: what 42–45 make true.**
   - **Images (42).**
     - The api image carries `contracts/deployments` at `/app/contracts/deployments`, with
@@ -243,8 +252,9 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
     - An empty `VITE_*` build input means unset:
       - no WalletConnect project id → injected (browser) wallets only;
       - no guide URL or demo URL → those links are hidden;
-      - the exception, today: `api.ts` reads `VITE_API_URL` with `??`, so an empty value
-        means same-origin (42's R1; §8).
+      - the one exception, by design: an empty `VITE_API_URL` means same-origin requests.
+        `api.ts` reads it with `??`, which keeps `""`; `||` would bake its dev default
+        (`http://localhost:8000`) into the bundle (judged at STEP_DONE 42; §8).
     - The inputs flow from `deploy-gcp.sh`'s environment (`WALLETCONNECT_PROJECT_ID`,
       `GUIDE_URL`, `DEMO_URL`), through Cloud Build substitutions (`_WALLETCONNECT_PROJECT_ID`,
       `_GUIDE_URL`, `_DEMO_URL`), to build args.
@@ -252,6 +262,13 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
       adds the API origin and `https:`.
     - No build loads Google Fonts.
     - CI boot-checks the api image and both web images.
+    - As shipped (#20, merged `a7f95f7`): `wagmi.ts` exports `walletConnectProjectId` and
+      `walletGroups`, and a blank `VITE_CHAIN_ID` counts as unset. `deploy-gcp.sh` refuses a
+      comma in any of the three inputs, and its Cloud Build call stages the source in
+      `gs://${BUILD_STAGING_BUCKET:-${PROJECT}-openad-builds}/source`. Both web build steps set
+      `DOCKER_BUILDKIT=1`. The boot check fails on any `pageerror` or `projectId` console
+      message, and on an empty `#root` at first paint or after a settle window. CI writes its
+      `84532.json` fixture only when none is committed, and deletes only a file it wrote.
   - **Cloud Run (43).**
     - Direct VPC egress (`private-ranges-only`) on api, indexer, settler and the migrate job.
     - Cloud SQL `--edition=ENTERPRISE`.
@@ -326,8 +343,8 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 | L Outbound-fetch bounds (accepted: indexer media deadline, domain-check fetch) | `fix/outbound-fetch-bounds` (#17, merged `3605473`) | noted under 6.9 by 36b | #14 merged; independent of M and N; merge before Final |
 | M Discover and slot-page period state (first-period anchoring) | `fix/discover-auction-state` (#19, merged `f50076d`) | noted under 6.7 by 36b | #14 merged; independent of L and N; merge before Final |
 | N Periods range cap (accepted) | `fix/periods-range-cap` (#18, merged `289bb72`) | noted under 6.9 by 36b | #14 merged; independent of L and M (T19 goes after T17; T18 restored on merge); merge before Final |
-| O Fix: the deploy images boot (api deployments, web WalletConnect/CSP/fonts, CI image boot checks) | `fix/deploy-images` (draft #20; worktree `/home/claude/OpenAd-42`) | 6.11 (47 records it) | main `f50076d`; independent of P, Q and R (D14); merges before Final |
-| P Fix: Cloud Run wiring (VPC egress, SQL edition, invoker, WIF roles, deploy nits) | `fix/cloud-run-wiring` (worktree `/home/claude/OpenAd-43`) | 6.12 (47) | main `f50076d`; independent of O, Q and R; merges before Final |
+| O Fix: the deploy images boot (api deployments, web WalletConnect/CSP/fonts, CI image boot checks) | `fix/deploy-images` (#20, merged `a7f95f7`) | 6.11 (47) | main `f50076d`; independent of P, Q and R (D14); merges before Final |
+| P Fix: Cloud Run wiring (VPC egress, SQL edition, invoker, WIF roles, deploy nits) | `fix/cloud-run-wiring` (worktree `/home/claude/OpenAd-43`) | 6.12 (47) | main `f50076d`; independent of O, Q and R; the last fix branch: merges main (now with #20) in first; merges before Final |
 | Q Fix: a dedicated settler key | `fix/settler-key` (#22, merged `5658fcb`) | 6.13 (47) | main `f50076d`; independent of O, P and R; merges before Final |
 | R Fix: CPC click integrity (no-store campaign serves, trusted burst key, origin enforcement) | `fix/cpc-click-integrity` (#21, merged `599368a`) | 6.14 (47) | main `f50076d`; independent of O, P and Q; merges before Final |
 | Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` (draft #16) | 6.3/6.6/6.7 ticks, 6.10, Phase 7; 6.11–6.14 and 7.19 (46, 47) | started after J and K merged; merges last, after L, M, N and O–R (36b and 46 done; 47 post-merge pass and targeted re-review, then CLOSE) |
@@ -390,19 +407,20 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 - ✓ 41. N: `GET /v1/slots/{id}/periods` rejects `to − from + 1 > 60` with 422 `invalid_window`, bounds `from` and `to` each at `UINT256_MAX`, and reads leases in one query (an index scan on `pk_leases`); T19. Reviews: R1 FIX (L2 the query's filters were untested; L3 a docstring; L3 a uint256 overflow gave a 500, pulled into scope) → R2 PASS (two L3s fixed anyway). Commits `5f31a5c` + `6b10332` + `7000e4a` (main merged in, T18 before T19) + `a6ba05f`, **PR #18 merged `289bb72`**. pytest 274/6, 279/1 with PG. Callers: web 15–60, sim 8, sim planner 5. **(as-shipped record below)**
 
 ### Slice O — `fix/deploy-images` (slice-review fix, 2026-09-25; worktree `/home/claude/OpenAd-42` off `f50076d`; parallel with P, Q, R and 46)
-- [>] 42. O:
+- ✓ 42. O: the deploy images boot. DONE 2026-09-25, **PR #20 merged `a7f95f7`**:
   - the api image carries `contracts/deployments` and sets `OPENAD_DEPLOYMENTS_DIR`;
   - an empty WalletConnect id no longer blanks the real web app (injected wallets only);
   - the WalletConnect id and the guide and demo URLs reach the web build (Cloud Build
-    substitutions, fed by `deploy-gcp.sh`);
+    substitutions, fed by `deploy-gcp.sh`), and Cloud Build stages its source in the builds
+    bucket (`--gcs-source-staging-dir`, with `${PROJECT}`);
   - `CSP_IMG_SRC`, no Google Fonts, and a CSP on §8's `openad-web` command;
-  - CI builds and boot-checks the api image and both web images;
-  - in its review fix round (D14 amendment): `--gcs-source-staging-dir` on the Cloud Build
-    call and in runbook §6, with `${PROJECT}` (`${PROJECT_ID}` is unbound under `set -u`).
-  - R1 FIX (L1: runbook §6's builds lack the staging flag, and its `--tag` example is invalid;
-    L2: the boot check passes at first paint; L2: the CI fixture would clobber a committed
-    `84532.json`; six L3s) → fix round 1 with the coder. Draft **PR #20**, `a2a9738`, CI green.
-  **Coder:** Sonnet, with an Opus review. **Risk: medium.** **(spec below)**
+  - CI builds and boot-checks the api image and both web images.
+  R1 FIX (L1: runbook §6's builds lacked the staging flag, and its `--tag` example was invalid;
+  L2: the boot check passed at first paint; L2: the CI fixture could clobber a committed
+  `84532.json`; six L3s) → fix round 1 (`60c2af8`), then main merged in (`d09712a`) → R2 FIX
+  (L2: the `check-sh.sh` edit reached base L110, 43's shared dry-run line; two L3s) → round 3
+  with an Opus coder (`e945590`) → **R3 PASS**. CI 5/5 on `e945590`. **Coder:** Sonnet, then
+  Opus for round 3. **Risk: medium.** **(as-shipped record below)**
 
 ### Slice P — `fix/cloud-run-wiring` (slice-review fix; worktree `/home/claude/OpenAd-43` off `f50076d`; parallel)
 - [>] 43. P:
@@ -418,8 +436,9 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
     round 1: guards before any side effect, `origin_of` → `scheme://host[:port]`, the builds
     staging bucket, base L273 (D14 and D15 amendments) → R2 FIX (L2: the api smoke always uses
     `status.url`, which fails behind a load balancer with closed ingress, main's §11; L2: the
-    new rules are untested; L3s) → round 3 with a new Opus coder, after committing the work and
-    merging main.
+    new rules are untested; L3s) → round 3 with a new Opus coder → R3 re-review (running at
+    15:40; the work is still uncommitted). Before its PR it commits and merges main, which now
+    holds #20 too: 42's R3 found 43's working copy merges with 42 cleanly.
   **Coder:** Sonnet for rounds 1–2, then a new Opus coder, with an Opus review. **Risk: medium.**
   **(spec below)**
 
@@ -481,7 +500,7 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
   `69e2aa9` + `911d363`, CI green on both. R1 FIX (L2: the "only takedown" claim; three L3s) →
   fix round 1 → **R2 PASS**. web 237, embed 5, sim 13 + 1 skipped; test:demo 15/15; capture
   byte-identical twice. **Risk: low.** **(as-shipped record below)**
-- ○ 47. Final: post-merge pass, once 42–45 have merged.
+- ○ 47. Final: post-merge pass, once 43 has merged too (42, 44 and 45 have: #20, #22, #21).
   - Merge main into #16 and resolve any conflicts.
   - ROADMAP 6.11–6.14 with the PR numbers.
   - The docs on #16's side that describe 42–45: the §3.3 heading, the §7 table and CI
@@ -857,246 +876,129 @@ _The full specs are in git history (`486ab0b`). This record replaced them at the
   **FIX** at about 10:05 UTC, which led to steps 42–47 (D14, D15). CLOSE is now the last item of
   this section.
 
-### Step 42 — The deploy images boot (slice O, `fix/deploy-images`)
 
-_Specced 2026-09-25 10:05 UTC (REPLAN, slice review FIX). Facts were checked at `f50076d` (main)
-and `cc040ef` (#16). Line numbers are main's unless marked._
+### Step 42 — The deploy images boot (slice O): DONE, as-shipped record
 
-**Amendment (2026-09-25 ~12:00 UTC; the orchestrator's decision from 43's R1 review, D14's
-amendments).** In 42's review fix round, also:
-- `deploy-gcp.sh`, in the Cloud Build call (L254-257, already 42's): add
-  `--gcs-source-staging-dir="gs://${BUILD_STAGING_BUCKET:-${PROJECT}-openad-builds}/source"`.
-  - Use `${PROJECT}`. The script runs under `set -u`, and `PROJECT_ID` exists only inside
-    `render()`, so `${PROJECT_ID}` would abort every run that leaves `BUILD_STAGING_BUCKET` unset.
-  - 43 creates the bucket (runbook §2) and documents `BUILD_STAGING_BUCKET` in `usage()`. Don't
-    edit `usage()`.
-- Runbook §6 (L257-268, 42's): the same flag on each `gcloud builds submit` form, as
-  `--gcs-source-staging-dir=gs://<PROJECT_ID>-openad-builds/source`.
-- 42's `check-sh.sh` block: the dry-run `builds submit` line carries
-  `--gcs-source-staging-dir=gs://<project>-openad-builds/source` by default, and the override's
-  bucket when `BUILD_STAGING_BUCKET` is set.
+**Status:** R3 PASS. Branch `fix/deploy-images` (worktree `/home/claude/OpenAd-42`), off
+`f50076d`, with main (`5658fcb`) merged in as `d09712a`. **PR #20 merged as `a7f95f7`**; CI 5/5
+on `e945590` (run 36138557635: contracts, api, web, docker, e2e). The full pre-implementation
+spec, with its ~12:00 UTC amendment and ~14:15 UTC R1 FIX block, is in git history (`a0d91a8`).
 
-**R1 FIX (2026-09-25 ~14:15 UTC; draft PR #20, `a2a9738`, CI green; fix round 1 is with the
-coder).**
-- **L1:** runbook §6's build commands don't carry the staging flag (the text only says they
-  "should also pass" it), and the extended `--tag` example is invalid: `gcloud builds submit`
-  takes no `-f` or `--build-arg`. Put the flag on every command, and replace the example with one
-  that works.
-- **L2:** `web-boot-check.mjs` passes at first paint, so a crash or a blank page after load isn't
-  caught. Keep listening for `pageerror` through a settle window, and check `#root` at its end.
-- **L2:** the CI api-image fixture would overwrite, then delete, a real
-  `contracts/deployments/84532.json` once one is committed. Write it only when the file is
-  absent, and delete only what it wrote.
-- **L3s:**
-  - two stated reasons are wrong: an empty `VITE_API_URL` means same-origin (`api.ts` reads it
-    with `??`), and a fake WalletConnect id doesn't throw;
-  - `check-sh.sh` L136 doesn't unset `BUILD_STAGING_BUCKET`;
-  - the boot check's argument parsing, and one repo comment's wording;
-  - §8's note runs to six lines, where the spec asked for one sentence;
-  - `cloudbuild.yaml`'s web steps should set `DOCKER_BUILDKIT=1`;
-  - say that a WalletConnect id needs extra CSP origins.
-- Before the PR leaves draft, merge `origin/main` (`5658fcb`: #21 and #22). D14 predicts no
-  conflicts.
-- Not 42's: ADR-0016 item 9 (Google Fonts) → 47; `api.ts` `??` → `||` → §8.
+**Commits:**
+- `a2a9738`: the fix (18 files, +508/−47).
+- `60c2af8`: fix round 1 (6 files, +142/−74).
+- `d09712a`: main (`5658fcb`: #21 and #22) merged in, with no conflicts.
+- `e945590`: round 3, by an Opus coder (3 files, +17/−13).
+- Against main: 18 files, +583/−50.
 
-**When and where:**
-- Worktree `/home/claude/OpenAd-42`, branch `fix/deploy-images` off `f50076d`. The orchestrator
-  created both. Edit only inside this worktree. It runs in parallel with 43, 44, 45 and 46.
-- Sonnet coder, Opus review. **Risk: medium.** It is build and CI plumbing, but it fixes two L1s:
-  the indexer and settler can't start, and the real web app is a blank page.
-- Local resources (D14):
-  - Postgres DB `openad_test_42`, if you run the api suite;
-  - browser checks on ports 5181–5189 only;
-  - Docker (start it with `nohup dockerd &` if it isn't running);
-  - Chromium from `/opt/pw-browsers` (never `playwright install` locally);
-  - revert any `package-lock.json` libc churn.
-- Commit on the branch (Conventional Commits, e.g. `fix(web): …`, `ci: …`). The orchestrator
-  pushes and opens the PR.
-- Don't touch `docs/ROADMAP.md` or README: 47 records this step as ROADMAP 6.11.
+**Files:**
+- `api/Dockerfile`, `web/Dockerfile` and `web/nginx/default.conf.template`;
+- `infra/gcp/cloudbuild.yaml`, `infra/gcp/services/{web.yaml, web-demo.yaml}` and
+  `infra/gcp/README.md`;
+- `web/src/lib/wagmi.ts` and `wagmi.test.ts` (new), `web/index.html` and `web/vite.config.ts`;
+- `e2e/scripts/web-boot-check.mjs` (new) and `.github/workflows/ci.yml` (the `docker` job);
+- `scripts/deploy-gcp.sh` (the build block and call) and `scripts/check-sh.sh` (42's block);
+- `docs/deploy-gcp.md` (§6 and §8), `.env.example` (base L98) and ADR-0017 (base L138-139).
 
-**Evidence (the slice review's findings, re-checked):**
-- **L1: the api image has no deployments artifact.**
-  - `api/Dockerfile` L7-10 copy only `api/`.
-  - `REPO_ROOT` (`config.py:16`, `parents[3]`) is `/` in the image, so the default
-    `contracts/deployments` resolves to `/contracts/deployments`, which doesn't exist.
-  - `indexer/__main__.py:21` and `settler/__main__.py:27` call `load_deployment` before the
-    liveness listener starts. Both exit, so Cloud Run never sees a healthy revision.
-  - Local runs work only because `docker-compose.stack.yml` mounts `/deployments` and sets
-    `OPENAD_DEPLOYMENTS_DIR`.
-- **L1: the non-demo web image boots to a blank page.**
-  - `web/Dockerfile` L48-59 bake every unset build arg in as `""`.
-  - `wagmi.ts` L39-40 fall back to the all-zero id only on `undefined` (`??`), so the project id
-    is `""`.
-  - RainbowKit 2.2.11 throws "No projectId found" as soon as a WalletConnect-based wallet is
-    created (`getWalletConnectConnector`, `node_modules/@rainbow-me/rainbowkit/dist/index.js`
-    ≈L7119-7129). A list with only `injectedWallet` never calls it.
-  - Cloud Build passes only `VITE_API_URL` and `VITE_CHAIN_ID` (`cloudbuild.yaml` L44-47). CI
-    builds only the demo image (`ci.yml` L91-121).
-  - `VITE_CHAIN_ID=""` would also fall back to Anvil, because `Number("")` is 0.
-- **L2: the CSP blocks what the page loads.**
-  - Every `add_header Content-Security-Policy` in the nginx template (L24, L45, L57, L70) has
-    `img-src 'self' data:`. That blocks paid media from the API origin (`/v1/serve/{id}/media`) on
-    `/embed-demo`, and house-ad media hosted by publishers.
-  - `style-src` and `font-src` block the Google Fonts links in `web/index.html` L18-22.
-  - The runbook's manual `openad-web` deploy (§8 L331-333) sets no CSP at all.
-- **L3:** `web/Dockerfile` L3-8 still says demo mode hasn't landed on main.
+**As shipped:**
+- The api image copies `contracts/deployments` to `/app/contracts/deployments` and sets
+  `OPENAD_DEPLOYMENTS_DIR` to that absolute path (`REPO_ROOT` is `/` in the image), so the
+  indexer and settler load their artifact. Compose's `/deployments` mount still overrides it.
+  Rebuild the api image after committing a `84532.json` or `8453.json` (runbook §8).
+- `web/src/lib/wagmi.ts`:
+  - `walletConnectProjectId(raw)` returns the trimmed id, or `undefined` for an unset, empty or
+    blank one;
+  - `walletGroups(projectId, dev)` lists only the Browser group (`injectedWallet`) without an id
+    or in DEV, and adds `getDefaultWallets().wallets` with one;
+  - `createRealConfig()` uses both. Without an id it passes a constant placeholder `projectId`,
+    which nothing uses, because no WalletConnect-based wallet is listed;
+  - a blank `VITE_CHAIN_ID` falls back to Anvil, like an unset one;
+  - `wagmi.test.ts` pins these, and that `createRealConfig()` doesn't throw with an empty id.
+- Build inputs:
+  - `cloudbuild.yaml` declares `_WALLETCONNECT_PROJECT_ID`, `_GUIDE_URL` and `_DEMO_URL`
+    (default `""`). It passes all three to `build-web` and `_GUIDE_URL` to `build-web-demo`, and
+    both web steps set `DOCKER_BUILDKIT=1` (`web/Dockerfile.dockerignore` applies only under
+    BuildKit);
+  - `deploy-gcp.sh` reads `WALLETCONNECT_PROJECT_ID`, `GUIDE_URL` (default: the hosted guide)
+    and `DEMO_URL` from its environment, refuses any that contains a comma, and appends them to
+    `--substitutions`;
+  - the Cloud Build call carries
+    `--gcs-source-staging-dir="gs://${BUILD_STAGING_BUCKET:-${PROJECT}-openad-builds}/source"`;
+  - `web/Dockerfile`'s header says what each `VITE_*` arg does: empty means unset, except
+    `VITE_API_URL`, where empty means same-origin.
+- CSP:
+  - the nginx template's four CSP lines read `img-src ${CSP_IMG_SRC}`, and `web/Dockerfile`
+    defaults it to `'self' data:` (nginx's envsubst leaves an undefined variable literal);
+  - `web.yaml`: `CSP_IMG_SRC` is `'self' data: ${API_ORIGIN} https:`, and `CSP_CONNECT_SRC`
+    gains `https://*.walletconnect.com` and `https://*.walletconnect.org` (inferred);
+  - `web-demo.yaml` pins both CSP variables at the demo-safe defaults and says never to widen
+    them.
+- Fonts: `web/index.html` loads no Google Fonts, and the demo's `transformIndexHtml` plugin only
+  adds the empty inline favicon. The CSS stack falls back to system fonts in every build.
+- CI's `docker` job:
+  - a `postgres:16` service, `npm ci`, and Playwright's Chromium;
+  - the api image: a minimal `84532.json` fixture is written only when none is committed, and
+    only a file this run wrote is deleted, right after the api build and before any web build.
+    The image loads it from `/app/contracts/deployments`, runs `alembic upgrade head`, and its
+    own CMD answers `/v1/health`;
+  - the non-demo web image, built with no WalletConnect id (the regression), and the web-demo
+    image each pass `/healthz`, the `img-src 'self' data:` CSP check and the boot check;
+  - boot-check screenshots are uploaded on failure.
+- `e2e/scripts/web-boot-check.mjs <url> [--out <dir>]` (flags in any order; honours
+  `PLAYWRIGHT_CHROMIUM_PATH`) fails on any `pageerror` or `projectId` console message from load
+  to the end, and on a `#root` with no element children or no visible text, at first paint
+  (10 s) or again after a settle window (network idle, up to 8 s, then 3 s). Failed network
+  requests are allowed.
+- Runbook:
+  - §6: one valid `gcloud builds submit` with the new substitutions and the staging flag, and a
+    `docker build` and `docker push` form in place of the invalid `--tag` example;
+  - §6: a real WalletConnect id lists wallets whose SDKs call more hosts. Add them to
+    `CSP_CONNECT_SRC` only (inferred), and leave `style-src` and `font-src` alone, so AppKit's
+    web font stays blocked;
+  - §8: the api image carries the deployments; `openad-web` gets `--set-env-vars` for
+    `CSP_CONNECT_SRC` and `CSP_IMG_SRC`, with a check-the-console note.
+- `infra/gcp/README.md` lists the new substitutions; `.env.example`: an unset or empty
+  `VITE_WALLETCONNECT_PROJECT_ID` means browser wallets only; ADR-0017's image bullet says the
+  api image carries the deployments.
+- `check-sh.sh`, one block inserted after base L115: it asserts the three substitutions, the
+  default staging dir (`gs://p-openad-builds/source`, from a run with `BUILD_STAGING_BUCKET`
+  unset in its subshell) and the override's bucket.
 
-**Items**
-1. **The api image carries the deployments.**
-   - `api/Dockerfile`: add `COPY contracts/deployments /app/contracts/deployments` and
-     `ENV OPENAD_DEPLOYMENTS_DIR=/app/contracts/deployments`. The path must be absolute, because
-     `REPO_ROOT` is `/`.
-   - A comment says what the directory holds: whatever `<chainId>.json` is committed (`84532.json`
-     once Sepolia is deployed). `deploy-gcp.sh --only stack` already refuses without that file.
-   - Compose's `/deployments` mount still overrides the path. `.dockerignore` already lets the
-     directory through (it excludes only `contracts/out`).
-2. **An empty build input means "unset"** (`web/src/lib/wagmi.ts`).
-   - Export two pure helpers:
-     - `walletConnectProjectId(raw)`: the trimmed value, or `undefined` for undefined, `""` or
-       blank.
-     - `walletGroups(projectId, dev)`: only the Browser group (`injectedWallet`) when there is no
-       id or in DEV; with an id, Browser plus `getDefaultWallets().wallets`.
-   - `createRealConfig()` uses both. Without an id it lists no WalletConnect-based wallet, and
-     passes a constant placeholder `projectId` that a comment says is never used. Never list
-     WalletConnect-based wallets under a fake id again.
-   - `resolveTargetChainId` treats a blank `VITE_CHAIN_ID` as unset.
-   - New `web/src/lib/wagmi.test.ts`:
-     - `""`, `"  "` and `undefined` resolve to `undefined`; `"abc"` resolves to `"abc"`;
-     - the groups without an id hold `injected` only;
-     - with an id and not DEV, they include `walletConnect`;
-     - `createRealConfig()` doesn't throw with an empty id (the regression). Stub
-       `import.meta.env` the way the other web tests do.
-3. **The build inputs reach the build.**
-   - `infra/gcp/cloudbuild.yaml`:
-     - declare `_WALLETCONNECT_PROJECT_ID`, `_GUIDE_URL` and `_DEMO_URL`, each defaulting to `""`;
-     - pass `VITE_WALLETCONNECT_PROJECT_ID`, `VITE_GUIDE_URL` and `VITE_DEMO_URL` to `build-web`,
-       and `VITE_GUIDE_URL` to `build-web-demo` too;
-     - use every substitution you declare: Cloud Build rejects an unused user substitution unless
-       `substitution_option: ALLOW_LOOSE` is set (inferred; verify before deploy).
-   - `scripts/deploy-gcp.sh`, only between L252 and L254 plus L257:
-     - a commented block sets:
-       - `WALLETCONNECT_PROJECT_ID="${WALLETCONNECT_PROJECT_ID:-}"`;
-       - `GUIDE_URL`, defaulting to ADR-0015's hosted guide (the `VITE_GUIDE_URL` value in
-         `.env.example`);
-       - `DEMO_URL="${DEMO_URL:-}"`, which stays hidden until the demo has its mapped URL
-         (43's §9 step).
-     - The block refuses any of the three that contains a comma, because gcloud splits
-       `--substitutions` on commas.
-     - Append `_WALLETCONNECT_PROJECT_ID=…,_GUIDE_URL=…,_DEMO_URL=…` to L257's `--substitutions`.
-     - Don't edit `usage()`: 43 documents these three names there (D14).
-   - `web/Dockerfile`: rewrite the L3-8 header comment. Say what each `ARG` does, and that an
-     empty value means unset.
-4. **The CSP matches what the page loads.**
-   - The nginx template, in all four CSP lines: `img-src ${CSP_IMG_SRC}`. Its header comment names
-     the variable.
-   - `web/Dockerfile`: `ENV CSP_IMG_SRC="'self' data:"`, a demo-safe default. It is required: the
-     nginx entrypoint substitutes only variables that are defined, and leaves `${CSP_IMG_SRC}` in
-     the header literally otherwise.
-   - `infra/gcp/services/web.yaml`, L29-33 only:
-     - `CSP_IMG_SRC: "'self' data: ${API_ORIGIN} https:"`. Paid media come from the API origin;
-       house ads come from publisher-hosted https URLs (`<open-ad>` on `/embed-demo`, and the
-       Supply house-ad preview).
-     - `connect-src` gains `https://*.walletconnect.com https://*.walletconnect.org` beside the
-       existing `wss://` entries (inferred; verify before deploy).
-     - Fix the comment.
-   - `web-demo.yaml`: `CSP_IMG_SRC: "'self' data:"` next to `CSP_CONNECT_SRC`, with the same
-     "never widen" note.
-   - Fonts:
-     - Remove the Google Fonts `preconnect` and stylesheet from `web/index.html`, L18-22 only (46
-       edits L8-14 on #16).
-     - The CSS stack (`--font-sans: Inter, ui-sans-serif, system-ui, sans-serif`) already falls
-       back. Normal builds then look like the demo, which the screenshots come from, and no
-       visitor IP goes to Google.
-     - `web/vite.config.ts` `demoIndexHtml`, L44-56 only: drop the font regex and fix the comment.
-       Keep the favicon line.
-   - Runbook `docs/deploy-gcp.md`:
-     - §6 (L257-268): the new substitutions and build args.
-     - §8, L291-296: the api image carries `contracts/deployments` with `OPENAD_DEPLOYMENTS_DIR`
-       set, so rebuild it after a `84532.json` or `8453.json` commit.
-     - §8, L331-333: `openad-web` gets `--set-env-vars` for `CSP_CONNECT_SRC` (as in `web.yaml`)
-       and `CSP_IMG_SRC`. Add one sentence: other wallet-SDK endpoints are inferred; check the
-       browser console for CSP reports in staging before setting a WalletConnect id in prod.
-5. **CI proves every image boots** (`.github/workflows/ci.yml`, the `docker` job; 42 is its sole
-   owner).
-   - Setup:
-     - a `postgres:16` service, as in the `api` job;
-     - `actions/setup-node` and `npm ci`;
-     - `npx playwright install chromium --with-deps` (CI only).
-   - **api image:**
-     - Before `docker build`, write a CI-only minimal `contracts/deployments/84532.json`:
-       `artifactVersion` 1, `chainId` 84532, and one `CampaignVault` entry with `abi: []`.
-       Delete it right after the build. Never commit it. Build the web images outside that
-       window, so `sync:deployments` never sees it.
-     - In the image, check that:
-       - `load_deployment(Settings().deployments_path, 84532)` loads, and the path is
-         `/app/contracts/deployments`;
-       - `uv run alembic upgrade head` succeeds against the service DB (`--network host`);
-       - the image's own CMD, started with the DB URL, answers `curl --retry … /v1/health` with
-         200.
-   - **Non-demo web image:**
-     - Build with `--build-arg VITE_API_URL=http://127.0.0.1:8000
-       --build-arg VITE_CHAIN_ID=84532` and **no** WalletConnect id: that is the regression.
-     - Run it; check `/healthz` and a CSP header with `img-src 'self' data:`; then run the boot
-       check.
-   - **Web-demo image:** keep the existing checks, add the same `img-src` assert, and run the
-     boot check on it too.
-   - **Boot check:** a new `e2e/scripts/web-boot-check.mjs <url> [--out <dir>]`.
-     - It uses `chromium` from `@playwright/test`, and honours `PLAYWRIGHT_CHROMIUM_PATH` when it
-       is set (as `e2e/demo/demo.config.ts` does).
-     - It fails:
-       - on any `pageerror`;
-       - when `#root` has no element children or no visible text 10 s after load;
-       - on a console message matching `/projectId/i`.
-     - Failed network requests are allowed: there's no API in CI.
-     - On failure it saves a screenshot into `--out`, and the job uploads it with `if: failure()`.
-6. **Docs, 42's hunks only:**
-   - `infra/gcp/README.md` L9-11: the cloudbuild bullet lists the new substitutions.
-   - `.env.example` L98 only: an unset or empty `VITE_WALLETCONNECT_PROJECT_ID` means browser
-     (injected) wallets only.
-   - ADR-0017 L138-139: the api image carries `contracts/deployments` and sets
-     `OPENAD_DEPLOYMENTS_DIR`.
-   - `scripts/check-sh.sh`: one block inserted between L115 and L116. It asserts that the dry-run
-     `builds submit` line carries `_WALLETCONNECT_PROJECT_ID=`, `_GUIDE_URL=` and `_DEMO_URL=`.
+**Reviews:**
+- R1 (Opus) FIX:
+  - L1: runbook §6's build commands lacked the staging flag, and its `--tag` example was invalid
+    (`gcloud builds submit` takes no `-f` or `--build-arg`) → the flag on the command, and a
+    `docker build` and `docker push` example;
+  - L2: the boot check passed at first paint → a settle window, then `#root` and the page
+    errors are checked again;
+  - L2: the CI fixture would overwrite, then delete, a committed `84532.json` → written only
+    when absent, and only what it wrote is deleted;
+  - L3s: two wrong stated reasons (an empty `VITE_API_URL`; a fake WalletConnect id doesn't
+    throw); `check-sh.sh` didn't unset `BUILD_STAGING_BUCKET`; the boot check's argument
+    parsing; §8's note length; `DOCKER_BUILDKIT=1`; the WalletConnect CSP origins;
+  - → fix round 1 (`60c2af8`), then main merged in (`d09712a`).
+- R2 FIX:
+  - L2: round 1's unset edited base L110, the shared dry-run line, which is 43's (D14) →
+    restored; the default bucket is checked from a separate run with the override unset;
+  - L3: the runbook's WalletConnect CSP advice → `CSP_CONNECT_SRC` only, and AppKit's web font
+    stays blocked;
+  - L3: `web/Dockerfile`'s header wording → an empty `VITE_API_URL` means same-origin;
+  - → round 3 with an Opus coder (`e945590`).
+- R3 (Opus) PASS.
 
-**Owns** the hunks above.
+**Checks:**
+- `check:sh` passes with `BUILD_STAGING_BUCKET` unset and with it exported;
+- `git diff -U0 f50076d e945590 -- scripts/check-sh.sh` is one hunk, `@@ -115,0 +116,36 @@`;
+- a merge test against 43's working copy is clean in all 9 files both change. The merged
+  `--only all` dry-run runs 43's guards, then 42's, then `builds submit` with
+  `--gcs-source-staging-dir=gs://p-openad-builds/source`;
+- CI 5/5 on `e945590` (run 36138557635).
 
-**Must not touch:**
-- `deploy-gcp.sh` outside its block and L257, including `usage()`;
-- `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, README, `docs/threat-model.md`;
-- `infra/gcp/services/{api,indexer,settler}.yaml`, `jobs/migrate.yaml` and `deploy.yml`;
-- the runbook outside L257-268, L291-296 and L331-333;
-- `web/index.html` outside L18-22.
-
-**Verify:**
-```bash
-cd /home/claude/OpenAd-42
-npm run typecheck && npm run lint && npm run test && npm run build && npm run build:demo \
-  && node web/scripts/check-demo-bundle.mjs
-npx prettier --check web/src/lib/wagmi.ts web/src/lib/wagmi.test.ts web/vite.config.ts \
-  web/index.html e2e/scripts/web-boot-check.mjs
-npm run check:sh
-python3 -c "import yaml,sys; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" \
-  .github/workflows/ci.yml infra/gcp/cloudbuild.yaml infra/gcp/services/web.yaml infra/gcp/services/web-demo.yaml
-# The CI docker job's checks, run locally (dockerd up; ports 5181-5189; the 84532.json fixture
-# exists only while the api image builds, then is deleted):
-docker build -f api/Dockerfile --build-arg UV_EXTRAS=gcs -t openad-api:42 .
-docker run --rm openad-api:42 uv run python -c "from openad.config import Settings; from openad.chain.deployments import load_deployment; s=Settings(); print(s.deployments_path, load_deployment(s.deployments_path, 84532).chain_id)"
-docker build -f web/Dockerfile --build-arg VITE_API_URL=http://127.0.0.1:8000 --build-arg VITE_CHAIN_ID=84532 -t openad-web:42 .
-docker run -d --name web42 -p 5181:8080 openad-web:42 && node e2e/scripts/web-boot-check.mjs http://127.0.0.1:5181/
-curl -sI http://127.0.0.1:5181/ | grep -i "content-security-policy" | grep -F "img-src 'self' data:"
-# Negative control: the same boot check against an image built from f50076d's web/ must fail
-# (blank root, or a projectId error). Say which in the handback.
-git status --short     # no 84532.json, no package-lock.json churn
-git diff --stat origin/main...HEAD
-```
-
-**Done when:**
-- Both image checks pass locally and in the PR's CI `docker` job, and the negative control fails
-  on the old code.
-- The web unit tests pass, including the new `wagmi.test.ts`.
-- The build inputs reach Cloud Build; the CSP allows exactly the image sources listed; no Google
-  Fonts are loaded.
-- No file outside the owned hunks changed, and the Opus review passes.
+**Follow-ups:**
+- → 47: ROADMAP 6.11 cites #20; ADR-0016 item 9 (L60-64) still describes the font strip that 42
+  removed; §7's CI sentence; the launch checklist's L12 row and its WalletConnect user action.
+- `api.ts`'s `??` on `VITE_API_URL` (R1, and a reviewer's backlog note at STEP_DONE 42): by
+  design, no change (D15; §8).
 
 ### Step 43 — Cloud Run wiring (slice P, `fix/cloud-run-wiring`)
 
@@ -1168,6 +1070,15 @@ coder).**
 - **Round 3 starts** by committing the work in progress, then merging `origin/main` (`5658fcb`:
   #21 and #22). D14 predicts no textual conflicts: main's §9 and §11 (45), and its §5 L218 and §8
   settler paragraph (44), sit outside 43's hunks.
+
+**Main moved (2026-09-25 ~15:40 UTC; STEP_DONE 42).** Main is now `a7f95f7`: #20 (42) merged on
+top of #21 and #22.
+- Before its PR, 43 commits and merges `origin/main` at `a7f95f7`, not `5658fcb`.
+- 42's R3 merge-tested its head against 43's working copy: clean in all 9 files both change. The
+  merged `--only all` dry-run runs 43's guards, then 42's comma checks, then `builds submit`
+  with `--gcs-source-staging-dir=gs://p-openad-builds/source`.
+- 42's `check-sh.sh` block is one insertion after base L115. Base L110, the shared dry-run line,
+  is unchanged and stays 43's.
 
 **When and where:**
 - Worktree `/home/claude/OpenAd-43`, branch `fix/cloud-run-wiring` off `f50076d`. It runs in
@@ -1599,12 +1510,15 @@ _Specced 2026-09-25 10:05 UTC (REPLAN). Amended at STEP_DONE 46 (~12:00 UTC): 46
 the stale lines that 45's R1 review found, the embed demo page's copy, and the launch-checklist
 notes from 43's and 45's R1 decisions (D14 and D15 amendments). Amended again at STEP_DONE 44
 and 45 (~14:15 UTC): the PR numbers known so far (42 is #20, 44 is #22, 45 is #21), and the
-follow-ups from 42's, 44's and 45's reviews. 43's PR number isn't known yet: the orchestrator
-gives it when it launches 47, and it replaces `#<43>` below._
+follow-ups from 42's, 44's and 45's reviews. Amended at STEP_DONE 42 (~15:40 UTC): #20 merged
+as `a7f95f7`, ADR-0016 item 9 made precise, and the `api.ts` candidate dropped (by design, D15).
+43's PR number isn't known yet: the orchestrator gives it when it launches 47, and it replaces
+`#<43>` below._
 
 **When and where:**
 - Primary tree `/home/claude/OpenAd`, `chore/launch-final` (#16). It starts after 42–45 have all
-  merged into main. 46 passed its review at `911d363`.
+  merged into main: 42 (#20 `a7f95f7`), 44 (#22 `5658fcb`) and 45 (#21 `599368a`) have, and 43
+  is the last. 46 passed its review at `911d363`.
 - Sonnet coder, Opus review. **Risk: low**: a merge, plus docs.
 - The orchestrator pushes. `.cursor/` stays unstaged, because it's the planner's.
 
@@ -1650,7 +1564,6 @@ gives it when it launches 47, and it replaces `#<43>` below._
      - limit `workers/serve` to `/media` before it is ever deployed;
      - the settler's startup check also compares its key with the owners of `AdSlot`,
        `Marketplace` and `CreativeRegistry`, not only the vault's;
-     - `web/src/lib/api.ts` reads `VITE_API_URL` with `||`, so an empty value means unset;
      - generate the runbook's §8 manual commands from the manifests;
      - optionally, `gcloud builds submit --async`, to drop `roles/logging.viewer`.
    - 7.7's note gains `contracts/script/deploy.py` L226 (`_seed_demo`), which runs over 100
@@ -1670,8 +1583,11 @@ gives it when it launches 47, and it replaces `#<43>` below._
      bounded map, and skipped until the hop count is verified (6.14), not by `ip + slot_id`.
    - ADR-0017's Cloudflare alternative ("…purely as a CDN for serve traffic", main L176 at
      `5658fcb`): a CDN for `/v1/serve/*/media` only, as 45's lines say (main L155-160 and L193).
-   - ADR-0016 item 9 ("Font-offline", L60-64): no build loads Google Fonts since 6.11 (#20),
-     and the demo's `transformIndexHtml` plugin only adds the empty inline favicon.
+   - ADR-0016 item 9 ("Font-offline", L60-64) still says the demo's `transformIndexHtml` plugin
+     drops the Google Fonts links, which 6.11 (#20) removed from `web/index.html` outright.
+     Reword it: no build loads Google Fonts since 6.11 (the CSS stack falls back to system
+     fonts), and the plugin only adds the empty inline favicon. Keep the item's last sentence
+     (the `injected` connector over the simulator).
 4. **Runbook `docs/deploy-gcp.md`, after the merge:**
    - §14: the bucket line uses `<MEDIA_BUCKET>` (43's per-project name).
    - §8's manual api command: add `OPENAD_SERVE_ENFORCE_ORIGIN=true` to `--set-env-vars`, as in
@@ -1701,7 +1617,8 @@ gives it when it launches 47, and it replaces `#<43>` below._
          `.env`, which Moccasin loads for every network;
        - store its key as `openad-settler-key-<ENV>` (`docs/deploy-sepolia.md`);
      - optionally, get a WalletConnect project id (without one, the app offers browser wallets
-       only), then check the browser console for CSP reports in staging;
+       only). With one, add the extra `CSP_CONNECT_SRC` hosts that runbook §6 lists (#20), then
+       check the browser console for CSP reports in staging;
      - map `demo.<domain>`, and set `WEB_DEMO_URL` and `DEMO_URL` (§9);
      - the XFF row (L35): verifying the chain and setting `OPENAD_TRUSTED_PROXY_HOPS` also turns
        on the CPC click burst rule (6.14). If a load balancer fronts the api, every api
@@ -1801,8 +1718,8 @@ git diff --stat origin/main...HEAD                        # #16's files only (pl
     - #4 `801440e`, #5 `8887adb`, #6 `e8a34b8`, #7 `866d7fe`, #8 `591e576`, #9 `07eeece`,
       #10 `eba40cd`, #11 `c3f39dc`, #12 `d5d46a0`, #13 `abb2b81`, #14 `5f27fb8`, #15 `2c4101b`,
       #17 `3605473`, #18 `289bb72`, #19 `f50076d`;
-    - then #21 `599368a` (45) and #22 `5658fcb` (44), plus #20 (42) and 43's PR, whose merge
-      commits are read from `git log --merges` at CLOSE;
+    - then #21 `599368a` (45), #22 `5658fcb` (44) and #20 `a7f95f7` (42), plus 43's PR, whose
+      merge commit is read from `git log --merges` at CLOSE;
     - #16 "merges last" (its commit doesn't exist yet at CLOSE).
   - A **step → PR map**: 36b's table (in git history at `486ab0b`), plus:
     - 42 → #20, 43 → #<43>, 44 → #22, 45 → #21;
@@ -1896,6 +1813,7 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - 2026-09-25 10:05 UTC — REPLAN (slice review FIX). The orchestrator's Opus slice review of the launch state (main `f50076d` plus #16 `cc040ef`) returned **FIX**. Six L1s: the api image has no `contracts/deployments`, so the indexer and settler exit before their liveness listener binds; the non-demo web image boots to a blank page, because an empty WalletConnect id reaches RainbowKit; Cloud Run has no route to the private-IP Cloud SQL (whose tier may also need `--edition=ENTERPRISE`); `services replace` leaves api, web and web-demo private; the WIF deployer can't run `gcloud builds submit`; and the deploy makes the contract owner's key the settler's. Eight L2s: origin enforcement is off in staging and prod; the click burst rule keys on the proxy's IP and never evicts; a CDN on serve JSON would share one-time click tokens and hide impressions; the CSP blocks API media and the fonts; the demo script's Fastlane step can't run; Slide 4 over-claims and cites a recording that doesn't exist; ARCHITECTURE §3.3 has drifted; and the phishing-blocklist claim is false. Plus L3s. The planner re-checked each against the code and confirmed them all. For example, RainbowKit throws in `getWalletConnectConnector`, `REPO_ROOT` is `/` in the image, `pricing-suggestion` is SIWE-only, and `check_click_url` checks only for https. Added **D14** (the split; hunk ownership per file; T20, 6.11–6.14 and 7.19 pre-assigned; the merge order; shared resources; unverified GCP facts marked inferred) and **D15** (the fix rules). New slices O–R, each in its own worktree off `f50076d`: **42** `fix/deploy-images` (Sonnet), **43** `fix/cloud-run-wiring` (Sonnet), **44** `fix/settler-key` (Opus) and **45** `fix/cpc-click-integrity` (Opus), in `/home/claude/OpenAd-42` … `-45`. Plus **46**, docs truth on #16 in the primary tree (Sonnet). All five are specced and [>]. Then **47**: the post-merge pass on #16 (merge main, 6.11–6.14 with the PR numbers, the docs that describe 42–45, and the gates), followed by the orchestrator's targeted Opus re-review, and then **CLOSE** (moved from 36b's item 8 and updated for 42–47). The 36 and 36b specs are replaced by an as-shipped record; the full text is at `486ab0b`. Five backlog notes added.
 - 2026-09-25 12:00 UTC — STEP_DONE 46, plus the orchestrator's decisions from 43's and 45's R1 reviews. **46 DONE**: `69e2aa9` (14 files, +145/−53) + `911d363` (fix round 1, 4 files), CI green on both; R1 FIX (L2: the threat model called the moderator's revoke the only takedown, but the publisher's `set_approval(id, False)`/`revoke_approval(id)` block a creative on its own slots, even under WAIVED; L3s: pin the script's default max CPC and the payout caption, widen the glossary regex, note L159's glob) → R2 PASS (mutations prove each new test; one optional L3, L159 is 139 characters → 47). web 237, embed 5, sim 13 + 1 skipped; test:demo 15/15 with the new script test; capture byte-identical twice, only `why-calculator.png` changed (43,478 B); /why defaults to `network-30` (3,500.00 vs 4,875.00 USDC; uplift 1,375.00 a month, 16,500.00 a year). §5's spec is replaced by an as-shipped record (the full text is at `30ffdda`). **45 R1 FIX** (L2: `[::1]` never matched in dev and test, and `Origin: null` with no Referer counted as a match, so an opaque-origin page got a paid campaign with a live `/v1/c/` token): 45 now also owns `serve/origin.py` and `test_origin.py`; an explicit `null` without a usable Referer host is a mismatch, neither header is a match, and the docs and T13 say best effort. Its L3s: pin `slot_id` in the burst key; mark the `.env.example` Cloud Run peer claim inferred; a short XFF chain keeps failing closed, and 45's §11 documents the LB rule (api ingress `internal-and-cloud-load-balancing`, `OPENAD_PUBLIC_URL` = the LB host). **43 R1 FIX** (L1: the runner-SA paragraph sat inside base L427-432; L2s: a check-sh SECRETKEY test that couldn't fail, `origin_of` cut only at "/", origin checks after the first side effect, a `--only stack` example without URLs and a first-run smoke on unmapped domains, bucket-scoped `storage.admin` on `_cloudbuild` likely insufficient, base L273 without the VPC vars; seven L3s, including an opt-in `PUBLIC_INVOKER=iam-disabled`): 43 gains base L273, creates `gs://<PROJECT_ID>-openad-builds` (uniform access) in §2, grants the deployer `storage.admin` on it only in §10, and documents `BUILD_STAGING_BUCKET` and the runner SA's `cloudbuild.builds.builder` + `artifactregistry.writer`, all inferred. **42** adds `--gcs-source-staging-dir` to its Cloud Build call and runbook §6 in its review fix round. **Planner correction:** the flag must read `${PROJECT}`, not `${PROJECT_ID}`: `deploy-gcp.sh` runs under `set -euo pipefail` and sets `PROJECT_ID` only in `render()`'s env prefix, so every run with `BUILD_STAGING_BUCKET` unset would abort (reproduced). Folded into D14 and D15 (amendments), specs 42, 43 and 45 (amendment blocks), 47 (the 45 review's stale lines: the §3.3 heading, the §7 Media cache row, ADR-0014 L117-118 and ADR-0017 L169; the `/embed-demo` copy as the one product-code exception; the L159 rewrap; the builds-bucket, LB and `PUBLIC_INVOKER` launch-checklist notes; the 7.20+ candidates) and CLOSE (user actions; the best-effort origin and IPv6 residuals). Two backlog notes: IPv6 /64 keying and `workers/serve`. 42–45 stay [>]; next is 47, once 42–45 merge, then the targeted re-review and CLOSE.
 - 2026-09-25 14:15 UTC — STEP_DONE 44 and 45 (both merged), plus 42's R1 and 43's R2. **45 DONE**: PR #21 (`90d523d`, 15 files, +777/−74) merged as `599368a`, CI 5/5. R1 FIX (as recorded at ~12:00) → fix round 1 (`origin_allowed`: loopback, now with `::1`, only in dev and test; an `Origin` naming no host is a mismatch unless the `Referer` names a matching host, an accepted deviation from literal `null`; neither header is a match; a malformed header no longer 500s; the burst test covers slot 2; the §11 LB bullet) → R2 FIX (L2: §9 and ADR-0017 still let non-media traffic reach Cloud Run directly, contradicting §11; L3: §11 over-claimed "fail closed"; L3: `allow_local` unpinned) → fix round 2 (the LB fronts every api path on the `API_URL` host; Cloud CDN only for `/v1/serve/*/media`, through a path-scoped backend, never `FORCE_CACHE_ALL`; "closing ingress is the fix"; a prod loopback test) → R3 PASS. pytest 336/6, PG 341/1; mutations 24/24, then 18/20 (one equivalent). **44 DONE**: PR #22 (`406b996`, 15 files, +1494/−29) merged as `5658fcb`, cleanly on top of #21; CI 5/5. R1 FIX (L2: after ownership moved to a Safe, `set_settler` let the deployer become the settler, reproduced on base and base-sepolia; L3s: refuse the artifact deployer at startup, export-only Sepolia advice because Moccasin loads `../.env` for every network, two surviving mutants, PROTOCOL wording) → fix round 1 (`resolve_settler(forbidden=…)`, `LoadedVault(vault, deployer)`, a rotation that refuses `owner()` and the deployer and really sends from the checked sender, `settler.key_is_deployer`) → R2 PASS, plus a test that kills the last mutant. Contracts 130, api PG 313/1 (the orchestrator, locally). §5's specs for 44 and 45 are replaced by as-shipped records (the full text is at `c9cf63f`). **42** (draft #20, `a2a9738`, CI green): R1 FIX (L1: runbook §6 lacks the staging flag, and its `--tag` example is invalid; L2: the boot check passes at first paint; L2: the CI fixture would clobber a committed `84532.json`; six L3s) → fix round 1 with the coder. **43** (uncommitted): R2 FIX (L2: the api smoke always uses `status.url`, which fails once the api's ingress is `internal-and-cloud-load-balancing` per #21's §11, so `--only all` stops before web; L2: the `[/?#]` cut, the guard order and the live-URL smoke are untested; L3s: `host[:digits]` only, `PUBLIC_INVOKER=iam-disabled` against `services replace`, doc gaps) → round 3 with a new Opus coder, after committing and merging main. The planner recommends choosing the api smoke URL by the ingress the script deploys; 43 may render `api.yaml` L15 (D14, ~14:15 amendment). D15 corrected: the smoke rule, the no-host `Origin` rule, and "fails closed" (it stops no one; closing ingress is the fix); `VITE_API_URL` noted as the exception to "empty means unset". 47 gains the PR numbers #20, #21 and #22, two inferred markers (§9, §11), ADR-0016 item 9, `contracts/README.md` L21 and L38, `api/README.md`'s settler line, `contracts/.deployments.db` in `.gitignore`, current main line numbers, and more 7.20+ candidates. CLOSE gains the merge commits and two residual risks. Backlog: three notes.
+- 2026-09-25 15:40 UTC — STEP_DONE 42 (merged). **42 DONE**: PR #20 merged as `a7f95f7`, CI 5/5 on `e945590` (run 36138557635). R1 FIX (as recorded at ~14:15) → fix round 1 (`60c2af8`: the boot check re-checks `#root` and page errors after a settle window, and parses its flags in any order; the CI fixture writes, and later deletes, `84532.json` only when none is committed; runbook §6 shows one valid build command with the staging flag, plus a `docker build` and `docker push` form; the web build steps force BuildKit) → main merged in (`d09712a`) → R2 FIX (L2: the `check-sh.sh` unset reached base L110, 43's shared dry-run line; L3: the WalletConnect CSP advice; L3: `web/Dockerfile`'s header) → round 3 with an Opus coder (`e945590`: L110 restored, the default bucket checked from its own run with the override unset; extra wallet hosts go in `CSP_CONNECT_SRC` only) → R3 PASS: `check:sh` passes with `BUILD_STAGING_BUCKET` unset and exported, the check-sh diff is one hunk (`@@ -115,0 +116,36 @@`), and a merge test against 43's working copy is clean in all 9 shared files, with the merged `--only all` dry-run running 43's guards, then 42's, then `builds submit` with `gs://p-openad-builds/source`. §5's spec is replaced by an as-shipped record (the full text is at `a0d91a8`). D14: the as-merged record, and 43, the last fix branch, merges main (now with #20) in first; 43's spec gains a "Main moved" note. D15: 42's as-shipped rules; `VITE_API_URL`'s `??` judged by design (an empty value means same-origin, and `||` would bake `http://localhost:8000` into the bundle), so the §8 note is struck and 47's 7.20+ candidate is dropped. 47: 42, 44 and 45 merged, only 43 left; ADR-0016 item 9 made precise; the WalletConnect user action names runbook §6's extra CSP hosts; `#<43>` stays a placeholder, and 6.11 cites #20. CLOSE gains #20's merge commit. JIT_INDEX: an Image rule bullet (shipped) split from the Cloud Run rules (43). 43 stays [>] (R3 re-review).
 
 ## 8. Backlog (found during the run; not scheduled)
 
@@ -1949,6 +1867,6 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 
 - The click burst rule keys IPv6 clients by their full address, so a client with a /64 can rotate addresses and never trip it. Key IPv6 by /64 → a 7.20+ candidate for 47 (the orchestrator's decision at 45's R1 review).
 - `workers/serve/src/index.ts` (ROADMAP 4.4: source only, not deployed) caches every ok `GET /v1/serve/*` response for 30 s, keyed by URL alone, and forwards the first visitor's `Origin`. The api's answer varies by `Origin` (paid or house), and campaign responses carry one-time tokens; whether Cloudflare's `cache.put` skips a `private, no-store` response is unverified. Before it is ever deployed, limit it to `/v1/serve/*/media` → a 7.20+ candidate for 47.
-- `web/src/lib/api.ts` reads `VITE_API_URL` with `??`, so an empty value means same-origin, not unset (the rule D15 states for `VITE_*` inputs). Use `||` → a 7.20+ candidate for 47 (from 42's R1 review; Cloud Build always passes `_API_URL`, and 43 refuses an unset `API_URL`, so it is latent).
+- ~~`web/src/lib/api.ts` reads `VITE_API_URL` with `??`, so an empty value means same-origin, not unset (the rule D15 states for `VITE_*` inputs). Use `||` → a 7.20+ candidate for 47 (from 42's R1 review; Cloud Build always passes `_API_URL`, and 43 refuses an unset `API_URL`, so it is latent).~~ → judged not needed (15:40): same-origin is what an empty `VITE_API_URL` is meant to mean (D15, and `web/Dockerfile`'s header since #20), and `||` would bake the dev default `http://localhost:8000` into a bundle built with an empty value.
 - The settler's startup check compares its key with the vault's `owner()` and the artifact's `deployer` only: a key that owns `AdSlot`, `Marketplace` or `CreativeRegistry` but not the vault isn't caught → a 7.20+ candidate for 47 (from 44's review).
 - `contracts/script/deploy.py` L226 (`_seed_demo`) runs over 100 columns (pre-existing) → a 7.7 note for 47.
