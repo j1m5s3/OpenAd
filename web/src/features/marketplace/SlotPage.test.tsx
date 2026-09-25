@@ -1,10 +1,14 @@
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { SlotPage } from './SlotPage';
 
 afterEach(cleanup);
+
+// Slot's calendar: firstPeriodStart 0, periodSeconds 3600 — used by the periods-window test below
+// to pick a "now" that lands in a known, non-zero period index.
+const usePeriods = vi.fn();
 
 vi.mock('./api', () => ({
   useSlot: () => ({
@@ -25,12 +29,14 @@ vi.mock('./api', () => ({
         startPrice: '1000000',
         floorPrice: '500000',
         leadSeconds: 600,
+        saleEnd: 0,
         approvalMode: 0,
         floorCpc: null,
+        paused: false,
       },
     },
   }),
-  usePeriods: () => ({ data: { items: [] } }),
+  usePeriods: (...args: unknown[]) => usePeriods(...args),
 }));
 
 function renderPage() {
@@ -42,6 +48,15 @@ function renderPage() {
     </MemoryRouter>,
   );
 }
+
+beforeEach(() => {
+  usePeriods.mockReset();
+  usePeriods.mockReturnValue({ data: { items: [] } });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('SlotPage share row', () => {
   it('shows an absolute, hash-safe slot URL', () => {
@@ -66,5 +81,17 @@ describe('SlotPage share row', () => {
       'href',
       expect.stringContaining('warpcast.com/~/compose'),
     );
+  });
+});
+
+describe('SlotPage periods window', () => {
+  it('requests periods starting at the current period index, not always 0 (PLAN step 40)', () => {
+    vi.useFakeTimers();
+    // The mocked slot's calendar is firstPeriodStart 0, periodSeconds 3600: period 5 runs
+    // [18000, 21600). A "now" inside it makes the current period index deterministically 5, well
+    // past the 15-period window (`from=0, to=14`) the page used to request unconditionally.
+    vi.setSystemTime(new Date(18_100 * 1000));
+    renderPage();
+    expect(usePeriods).toHaveBeenCalledWith('42', 5);
   });
 });

@@ -2,15 +2,15 @@ import { Link } from 'react-router';
 
 import { routes } from '../app/paths';
 import type { SlotOut } from '../lib/api';
-import { auctionOpenAt, auctionState } from '../lib/auction';
+import { auctionStatus } from '../lib/auction';
 import { withDevWalletParam } from '../lib/devWalletQuery';
 import { formatDuration, formatTimeLeft, formatUsdc, shortAddress } from '../lib/format';
 import { kindLabel, SALE_CPC, saleModeLabel } from '../lib/labels';
 import { categoryLabel } from '../lib/listingTaxonomy';
 
 export function SlotCard({ slot }: { slot: SlotOut }) {
-  const state = auctionState(slot);
-  const openAt = auctionOpenAt(slot);
+  const status = auctionStatus(slot);
+  const { state } = status;
   return (
     <Link
       to={withDevWalletParam(routes.slot(slot.slotId))}
@@ -46,10 +46,17 @@ export function SlotCard({ slot }: { slot: SlotOut }) {
           {slot.terms?.saleMode === SALE_CPC
             ? 'Campaigns compete at serve'
             : `Period ${slot.periodSeconds ? formatDuration(slot.periodSeconds) : '—'}`}
-          {state === 'upcoming' && openAt != null ? ` · live ${formatTimeLeft(openAt)}` : null}
-          {state === 'live' && slot.firstPeriodStart != null
-            ? ` · period starts ${formatTimeLeft(slot.firstPeriodStart)}`
+          {state === 'upcoming' && status.opensAt != null
+            ? ` · live ${formatTimeLeft(status.opensAt)}`
             : null}
+          {state === 'live' && status.startsAt != null
+            ? ` · period starts ${formatTimeLeft(status.startsAt)}`
+            : null}
+          {state === 'remainder' && status.opensAt != null
+            ? ` · next auction ${formatTimeLeft(status.opensAt)}`
+            : state === 'remainder' && status.endsAt != null
+              ? ` · final period ends ${formatTimeLeft(status.endsAt)}`
+              : null}
         </p>
         {slot.listing && (
           <div className="space-y-1.5">

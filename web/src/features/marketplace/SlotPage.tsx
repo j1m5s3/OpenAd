@@ -3,6 +3,7 @@ import { Link, useHref, useParams } from 'react-router';
 
 import { routes } from '../../app/paths';
 import { withDevWalletParam } from '../../lib/devWalletQuery';
+import { auctionStatus } from '../../lib/auction';
 import { FieldHint, GuideLink } from '../../components/FieldHint';
 import { formatDuration, formatUnixSeconds, formatUsdc } from '../../lib/format';
 import { SALE_CPC, approvalModeLabel, saleModeLabel } from '../../lib/labels';
@@ -22,7 +23,12 @@ function useSlotShareUrl(slotId: string): string {
 export function SlotPage() {
   const { slotId = '' } = useParams();
   const slot = useSlot(slotId);
-  const periods = usePeriods(slotId);
+  // The window follows the open-ended calendar (PLAN step 40): request the current period first
+  // (`from = max(0, current)`), not always period 0 — a calendar older than 15 periods would
+  // otherwise list only closed periods and leave nothing buyable on the page.
+  const now = Math.floor(Date.now() / 1000);
+  const current = slot.data ? auctionStatus(slot.data, now).current : undefined;
+  const periods = usePeriods(slotId, Math.max(0, current ?? -1));
   const [buy, setBuy] = useState<{ periodIndex: string; remainder: boolean } | null>(null);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'selected'>('idle');
   const linkInputRef = useRef<HTMLInputElement>(null);
