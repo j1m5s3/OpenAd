@@ -63,6 +63,16 @@ class Settings(BaseSettings):
     ipfs_gateway: str = "https://ipfs.io/ipfs/"
     verify_interval_seconds: int = 6 * 3600
     safe_browsing_key: str | None = None
+    # Overall deadline (ROADMAP 6.9 step 39) around connect, every redirect hop, and the body,
+    # for one `fetch_media` call — on top of the per-read httpx timeout. A host that trickles
+    # small chunks forever ("slow-drip") never trips a per-read timeout but still gets cut off
+    # here (`docs/threat-model.md` T18).
+    media_fetch_deadline_seconds: int = Field(default=30, ge=1)
+    # Wall-clock budget for one indexer verify pass (`services/media.verify_pending`, ROADMAP
+    # 6.9 step 39). Creatives it doesn't reach in the budget stay `pending` for the next pass,
+    # so a permissionlessly-registered creative with a slow `uri` delays verification but never
+    # blocks block indexing for longer than one budget plus one fetch deadline (T18).
+    verify_pass_budget_seconds: int = Field(default=20, ge=1)
 
     # --- indexer
     indexer_poll_seconds: float = 2.0

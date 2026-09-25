@@ -5,8 +5,11 @@ Serve never fetches advertiser URLs; only the verifier writes the cache.
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import socket
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from urllib.parse import urljoin, urlsplit
 
@@ -168,6 +171,21 @@ def _blocked_host(host: str) -> bool:
     return ip is not None and _blocked_ip(ip)
 
 
+def _content_encoding_ok(resp: httpx.Response) -> bool:
+    """True unless the response declares a non-identity `Content-Encoding`.
+
+    Callers read the body with `resp.aiter_raw()`, which bypasses httpx's automatic content
+    decoding — so a byte cap checked against it bounds what's actually read off the wire. If we
+    instead let httpx decode (`aiter_bytes()`) and capped the *decoded* size, a server could
+    still send a small, highly-compressed body (a "decompression bomb") that expands far past
+    the cap while it's being decoded (fix round 1, ROADMAP 6.9 step 39; docs/threat-model.md
+    T18). Callers also ask for `Accept-Encoding: identity`, but a server can ignore that, so the
+    actual response header is what's checked here, not what was requested.
+    """
+    encoding = resp.headers.get("content-encoding", "").strip().lower()
+    return encoding in ("", "identity")
+
+
 def _hop_allowed(url: str, *, is_dev: bool) -> bool:
     """Scheme + host check applied to the initial URL and every redirect hop alike.
 
@@ -193,35 +211,62 @@ def _hop_allowed(url: str, *, is_dev: bool) -> bool:
 
 
 async def fetch_media(uri: str, *, settings: Settings) -> tuple[bytes | None, str]:
+    """Fetch and return the creative's bytes, or ``(None, failed:*)``.
+
+    `FETCH_TIMEOUT_S` bounds each individual httpx read/connect, which a host that keeps the
+    connection open and trickles a few bytes every few seconds never trips (ROADMAP 6.9 step
+    39; `docs/threat-model.md` T18). `settings.media_fetch_deadline_seconds` wraps connect,
+    every hop, and the whole body in one `asyncio.timeout`, so that "slow-drip" host is still
+    cut off, deterministically, after one bounded deadline. The body is read raw
+    (`aiter_raw()`, see `_content_encoding_ok`) so `max_media_bytes` bounds actual wire bytes,
+    not a possibly-much-larger decoded size (fix round 1).
+    """
     url = _resolve_uri(uri, settings.ipfs_gateway)
     try:
         if not _hop_allowed(url, is_dev=settings.is_dev):
             return None, VERIFY_FAILED_FETCH
-        async with httpx.AsyncClient(timeout=FETCH_TIMEOUT_S, follow_redirects=False) as client:
-            for _ in range(MAX_REDIRECT_HOPS + 1):
-                async with client.stream("GET", url) as resp:
-                    if resp.has_redirect_location:
-                        url = urljoin(url, resp.headers["location"])
-                        if not _hop_allowed(url, is_dev=settings.is_dev):
+        async with asyncio.timeout(settings.media_fetch_deadline_seconds):
+            async with httpx.AsyncClient(
+                timeout=FETCH_TIMEOUT_S,
+                follow_redirects=False,
+                headers={"Accept-Encoding": "identity"},
+            ) as client:
+                for _ in range(MAX_REDIRECT_HOPS + 1):
+                    async with client.stream("GET", url) as resp:
+                        if resp.has_redirect_location:
+                            url = urljoin(url, resp.headers["location"])
+                            if not _hop_allowed(url, is_dev=settings.is_dev):
+                                return None, VERIFY_FAILED_FETCH
+                            continue
+                        resp.raise_for_status()
+                        if not _content_encoding_ok(resp):
                             return None, VERIFY_FAILED_FETCH
-                        continue
-                    resp.raise_for_status()
-                    chunks: list[bytes] = []
-                    total = 0
-                    async for chunk in resp.aiter_bytes():
-                        total += len(chunk)
-                        if total > settings.max_media_bytes:
-                            return None, VERIFY_FAILED_SIZE
-                        chunks.append(chunk)
-                    return b"".join(chunks), VERIFY_VERIFIED
-            return None, VERIFY_FAILED_FETCH  # too many redirect hops
-    except httpx.TimeoutException:
+                        chunks: list[bytes] = []
+                        total = 0
+                        async for chunk in resp.aiter_raw():
+                            total += len(chunk)
+                            if total > settings.max_media_bytes:
+                                return None, VERIFY_FAILED_SIZE
+                            chunks.append(chunk)
+                        return b"".join(chunks), VERIFY_VERIFIED
+                return None, VERIFY_FAILED_FETCH  # too many redirect hops
+    except (TimeoutError, httpx.TimeoutException):
         return None, VERIFY_FAILED_TIMEOUT
     except Exception:
         return None, VERIFY_FAILED_FETCH
 
 
 async def verify_creative(session: AsyncSession, creative_id: int, settings: Settings) -> str:
+    """Verify one creative. `CreativeRegistered` is permissionless, so any wallet can become a
+    creative's advertiser, and `POST /v1/creatives/{id}/verify` lets that advertiser
+    (`creatives.require_advertiser`) re-run this at any time, whatever the creative's current
+    status. So the network fetch below must not hold a pooled DB connection while it runs (fix
+    round 1, ROADMAP 6.9 step 39; docs/threat-model.md T18) — two concurrent verifies of one
+    creative previously pinned a connection each for the whole fetch, and could exhaust the
+    api's pool. Same pattern as `offchain.check_domain_verification`: read what the fetch needs,
+    commit (releasing the connection), fetch, then write the result in a newly auto-begun
+    transaction.
+    """
     creative = await session.get(Creative, creative_id)
     if creative is None:
         raise NotFoundError(f"creative {creative_id} not found")
@@ -237,7 +282,14 @@ async def verify_creative(session: AsyncSession, creative_id: int, settings: Set
         await session.commit()
         return row.status
 
-    data, fetch_status = await fetch_media(creative.uri, settings=settings)
+    uri = creative.uri
+    content_hash = creative.content_hash or ""
+    mime, width, height = creative.mime, creative.width, creative.height
+    click_url = creative.click_url
+    max_bytes = settings.max_media_bytes
+    await session.commit()  # release the pooled connection before network I/O (T18)
+
+    data, fetch_status = await fetch_media(uri, settings=settings)
     if data is None:
         row.status = fetch_status
         row.error = fetch_status
@@ -247,12 +299,12 @@ async def verify_creative(session: AsyncSession, creative_id: int, settings: Set
 
     status = verify_bytes(
         data,
-        content_hash=creative.content_hash or "",
-        mime=creative.mime,
-        width=creative.width,
-        height=creative.height,
-        click_url=creative.click_url,
-        max_bytes=settings.max_media_bytes,
+        content_hash=content_hash,
+        mime=mime,
+        width=width,
+        height=height,
+        click_url=click_url,
+        max_bytes=max_bytes,
     )
     row.status = status
     row.error = None if status == VERIFY_VERIFIED else status
@@ -265,7 +317,23 @@ async def verify_creative(session: AsyncSession, creative_id: int, settings: Set
     return status
 
 
-async def verify_pending(session: AsyncSession, settings: Settings) -> int:
+async def verify_pending(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    clock: Callable[[], float] = time.monotonic,
+) -> int:
+    """Verify pending creatives, in FIFO (`creative_id`) order, up to
+    `settings.verify_pass_budget_seconds` of wall clock (ROADMAP 6.9 step 39;
+    `docs/threat-model.md` T18). `CreativeRegistered` is permissionless and each fetch is only
+    bounded by `media_fetch_deadline_seconds`, so without a budget here a run of slow creatives
+    could hold up every `run_once` -> `process_range` -> `_verify_pending` call indefinitely and
+    stall block indexing. A creative this pass doesn't reach stays `pending` (unchanged) and is
+    retried next pass; one it does reach and that fails (any `failed:*` status, including
+    `failed:timeout`) is never retried automatically — this query only ever selects `pending`
+    rows. `clock` is injectable so tests can move time deterministically instead of racing a
+    real deadline.
+    """
     from datetime import timedelta
 
     from sqlalchemy import or_, select
@@ -274,20 +342,28 @@ async def verify_pending(session: AsyncSession, settings: Settings) -> int:
     ids = (
         (
             await session.execute(
-                select(CreativeVerification.creative_id).where(
+                select(CreativeVerification.creative_id)
+                .where(
                     CreativeVerification.status == VERIFY_PENDING,
                     or_(
                         CreativeVerification.checked_at.is_(None),
                         CreativeVerification.checked_at < cutoff,
                     ),
                 )
+                # FIFO by creative_id (roughly registration order), so a pass that runs out of
+                # budget always skips the same, highest-id creatives, not an arbitrary subset
+                # per backend — and so the order is the same test-to-test on SQLite and PG.
+                .order_by(CreativeVerification.creative_id)
             )
         )
         .scalars()
         .all()
     )
+    deadline = clock() + settings.verify_pass_budget_seconds
     count = 0
     for cid in ids:
+        if clock() >= deadline:
+            break
         await verify_creative(session, cid, settings)
         count += 1
     return count
