@@ -101,17 +101,24 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
   - 39, 40 and 41 are independent: 39 changes the api fetch paths, 40 the web and e2e, and 41
     the api periods route. They merge in whatever order they go green, and each later one
     merges main in first.
-  - 36 merges last, after all three. It then merges main in, re-captures the screenshots (so
-    Discover shows 40's fix) and replaces `#TBD-36`. It also records 39, 40 and 41 in the
-    ROADMAP, because it is the only step that edits the ROADMAP.
+  - 36 merges last, after all three. Its post-merge pass (**36b**) merges main in, re-captures
+    the screenshots (so Discover shows 40's fix) and replaces `#TBD-36` (= #16). It also records
+    39, 40 and 41 in the ROADMAP, because it is the only step that edits the ROADMAP.
   - The planner archives the plan in 36's PR.
-  - Expected textual overlaps (predicted from the specs, not yet checked against code):
+  - Expected textual overlaps (predicted from the specs; checked on 2026-09-25 07:40 UTC, see
+    the last sub-bullet):
     - `docs/threat-model.md`: 39 adds T18 and 41 adds T19, both after T17. The orchestrator
       restores the T17 → T18 → T19 order when merging.
     - `api/src/openad/routers/slots.py`: 39 changes the domain-verification route and 41 the
       periods route, in separate hunks.
     - `docs/ARCHITECTURE.md` §3.3: 41's cap note and 36's web-origin host rule.
     - `.env.example`: 39's two settings and 36's comments.
+    - Checked with `git merge-tree` (no refs, index or tree touched):
+      - 36 merges main at `3605473` (with 39) cleanly. It also merges main plus 40 cleanly,
+        including when 40 also fixes the capture script, and 41's branch cleanly.
+      - Main vs 41 conflicts only in `docs/threat-model.md` (the T18/T19 order). `routers/slots.py`
+        and ARCHITECTURE merge automatically.
+      - 40 vs 41 is clean.
 
 ## 3. Slices → branches
 
@@ -128,10 +135,10 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 | H Fix: fresh-DB Alembic chain (found in review) | `fix/alembic-fresh-db` | 6.6 prerequisite | — (merge before D ships and before F) |
 | J Auth hardening (SIWE binding, nonce/session hygiene, rate limit) | `fix/auth-hardening` (#15, merged `2c4101b`) | 6.8 | #13 merged |
 | K Capacity and deploy hardening (pool budget, scale caps, same-site, media hops) | `feat/ops-hardening` (#14, merged `5f27fb8`) | 6.9 | #13 merged; merge after J |
-| L Outbound-fetch bounds (accepted: indexer media deadline, domain-check fetch) | `fix/outbound-fetch-bounds` | noted under 6.9 by 36 | #14 merged; independent of M and N; merge before Final |
-| M Discover and slot-page period state (first-period anchoring) | `fix/discover-auction-state` | noted under 6.7 by 36 | #14 merged; independent of L and N; merge before Final |
-| N Periods range cap (accepted) | `fix/periods-range-cap` | noted under 6.9 by 36 | #14 merged; independent of L and M (T19 goes after T17; T18 restored on merge); merge before Final |
-| Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` | 6.3/6.6/6.7 ticks, 6.10, Phase 7 | started after J and K merged; merges last, after L, M and N |
+| L Outbound-fetch bounds (accepted: indexer media deadline, domain-check fetch) | `fix/outbound-fetch-bounds` (#17, merged `3605473`) | noted under 6.9 by 36b | #14 merged; independent of M and N; merge before Final |
+| M Discover and slot-page period state (first-period anchoring) | `fix/discover-auction-state` | noted under 6.7 by 36b | #14 merged; independent of L and N; merge before Final |
+| N Periods range cap (accepted) | `fix/periods-range-cap` | noted under 6.9 by 36b | #14 merged; independent of L and M (T19 goes after T17; T18 restored on merge); merge before Final |
+| Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` (draft #16) | 6.3/6.6/6.7 ticks, 6.10, Phase 7 | started after J and K merged; merges last, after L, M and N (post-merge pass 36b) |
 
 ## 4. Micro-steps (one line each; ✱ active, [>] active in parallel, ○ pending, ✓ done)
 
@@ -181,26 +188,32 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 ### Slice K — `feat/ops-hardening` (after #13; worktree `/home/claude/OpenAd-o`; parallel with 37, merge after it)
 - ✓ 38. K: pools at all four `Database(...)` sites (api 4 + 2, indexer and settler 2 + 1, migrate job no pool env); `maxScale` api 4, web and web-demo 10; `max_connections=100` pinned by flag, budget 31 steady / 34 with reserved / ≈64 in a rollout overlap; same-site guard in `deploy-gcp.sh` (`--allow-cross-site-auth`); media hops validated (≤3, https, private and reserved hosts refused outside dev); T17; ROADMAP 6.9 `[x]`. R1 FIX (2 L1) → R2 FIX → R3 (Opus) PASS, L3 only. `4370d09` (base `abb2b81`), Main merged in as `2f313d9` (conflicts only in ROADMAP and threat-model ordering; checks green); **PR #14 merged `5f27fb8`**. api 154 passed / 4 skipped (157 / 1 with PG); `check:sh` and YAML ok. **(as-shipped record below)**
 
-### Slice L — `fix/outbound-fetch-bounds` (accepted 2026-09-25; after #14; worktree `/home/claude/OpenAd-o`; merges before Final)
-- [>] 39. L: one overall deadline on media fetches and a per-pass budget for indexer verification, so a slow-drip media host can't stall block indexing; the domain meta check releases its DB connection before fetching, is bounded (deadline, body cap, 38's hop rules) and gets a per-slot cooldown; T18. **Accepted**; Sonnet coder, Opus review. Coded on `fix/outbound-fetch-bounds` (base `2f313d9`) in `/home/claude/OpenAd-o`. R1 FIX (2 L1, 3 L2) → **fix round 1 in progress**. The scope grew to `POST /v1/creatives/{id}/verify` and raw-byte reads (the spec's fix-round block). **Risk: medium.** **(compact spec below)**
+### Slice L — `fix/outbound-fetch-bounds` (accepted 2026-09-25; after #14; worktree `/home/claude/OpenAd-o`, now removed; merged first, as #17)
+- ✓ 39. L: one overall deadline on media fetches (`OPENAD_MEDIA_FETCH_DEADLINE_SECONDS`, 30 s) and a per-pass budget for indexer verification (`OPENAD_VERIFY_PASS_BUDGET_SECONDS`, 20 s); the domain meta check and `POST /v1/creatives/{id}/verify` read, commit, fetch, then write, so neither holds a pooled connection during network I/O; both fetchers read raw bytes (`Accept-Encoding: identity`, `aiter_raw`) under byte caps; `_check_meta` follows ≤ 3 hops under 38's rules with a 10 s deadline and a 256 KiB or `</head>` cap; the per-slot 30 s cooldown is one atomic `UPDATE` (429 `rate_limited`); T18. R1 FIX (2 L1, 3 L2) → R2 FIX (the tests missed their mutations) → R3 FIX (Opus coder; untested `Accept-Encoding`) → R4 PASS. `4bc78c1` + `687dbf4` + `7c11561` (base `2f313d9`), **PR #17 merged `3605473`**; worktree `-o` removed. api 269 passed / 6 skipped (274 / 1 with PG). **(as-shipped record below)**
 
 ### Slice M — `fix/discover-auction-state` (added 2026-09-25; worktree `/home/claude/OpenAd-p`; independent of L and N; merges before Final)
-- [>] 40. M: Discover's state, SlotCard's timing copy and the slot page's period window follow the open-ended calendar (the next purchasable period, `sale_end`, overlapping windows when `lead > period`) instead of the first period. A unit table plus a brute-force cross-check; demo e2e rows found by their index cell. Web and e2e only; no ROADMAP edit (36 records it). **Coder launched** 2026-09-25 (Sonnet; Opus review) in `/home/claude/OpenAd-p` off `5f27fb8`. **Risk: medium.** **(compact spec below)**
+- [>] 40. M: Discover's state, SlotCard's timing copy and the slot page's period window follow the open-ended calendar (the next purchasable period, `sale_end`, overlapping windows when `lead > period`) instead of the first period. A unit table plus a brute-force cross-check; demo e2e rows found by their index cell. Web and e2e only; no ROADMAP edit (36b records it). **Coder launched** 2026-09-25 (Sonnet; Opus review) in `/home/claude/OpenAd-p` off `5f27fb8`; committed `50b0285` (observed at 07:40 UTC, not yet reported). `e2e/demo/capture-screenshots.mjs` has the same positional row as `buyFirstPeriod`. 36b item 4 fixes it unless this step's fix round takes it; either way merges cleanly. **Risk: medium.** **(compact spec below)**
 
 ### Slice N — `fix/periods-range-cap` (accepted 2026-09-25; worktree `/home/claude/OpenAd-q`; independent of L and M; merges before Final)
-- [>] 41. N: cap `GET /v1/slots/{id}/periods` at 60 periods (422 `invalid_window`) and read its leases in one query; T19. Found while speccing 40: one unauthenticated request can hold a pooled DB connection indefinitely. **Accepted.** **Coder launched** 2026-09-25 (Sonnet) in `/home/claude/OpenAd-q` off `5f27fb8`; its Postgres tests use `openad_test_q`, and T19 goes directly after T17. **Risk: low.** **(compact spec below)**
+- [>] 41. N: cap `GET /v1/slots/{id}/periods` at 60 periods (422 `invalid_window`) and read its leases in one query; T19. Found while speccing 40: one unauthenticated request can hold a pooled DB connection indefinitely. **Accepted.** **Coder launched** 2026-09-25 (Sonnet) in `/home/claude/OpenAd-q` off `5f27fb8`; its Postgres tests use `openad_test_q`, and T19 goes directly after T17. Committed `5f31a5c` + `6b10332` (observed at 07:40 UTC, not yet reported). Merging main (with 39) in conflicts only in `docs/threat-model.md`: restore T17 → T18 → T19. **Risk: low.** **(compact spec below)**
 
 ### Final — `chore/launch-final` (started off `2f313d9` in parallel with 39; merges last, after 39, 40 and 41)
-- ✱ 36. Final (primary tree, `chore/launch-final` off `2f313d9`; R1 FIX → **fix round 1 in progress**, see §5). It covers:
+- ✓ 36. Final, coder rounds 1–2 (primary tree, `chore/launch-final` off `2f313d9`, **draft PR #16**, so `#TBD-36` = #16). R1 FIX → fix round 1 → **R2 FIX**. All R1 findings are resolved, and the runbook's IAM grants now match every secret. The orchestrator folded the R2 leftovers into 36b instead of running another round now. It covers:
   - ROADMAP: 6.3 `[x]` with a dated amended-acceptance note; 6.6 split into artifacts `[x]` and a new **6.10** live deploy `[ ]` (6.8 and 6.9 come from 37 and 38); 6.7 `[x]`; a Phase 7 backlog.
   - Sourcemaps off; the `PLAYWRIGHT_CHROMIUM_PATH` hook in the main e2e config.
   - Onramp guide page; guide README and SUMMARY.
   - README "What's in the box" (including the hardening and the same-site domain requirement) and two new deterministic screenshots.
   - Business docs (the launch checklist gains the custom-domain, XFF and budget user actions), ARCHITECTURE §7 truth fixes, a scorecard automated-checks section, AGENTS.md pointers.
   - The runbook's DB-password flow (§3/§5) and a DNS TXT truth fix (routed from 38); the web-origin host rule and a stale `api/README.md` (routed from 37).
-  - After merging main: re-capture the screenshots (40 changes Discover) and record 39, 40 and 41 in the ROADMAP.
-  - The planner archives the plan in the same PR.
-  **Risk: low.** **(full spec below, re-sequenced)**
+  **Risk: low.** **(full spec below; its post-merge parts moved to 36b)**
+- ○ 36b. Final, post-merge pass. Same branch and PR; it starts once 40's and 41's PRs merge (39's already has). It covers:
+  - merge main; `#TBD-36` → #16;
+  - cite #17 and the 40/41 PRs in the ROADMAP (6.7, 6.9, Phase 7), README and the launch checklist;
+  - 36's R2 leftovers;
+  - rebase the GTM launch plan on launch actions, with deck Slide 10 to match;
+  - the capture script finds the bought row by its index cell (the positional `nth()` breaks after 40), and `buy-leased.png` shows what its comment claims;
+  - re-capture the screenshots.
+  Sonnet, with an Opus review. Then the planner's CLOSE archive lands in the same PR, and the orchestrator ships. **Risk: low.** **(spec below)**
 
 ## 5. Active step — full spec
 
@@ -356,104 +369,67 @@ git diff --name-only origin/main...HEAD | grep '^\.cursor/' && echo "FAIL JIT fi
 ```
 
 
-### Step 39 — Bound outbound fetches (slice L, accepted, compact spec)
+### Step 39 — Bound outbound fetches (slice L): DONE, as-shipped record
 
-_Planner finding, verified against `4370d09`. **Accepted** by the orchestrator on 2026-09-25: it
-runs before 36 merges._
+**Status:** R4 PASS, after 4 review rounds. Branch `fix/outbound-fetch-bounds`, base
+`2f313d9`, head `7c11561`. **PR #17 merged as `3605473`** (seen on `origin/main` at 07:40 UTC;
+the orchestrator reported CI pending, merging when green). The `/home/claude/OpenAd-o` worktree
+is removed. The full pre-implementation spec is in git history (`f7db32c`).
 
-**Fix round 1 (R1 FIX; the orchestrator's scope decisions, 2026-09-25).** These supersede the
-items below where they differ:
-- F1 (L1). `POST /v1/creatives/{id}/verify` also held a pooled connection during `fetch_media`.
-  It is now in scope, with the same read, commit, fetch, write pattern as item 3.
-- F2 (L1). `_check_meta`'s body loop rescanned the buffer (O(n²)), and decoded chunks allowed a
-  gzip bomb. Both `_check_meta` and `fetch_media` send `Accept-Encoding: identity` and read with
-  `aiter_raw`, so the byte caps apply to wire bytes. A server that ignores `identity` fails
-  closed (hash or tag mismatch).
-- F3 (L2). The cooldown was read-then-write. It is now one atomic conditional `UPDATE` (a row
-  count of 1 wins).
-- F4 (L2). The T18 residual text is corrected, and `_check_meta`'s deadline gets a test.
-- L3s, including a guard for a re-issued token, are the coder's call in fix round 1. Leftovers
-  go to §8.
+**Commits:**
+- `4bc78c1`: fix round 1 checkpoint.
+- `687dbf4`: round 2, so the tests catch their mutations.
+- `7c11561`: round 3, so the domain check asserts `Accept-Encoding: identity`.
 
-**Where:**
-- Sequence: #15 (37) merges → main is merged into #14 → #14 (38) merges → 39 starts on a fresh
-  branch `fix/outbound-fetch-bounds` off `origin/main` in the `/home/claude/OpenAd-o` worktree.
-  JIT files are not edited there.
-- It reuses 38's `_hop_allowed` and 37's `RateLimitedError(message, retry_after=…)`.
-- 36 starts at the same time in the primary tree, off the same main. 39 edits no ROADMAP line
-  (36 records it under 6.9). 39, 40 and 41 merge in whatever order they go green, each later
-  one merging main in first (D13); 36 merges last.
+**Files:**
+- `.env.example`;
+- `api/src/openad/{config.py, errors.py, routers/slots.py, services/media.py,
+  services/offchain.py}`;
+- `api/tests/{test_domain_verification.py (new), test_media.py}`;
+- `docs/ARCHITECTURE.md` §3.5/§3.6;
+- `docs/threat-model.md` T18.
 
-**Coder model:** Sonnet, with an Opus review. **Risk: medium.** It changes the indexer loop and a
-user-facing route. The failure mode is availability, not funds.
+**As shipped:** items 1–6 of the spec, plus F1–F4 from fix round 1:
+- media fetches have one overall deadline (`OPENAD_MEDIA_FETCH_DEADLINE_SECONDS`, 30 s);
+- indexer verification has a per-pass budget (`OPENAD_VERIFY_PASS_BUDGET_SECONDS`, 20 s);
+- the domain meta check, and `POST /v1/creatives/{id}/verify`, read, then commit, then fetch,
+  then write, so neither holds a pooled DB connection during network I/O;
+- both fetchers send `Accept-Encoding: identity` and read with `aiter_raw` under byte caps, and
+  fail closed if a server ignores it;
+- `_check_meta` follows redirects manually under 38's hop rules, with a deadline and a body cap;
+- the per-slot cooldown is one atomic conditional `UPDATE`, answered with 429 `rate_limited`.
 
-**Evidence:**
-- **Media verification can stall indexing.**
-  - `services/media.py` `fetch_media` only has httpx per-operation timeouts
-    (`FETCH_TIMEOUT_S = 10`, applied to each read). A host that sends a small chunk every few
-    seconds, and stays under `max_media_bytes` (2 MiB), never times out.
-  - `verify_pending` is sequential and runs inline in the indexer's `run_once`
-    (`indexer/runner.py:225`), after each block range.
-  - Every on-chain `CreativeRegistered` queues a fetch (`indexer/handlers.py:491`), and
-    registering a creative is permissionless.
-  - So one cheap transaction can stall block indexing indefinitely, and new leases never reach
-    serve.
-- **The domain meta check can exhaust the api's DB pool.**
-  - `services/offchain.py:204` `_check_meta` uses `follow_redirects=True` and reads the whole
-    body.
-  - It runs inside `POST /v1/slots/{id}/domain-verification?check=true` while the request's
-    session holds a pooled connection (`get_session` and `require_slot_owner` have already
-    queried).
-  - Minting a slot is permissionless, so one wallet can pin all `4 × (4 + 2) = 24` api
-    connections with about 24 slow requests.
-  - Serve reads the DB on every request (`routers/serve.py`), so it then fails after
-    `pool_timeout`. 38's smaller pools make this cheaper.
+**Reviews:**
+- R1 FIX:
+  - L1: creative verify pinned the pool.
+  - L1: `_check_meta` had an O(n²) scan and allowed gzip bombs.
+  - L2: the cooldown had a race.
+  - L2: T18 had errors.
+  - L2: the deadline had no test.
+- R2 FIX:
+  - L2: the slow-drip test passed without the deadline.
+  - L2: the body-cap test lost its mutation.
+  - L3: the media header assert was swallowed.
+  - L3: wording.
+- R3 FIX (the coder was escalated to Opus). L2: `_check_meta`'s `Accept-Encoding` header is
+  load-bearing but untested; without it most real hosts gzip, and verification quietly fails.
+- R4 PASS. Mutations (a)–(e) are all caught, and the timing tests are stable at about a quarter
+  of a core.
 
-**Items**
-1. `fetch_media`: one overall deadline around connect, every hop and the body
-   (`asyncio.timeout`). A new setting, `media_fetch_deadline_seconds: int = 30`; when it's hit,
-   return `VERIFY_FAILED_TIMEOUT`.
-2. Indexer: `_verify_pending` gets a pass budget (`verify_pass_budget_seconds: int = 20`).
-   Creatives it doesn't reach stay pending for the next pass, so indexing resumes after at most
-   one budget plus one deadline. Bounded concurrency is Phase 7.
-3. `check_domain_verification`: read the domain and token, then end the transaction (commit) so
-   no pooled connection is held. Run the network check, then write the result in a new
-   transaction.
-4. `_check_meta`:
-   - https only (http only in dev);
-   - redirects followed manually with 38's `_hop_allowed`, at most 3;
-   - an overall 10 s deadline;
-   - the body streamed, stopping at 256 KiB or at `</head>`.
-5. Per-slot cooldown for `check=true`: at most one check per 30 s, based on `last_checked_at`.
-   Otherwise 429 `rate_limited` with `Retry-After` (37's `RateLimitedError`).
-6. Docs:
-   - `docs/threat-model.md` **T18** "Outbound fetch stall (slow-drip media or verification
-     host)";
-   - ARCHITECTURE's verification paragraph names the deadline and the pass budget;
-   - `.env.example` gets the two settings.
+**Checks:**
+- ruff, format (src and tests) and mypy clean.
+- pytest 269 passed / 6 skipped; with PG (`openad_test`) 274 passed / 1 skipped.
 
-**Tests:**
-- An httpx `MockTransport` whose body is an async stream that sleeps between chunks, with a
-  small deadline, gives `failed:timeout` within the deadline.
-- The pass budget stops the loop and leaves the rest pending.
-- In prod mode, `_check_meta` refuses an http or private-IP redirect, and stops at the body cap.
-- No transaction is open while the check runs (`session.in_transaction()` is False).
-- The cooldown returns 429 with `Retry-After`.
+**Residuals, recorded in T18:**
+- no per-address or per-session limit on creative verify (Phase 7);
+- no per-pass fetch concurrency (Phase 7, already 7.14);
+- DNS rebinding stays with T17 (7.12).
 
-**Verify**
-```bash
-(cd api && uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy src && uv run pytest -q)
-(cd api && OPENAD_TEST_PG_URL=<pgserver url> uv run pytest -q)
-grep -n "follow_redirects=True" api/src/openad/services/*.py && echo FAIL || echo redirects-ok
-```
-
-**Done when:**
-- A slow-drip media host costs the indexer at most one deadline per creative, and never blocks
-  block indexing for longer than one budget plus one deadline.
-- The domain check holds no DB connection during network I/O and is bounded.
-- T18 is added.
-- All checks are green.
-- Ship: PR, CI, merge before 36.
+**Backlog notes** (§8; 36b records them in ROADMAP 7.7 and 7.14):
+- an unscoped `ruff format --check` flags `0002_cpc.py` (known, 7.7);
+- prettier table alignment already fails at base on `ARCHITECTURE.md` and `threat-model.md`,
+  and CI doesn't check docs;
+- code comments cite "step 39", which only the archive's step → PR map resolves.
 
 
 ### Step 40 — Discover and slot-page period state follow the open-ended calendar (slice M, compact spec)
@@ -637,7 +613,10 @@ contain once #13 merges. Re-sequenced in the same pass: **36 starts after the ha
 37 and 38 merge, and merges after 39, 40 and 41**, so its docs describe the
 hardened state. Facts refreshed again after STEP_DONE 37 (39 accepted) and the 40/41 REVISE._
 
-**Progress (fix round 1, 2026-09-25).** Coded on `chore/launch-final` off `2f313d9`.
+_The post-merge work is now **36b** (below): item 3's 39/40/41 lines, item 13 and the
+post-merge "Done when" bullets. 36b supersedes them where they differ._
+
+**Progress (rounds 1–2, 2026-09-25).** Coded on `chore/launch-final` off `2f313d9`; draft **PR #16**.
 - R1 FIX, L1s:
   - the `gcloud sql users set-password` syntax is wrong;
   - the onramp guide falsely says the app shows the USDC address;
@@ -654,7 +633,11 @@ hardened state. Facts refreshed again after STEP_DONE 37 (39 accepted) and the 4
   - a latent capture-script bug: after a LEASE buy it waited for the CPC-only "Confirmed on
     chain"; it now waits for "Lease confirmed";
   - stale ARCHITECTURE §5 claims ("6.2 in progress", "SPA fallback").
-- `#TBD-36` placeholders stand for this PR's number; the orchestrator replaces them.
+- `#TBD-36` placeholders stand for this PR's number, **#16**; 36b replaces them.
+- R2 FIX: all R1 findings are resolved, and the runbook's IAM grants now match every secret.
+  - The leftovers are the L2 on 6.9's PR citation and the L3s in 36b items 3 and 4, two of them
+    pre-existing runbook issues. They fold into **36b**, together with the orchestrator's GTM
+    rebase: one coder round after 39, 40 and 41 merge, rather than a round now.
 
 **Why merged:** 17+18 (guide, ROADMAP 6.3, ship C) and 32+33 (ROADMAP ticks, README, guide
 SUMMARY, qa note, archive) edit the same files: `docs/ROADMAP.md`, `docs/guide/SUMMARY.md` and
@@ -686,8 +669,9 @@ stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
   https://claude.ai/artifact/Day12XXUFNi7CJdNpa2MUH. Both are private until the owner shares
   them.
 - PRs: #4 A, #5 E, #6 H, #7 F, #8 B, #9 D, #10 C1, #11 G, #12 I, #13 C2, #15 J (37, auth
-  hardening), #14 K (38, capacity and deploy hardening), then L (39, outbound-fetch bounds). Take
-  the numbers from `git log`.
+  hardening), #14 K (38, capacity and deploy hardening), #17 L (39, outbound-fetch bounds, merged
+  `3605473`), and #16 is this PR. M (40) and N (41) get their numbers when they open. Take the
+  numbers from `git log --merges origin/main`.
 - After 37 and 38:
   - SIWE is bound to allowed origins (strict EIP-4361 built with viem's `createSiweMessage` on
     web and sim, EIP-55 addresses, ±300 s skew); nonce use is atomic; auth rows are pruned.
@@ -701,7 +685,7 @@ stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
   - Every media redirect hop is validated. Host blocking applies outside dev only, because the
     sim uses loopback (ADR-0012).
   - ROADMAP 6.8 and 6.9 are `[x]` from those steps.
-- 39 (merges before 36): media fetches have one overall deadline, and indexer verification has a
+- 39 (PR #17, merged `3605473`): media fetches have one overall deadline, and indexer verification has a
   per-pass budget. The domain meta check, and `POST /v1/creatives/{id}/verify`, hold no DB
   connection while they fetch. Both fetchers read raw bytes with `Accept-Encoding: identity`. The
   meta check is bounded and has a per-slot cooldown (T18).
@@ -951,6 +935,220 @@ git status --short   # no .cursor/ staged by the coder; no api/, contracts/ chan
      audit, legal).
 
 
+### Step 36b — Launch finalization, post-merge pass (slice Final; starts once 39, 40 and 41 have merged)
+
+_Specced 2026-09-25 07:40 UTC at STEP_DONE 39, from 36's R2 findings and the orchestrator's
+additions. It supersedes 36's item 3 (its 39/40/41 lines), item 13 and the post-merge "Done
+when" bullets. Facts were checked against `origin/main` @ `3605473` (#17 merged), 40 @ `50b0285`
+and 41 @ `6b10332`._
+
+**When and where:**
+- It starts once 40's and 41's PRs have merged. 39's has: #17 → `3605473`.
+- Primary tree `/home/claude/OpenAd`, branch `chore/launch-final`, draft **PR #16**. Push to the
+  same branch; don't open a new PR.
+- One coder round: Sonnet, with an Opus review. **Risk: low.** The work is docs, the capture
+  script and regenerated PNGs. There's no product code.
+- The coder does not stage `.cursor/`. The planner's CLOSE (item 8) lands in the same PR after the
+  review passes, and the orchestrator commits it.
+
+**Items**
+1. **Merge main.** Run `git fetch && git merge origin/main`: a merge commit, not a rebase, because
+   #16 is pushed.
+   - Expect it to be clean. `git merge-tree` shows no conflicts for 36 against main at
+     `3605473`, against main plus 40, or against 41, including when 40 also fixes the capture
+     script.
+   - 41's own conflict with 39 (the T18 and T19 order in `docs/threat-model.md`) gets resolved on
+     41's branch before it merges.
+   - If anything does conflict, keep both sides' facts.
+   - After the merge, re-read these, since they now sit side by side:
+     - ARCHITECTURE §3.5–§3.6: 39's deadline, budget and cooldown text next to 36's DNS TXT truth
+       fix;
+     - ARCHITECTURE §3.3: 41's cap note next to 36's web-origin host rule;
+     - `.env.example`: 39's two settings next to 36's comments;
+     - `docs/threat-model.md`: the order must be T15 … T19.
+2. **PR numbers and claims.** Take the numbers from `git log --merges --oneline origin/main`
+   ("Merge pull request #N from …"). Then make these edits:
+   - Replace `#TBD-36` with `#16` in `docs/business/launch-checklist.md` (the Sourcemaps row and
+     the republish row) and in `docs/business/market-fit.md` (blockers 1 and 5).
+   - **ROADMAP 6.9** (R2 L2):
+     - Its closing sentence cites **PR #17** instead of "the outbound-fetch-bounds PR". It also
+       says that `POST /v1/creatives/{id}/verify` releases its connection before fetching, and
+       that both fetchers read raw bytes under their caps.
+     - Add one sentence for 41's PR: `GET /v1/slots/{id}/periods` rejects windows wider than 60
+       periods (422 `invalid_window`) and reads leases in one query (**T19**).
+     - Pointers gain T18 and T19.
+   - **ROADMAP 6.7:** add a dated line for 40's PR. Discover's state, the slot card's timing copy
+     and the slot page's period list follow the open-ended calendar (PROTOCOL §4.1). Before it,
+     every slot read "Ended" one period after its first, and a calendar older than 15 periods
+     showed nothing buyable.
+   - **ROADMAP Phase 7:**
+     - 7.14 says PR #17 bounds each fetch and each pass but not how many run concurrently. Add
+       that `POST /v1/creatives/{id}/verify` has no per-address or per-session limit (T18
+       residuals; `api/src/openad/routers/creatives.py`).
+     - 7.7 adds two things:
+       - prettier on `docs/`: table alignment already fails on `ARCHITECTURE.md` and
+         `threat-model.md`, and CI doesn't check docs;
+       - code comments cite JIT step numbers ("step 39", "PLAN step 40"). The archived plan's
+         step → PR map resolves them.
+     - A new **7.17 "Sim planner period window".** `sim/src/planner/snapshot.ts:48` lists
+       periods 0–4 only, so sim activity stops after five periods. It should list from the
+       current index, as 40 does. Pointers: `sim/src/planner/`.
+   - **README "What's in the box",** the security bullet: replace "outbound-fetch time limits ship
+     separately (ROADMAP 6.9, T18)" with what shipped:
+     - outbound fetches have an overall deadline and hold no DB connection while they run
+       (PR #17, T18);
+     - the periods endpoint caps its window (41's PR, T19).
+   - **`launch-checklist.md` Done table:** add a row for each of these:
+     - #15, auth hardening;
+     - #14, capacity and deploy hardening;
+     - #17, outbound-fetch bounds;
+     - 40's PR: Discover and the slot page follow the open-ended calendar;
+     - 41's PR: periods range cap.
+   - **`pitch-deck.md` Slide 11:** "Built" may say "auth, capacity and request-bound hardening".
+     Change nothing else there.
+   - **JIT process words that 39 added to docs:** in `docs/ARCHITECTURE.md` and `.env.example`,
+     "fix round 1" and "step 39" become "ROADMAP 6.9, PR #17", or just the T18 reference. Code
+     comments stay as they are (7.7).
+3. **36's R2 leftovers** (docs only):
+   - L3, `docs/deploy-gcp.md`, the web-origin host rule (≈L397–399): "which are checked against
+     the same rule" becomes "which must follow the same rule". The API doesn't validate its
+     origin lists against it.
+   - L3, `docs/qa/scorecard.md` (≈L63–68): each demo spec file has its own `auto: true` guard
+     (`flows.spec.ts` and `growth.spec.ts`), and only `flows.spec.ts`'s also fails on an HTTP
+     response ≥ 400. Say exactly that.
+   - L3, `docs/guide/advertiser/getting-usdc-on-base.md` (L23–24): "a single permit signature
+     (EIP-2612)" becomes "one permit signature (EIP-2612) plus one transaction, with no separate
+     approval transaction".
+   - L3 (pre-existing), `docs/deploy-gcp.md` §5: grant `openad-migrate-<ENV>` only the
+     database-URL secret, because `infra/gcp/jobs/migrate.yaml` mounts nothing else. The session
+     and click secrets go to `openad-api-<ENV>` only, which `api.yaml` mounts. The settler-key
+     and database-URL grants stay as they are.
+   - L3 (pre-existing), §14 Teardown: `gcloud run services delete` and `gcloud secrets delete`
+     take one name each, so loop over the names. Add `openad-web-demo`
+     (`infra/gcp/services/web-demo.yaml`).
+4. **Capture script** (`e2e/demo/capture-screenshots.mjs`):
+   - **Row addressing (planner finding; it breaks after 40).**
+     - The script finds the bought row by position (`page.locator('tbody tr').nth(periodIndex)`,
+       with the comment "Rows list periods 0..n in order").
+     - After 40, the slot page lists from the current period, which is index 3 in the demo
+       (`fps = now − 3.5 days`). So `nth(4)` is period 7, and the "Leased" wait times out.
+     - Find the row by its index cell instead, as 40's `flows.spec.ts` does:
+       `page.locator('tbody tr', { has: page.getByRole('cell', { name: periodIndex, exact: true }) })`.
+       Fix the comment too.
+     - If main already has this fix (the orchestrator may relay it to 40), keep main's version.
+   - **`buy-leased.png`** (R2 L3): the comment promises the Leased row next to the wallet balance,
+     but after scrolling to the top, that row is below the fold.
+     - Take the shot full-page, like `discover-categories.png`, as long as it stays ≤ 400 KB.
+     - Otherwise, keep the viewport shot and reword the comment to describe what it shows.
+     - Either way, keep the wait on the row's "Leased" button.
+5. **GTM launch plan** (orchestrator): rebase `docs/business/gtm-marketing.md` "Launch plan"
+   (L39–49) on launch actions, matching the hosted deck's refreshed GTM slide:
+   - **Days 0–30, go live:** launch on Base Sepolia and Google Cloud (ROADMAP 6.10), and
+     hand-recruit pilot publishers with the demo and the embed tag.
+   - **Days 30–60, prove it:** pilots' CTR, eCPM and spend from the built-in dashboards go into
+     advertiser outreach, alongside the first hackathon sponsorship.
+   - **Days 60–90, scale it:** the independent audit (7.10), then Base mainnet; grant applications
+     and direct outreach with the deck.
+   - Add one sentence: the product work behind each phase is already built (6.2–6.9); what
+     remains is the launch, the pilots and the audit.
+   - `pitch-deck.md` Slide 10 gets the same three phases, one line each. It is the hosted deck's
+     source, and the orchestrator regenerates the deck from it.
+6. **Re-capture** after items 1 and 4:
+   - Run `npm run build:demo`, then `capture:screenshots` twice. The two runs must be
+     byte-identical, with every PNG ≤ 400 KB.
+   - `discover.png` shows slots 0, 2 and 4 as live (40).
+   - Check that README's alt text and the doc captions still describe each image.
+7. **Formatting:** run `npx prettier --write` on the business docs you edited. `docs/` tables
+   outside `docs/business/` stay as they are (7.7).
+8. **Planner CLOSE, after the review passes, in the same PR.** The planner only; the orchestrator
+   commits it.
+   - Write `.cursor/jit_history/2026-09-25-market-fit-launch.md`, in the compact archive style of
+     `2026-09-12-sme-ux-critique-loop.md`:
+     - title "# JIT_PLAN — Market fit, hardening and launch (archived)";
+     - a header: created 2026-09-24, closed when #16 merges; ROADMAP 6.1–6.9 `[x]`, 6.10 open
+       (user-run), Phase 7 listed.
+   - Its **Decisions** section condenses D1–D13.
+   - Its **Outcome** section contains:
+     - The PR list, each with its slice and merge commit: #4–#17, plus 40's and 41's PRs.
+     - A **step → PR map**, so the "step NN" references in code and docs resolve:
+
+       | Steps | PR |
+       | ----- | -- |
+       | 1, 3 | #4 |
+       | 4–13 | #8 |
+       | 14+15 | #10 |
+       | 16 | #13 |
+       | 19–22 | #9 |
+       | 23+24 | #5 |
+       | 25–29 | #7 |
+       | 30+31 | #11 |
+       | 34 | #6 |
+       | 35 | #12 |
+       | 36 and 36b | #16 |
+       | 37 | #15 |
+       | 38 | #14 |
+       | 39 | #17 |
+       | 40 | M's PR |
+       | 41 | N's PR |
+
+       Steps 2, 17+18 and 32+33 were folded into other steps.
+     - The demo and deck links, which stay private until the owner shares them.
+     - The open user actions:
+       - the 6.10 live deploy;
+       - a custom domain;
+       - the WIF secrets;
+       - the Sepolia deploy plus `84532.json`;
+       - verify XFF, then enable the limiter;
+       - confirm `max_connections`;
+       - the audit;
+       - legal;
+       - sharing the Artifacts.
+     - Residual risks:
+       - not audited;
+       - the per-instance limiter is off until XFF is verified;
+       - DNS rebinding (T17);
+       - T18's per-address verify limit and concurrency;
+       - DNS TXT doesn't work;
+       - the same-site guard isn't PSL-aware.
+     - A pointer to Phase 7 (ROADMAP 7.1–7.17).
+   - Its **Identity fence** section is as in §6.
+   - Delete `.cursor/JIT_PLAN.md`, as `45645e1` did. The full plan stays in git history.
+   - Refresh `.cursor/JIT_INDEX.md`:
+     - ADRs 0001–0017;
+     - the Phase 6 section points at the archive;
+     - drop the "accepted" and "in progress" wording;
+     - the hosted demo is "rebuilt from main after #16".
+
+**Verify:** run 36's Verify block in full (after the merge), plus the following.
+```bash
+cd /home/claude/OpenAd
+git log --merges --oneline origin/main | head -5          # PR numbers for item 2
+(cd api && uv run ruff check src tests && uv run mypy src && uv run pytest -q)   # main's api code after the merge
+grep -rn 'TBD-36' --exclude-dir=node_modules --exclude-dir=.cursor . && echo "FAIL placeholders" || echo tbd-ok
+grep -n "nth(" e2e/demo/capture-screenshots.mjs && echo "REVIEW positional rows" || echo rows-ok
+grep -n "ship separately\|outbound-fetch-bounds PR" README.md docs/ROADMAP.md && echo "REVIEW PR claims" || echo claims-ok
+grep -n "fix round\|step 39" docs/ARCHITECTURE.md .env.example && echo "REVIEW process words" || echo words-ok
+grep -n "services delete openad-api openad\|secrets delete openad-database-url-<ENV> openad" docs/deploy-gcp.md && echo "FAIL teardown" || echo teardown-ok
+grep -n "checked against the same rule" docs/deploy-gcp.md && echo "FAIL host rule" || echo hostrule-ok
+git diff --stat origin/main...HEAD                         # 36's files only (plus .cursor/ after CLOSE)
+```
+
+**Done when:**
+- Main is merged in, and 36's Verify block and the checks above pass.
+- The screenshots are re-captured: deterministic, ≤ 400 KB each, and Discover shows 40's labels.
+- No `#TBD-36` remains. README, ROADMAP (6.7, 6.9, Phase 7) and the launch checklist cite #16,
+  #17 and 40's and 41's PRs.
+- The R2 leftovers are fixed. The GTM plan and Slide 10 match the hosted deck.
+- The Opus review passes.
+- Then the planner's CLOSE (item 8) is committed on the branch, and the orchestrator:
+  1. marks #16 ready and waits for CI 5/5;
+  2. merges #16;
+  3. republishes the demo Artifact from main (maps gone; same URL, still private);
+  4. regenerates the hosted deck from `pitch-deck.md` (Slides 10 and 11 changed; same URL);
+  5. sends the user the final report: what shipped, the demo and deck links with the share
+     reminder, and the user actions from the Outcome section.
+
+
 ## 6. Identity fence (unchanged)
 
 Non-custodial api/web; slots leased not sold; one-tx LEASE buy; Marketplace empty after tx;
@@ -989,6 +1187,7 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - 2026-09-25 05:36 UTC — STEP_DONE 37: R1 FIX (2 L2) → R2 PASS; `eb8193f` + `2ce0f5b` (JIT files up to the STEP_DONE 38 pass), **PR #15** open, CI pending. api 219/5 (223/1 with PG), web 212, embed 5, sim 13 + 1, demo 14/14, YAML e2e 13/13; live uvicorn relay, clock-skew, size and limiter checks pass. §5's full spec is replaced by an as-shipped record (the full text is in `2ce0f5b`). **39 accepted**: after #15 → main merged into #14 → #14, it starts in `/home/claude/OpenAd-o` (Sonnet, Opus review) while 36 starts in the primary tree off the same main; 39 merges first. 36 refreshed: new PR order (#15 before #14), 37's shipped facts, the web-origin host rule (viem rejects IPv6 literals and single-label hosts other than `localhost`), the stale `api/README.md` (migration list at 0002, and a claim that the Dockerfile migrates on start), and a definite 6.9 line for 39. 37's L3s and `OPENAD_SESSION_SECRET` go to the Phase 7 list. JIT_INDEX: `OPENAD_SIM_WEB_ORIGIN`, migration head `0005`, CI Postgres.
 - 2026-09-25 06:55 UTC — REVISE and progress. #15 merged `2c4101b`; main merged into #14 as `2f313d9` (conflicts only in ROADMAP and threat-model ordering, as predicted); #14 merged `5f27fb8`. 39 was coded off `2f313d9` and is in fix round 1 after R1 FIX. Its scope grew to `POST /v1/creatives/{id}/verify`, raw-byte reads with `Accept-Encoding: identity`, and an atomic cooldown; recorded as F1–F4. 36 was coded off `2f313d9` and is in fix round 1 after R1 FIX (set-password syntax, onramp claim, screenshot scroll offset, GLOSSARY DNS TXT, `VITE_API_URL` in the host note, `VITE_SOURCEMAP` is shell-only, the 6.7 amended note, and a new deploy bug: the settler lacks `secretAccessor` on the database-URL secret). Shipped extras are recorded. **New step 40** (slice M, `fix/discover-auction-state` in `/home/claude/OpenAd-p`): Discover state anchored to the first period. The planner verified it and widened it to the slot page, which lists periods 0–14 only, so older calendars show nothing buyable. It also found that `buyFirstPeriod` in the demo e2e addresses rows by position. **Proposed 41** (slice N): `GET /v1/slots/{id}/periods` has no range cap and does one DB read per index, so one unauthenticated request can hold a pooled connection indefinitely. Added D13 (merge order 39 → 40 (→ 41) → 36). Backlog: the sim planner lists periods 0–4 only.
 - 2026-09-25 07:00 UTC — REVISE: **41 accepted** and launched now (orchestrator override of its Where): Sonnet coder in the new worktree `/home/claude/OpenAd-q` on `fix/periods-range-cap` off `5f27fb8`. Its PG tests use `openad_test_q` on the same pgserver socket, and T19 goes directly after T17 (the orchestrator restores T17 → T18 → T19 on merge). **D13 amended**: 39, 40 and 41 are independent and merge in whatever order they go green, each later one merging main in first; 36 merges last, then merges main in, re-captures the screenshots and replaces `#TBD-36`. **40 launched** (Sonnet) in `/home/claude/OpenAd-p`. 39 and 36 are still in fix round 1. D13 now lists the expected textual overlaps: threat-model (39/41), `routers/slots.py` (39/41), ARCHITECTURE §3.3 (36/41) and `.env.example` (36/39).
+- 2026-09-25 07:40 UTC — STEP_DONE 39 plus 36's R2 status. **39 DONE**: R1 FIX → R2 FIX → R3 FIX (coder escalated to Opus) → R4 PASS; `4bc78c1` + `687dbf4` + `7c11561`; **PR #17**, which `origin/main` already shows merged as `3605473` (the orchestrator reported CI pending); api 269/6 (274/1 with PG). §5's spec is replaced by an as-shipped record; the T18 residuals and three backlog notes go to §8. **36 R2 FIX**: all R1 findings resolved and IAM matches every secret; draft **PR #16** (`#TBD-36` = #16). The R2 leftovers and the orchestrator's GTM launch-plan re-base fold into a new **36b** post-merge pass, specced now (merge main, re-capture, `#TBD-36` → #16, PR citations for #17/40/41, the CLOSE archive in the same PR). Planner findings while speccing it: `capture-screenshots.mjs` finds the bought row by position, so it times out once 40 lists periods from the current index (36b item 4, or relay to 40); `git merge-tree` shows 36's main merge clean and main vs 41 conflicting only in the threat-model T18/T19 order, so D13's overlap list is updated. Observed, not yet reported: 40 committed `50b0285`, 41 `5f31a5c` + `6b10332`.
 
 ## 8. Backlog (found during the run; not scheduled)
 
@@ -1015,7 +1214,7 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - 38 L3: no prod-mode test that public IP literals (`8.8.8.8`, `[2001:4860:4860::8888]`, `[::ffff:8.8.8.8]`, `ads.example.`) are accepted; removing the IPv4-mapped unwrap survives mutation.
 - `deploy.yml` `--only stack` passes no `API_URL`/`WEB_URL`, so the example.com placeholders pass the same-site guard. The guard compares two labels (false accept under `co.uk`, `web.app`); a PSL-aware check is Phase 7.
 - `host_of` in `deploy-gcp.sh` isn't verified on a real macOS bash 3.2.
-- Outbound fetches → **step 39, accepted 2026-09-25**: no overall deadline on media fetches (hops or body; httpx `timeout=` is per read); the indexer verifies inline and sequentially (`indexer/runner.py:225`); `_check_meta` (`services/offchain.py:204`) follows redirects unchecked, reads the whole body and holds a pooled DB connection during the fetch. Severity if deferred: one permissionless creative registration can stall block indexing, and ~24 slow domain checks can exhaust the api pool (4 × (4 + 2)) so serve fails.
+- Outbound fetches → **fixed by step 39 (PR #17, `3605473`)**: no overall deadline on media fetches (hops or body; httpx `timeout=` is per read); the indexer verifies inline and sequentially (`indexer/runner.py:225`); `_check_meta` (`services/offchain.py:204`) follows redirects unchecked, reads the whole body and holds a pooled DB connection during the fetch. Severity if deferred: one permissionless creative registration can stall block indexing, and ~24 slow domain checks can exhaust the api pool (4 × (4 + 2)) so serve fails.
 - DNS TXT domain verification can't succeed: `dnspython` isn't a dependency (`_check_dns` returns False on ImportError). The UI only uses the meta tag, but the docs claim both → doc truth fix **scheduled in 36**; the feature goes to Phase 7.
 - `docs/deploy-gcp.md` §3 DB password is never shown or stored (and base64 isn't URL-safe) → **scheduled in 36**.
 - 37 L3: no test that percent-encoded URIs and resources are accepted (removing `_PCT_ENCODED` survives mutation); OpenAPI still documents FastAPI's 422 shape for `/v1/auth/verify`; `openad.errors.InvalidRequestError` clashes conceptually with SQLAlchemy's `InvalidRequestError`; `SiweIn.signature` is uncapped (cap about 256) → Phase 7 (36).
@@ -1024,5 +1223,9 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - `api/README.md` is stale: the migration list stops at 0002, and it says the Dockerfile migrates on start → **scheduled in 36**.
 - The slot page lists periods 0–14 only (`lib/api.ts:95` defaults), so a calendar older than 15 periods shows nothing buyable → **in step 40**.
 - `GET /v1/slots/{id}/periods` has no range cap and reads leases one index at a time (`routers/slots.py:38-50`, `services/periods.py:47-49`) → **step 41 (accepted; coding in `/home/claude/OpenAd-q`)**. Severity on main until it merges: one unauthenticated request can hold a pooled DB connection indefinitely; about 24 take the api's whole pool.
-- The sim planner lists periods 0–4 only (`sim/src/planner/snapshot.ts:48`), so sim activity dies out after five periods → Phase 7, or fold it into 40 if the orchestrator widens 40 to `sim/`.
-- The remaining unscheduled items above → ROADMAP Phase 7 in 36.
+- The sim planner lists periods 0–4 only (`sim/src/planner/snapshot.ts:48`), so sim activity dies out after five periods → Phase 7 as **7.17** (36b).
+- 39 notes: an unscoped `ruff format --check` flags `0002_cpc.py` (known, 7.7). Prettier table alignment already fails at base on `docs/ARCHITECTURE.md` and `docs/threat-model.md`, and CI doesn't check docs → 7.7 (36b).
+- Code comments cite JIT step numbers ("step 39", "PLAN step 40"), which only the archive's step → PR map resolves → a 7.7 note plus the CLOSE map (36b).
+- T18 residual: no per-address or per-session limit on `POST /v1/creatives/{id}/verify` → 7.14 (36b).
+- `e2e/demo/capture-screenshots.mjs` finds the bought row by position (`nth(periodIndex)`). Once 40 lists periods from the current index (3 in the demo), the "Leased" wait times out → **36b item 4**, or 40's fix round (either way the merge is clean, per the D13 check).
+- The remaining unscheduled items above → ROADMAP Phase 7 in 36 (36b adds the 7.7 and 7.14 notes and 7.17).
