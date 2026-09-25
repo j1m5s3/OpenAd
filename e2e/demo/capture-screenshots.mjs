@@ -211,7 +211,8 @@ async function main() {
         Promise.all(
           imgs.map(async (img) => {
             await img.decode();
-            if (!img.complete || img.naturalWidth === 0) throw new Error('embed image did not decode');
+            if (!img.complete || img.naturalWidth === 0)
+              throw new Error('embed image did not decode');
           }),
         ),
       );
