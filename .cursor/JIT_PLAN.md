@@ -119,6 +119,12 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
       - Main vs 41 conflicts only in `docs/threat-model.md` (the T18/T19 order). `routers/slots.py`
         and ARCHITECTURE merge automatically.
       - 40 vs 41 is clean.
+    - As merged (confirmed):
+      - #17 (39) → `3605473`.
+      - #18 (41) merged main in as `7000e4a`, where the orchestrator put T18 before T19 →
+        `289bb72`.
+      - #19 (40) merged main in as `173a7c5`, with no web overlap → `f50076d`.
+      - 36b's merge of `f50076d` was clean → `44aa234`.
 
 ## 3. Slices → branches
 
@@ -136,9 +142,9 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 | J Auth hardening (SIWE binding, nonce/session hygiene, rate limit) | `fix/auth-hardening` (#15, merged `2c4101b`) | 6.8 | #13 merged |
 | K Capacity and deploy hardening (pool budget, scale caps, same-site, media hops) | `feat/ops-hardening` (#14, merged `5f27fb8`) | 6.9 | #13 merged; merge after J |
 | L Outbound-fetch bounds (accepted: indexer media deadline, domain-check fetch) | `fix/outbound-fetch-bounds` (#17, merged `3605473`) | noted under 6.9 by 36b | #14 merged; independent of M and N; merge before Final |
-| M Discover and slot-page period state (first-period anchoring) | `fix/discover-auction-state` | noted under 6.7 by 36b | #14 merged; independent of L and N; merge before Final |
-| N Periods range cap (accepted) | `fix/periods-range-cap` | noted under 6.9 by 36b | #14 merged; independent of L and M (T19 goes after T17; T18 restored on merge); merge before Final |
-| Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` (draft #16) | 6.3/6.6/6.7 ticks, 6.10, Phase 7 | started after J and K merged; merges last, after L, M and N (post-merge pass 36b) |
+| M Discover and slot-page period state (first-period anchoring) | `fix/discover-auction-state` (#19, merged `f50076d`) | noted under 6.7 by 36b | #14 merged; independent of L and N; merge before Final |
+| N Periods range cap (accepted) | `fix/periods-range-cap` (#18, merged `289bb72`) | noted under 6.9 by 36b | #14 merged; independent of L and M (T19 goes after T17; T18 restored on merge); merge before Final |
+| Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` (draft #16) | 6.3/6.6/6.7 ticks, 6.10, Phase 7 | started after J and K merged; merges last, after L, M and N (post-merge pass 36b; main merged in as `44aa234`) |
 
 ## 4. Micro-steps (one line each; ✱ active, [>] active in parallel, ○ pending, ✓ done)
 
@@ -191,11 +197,11 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 ### Slice L — `fix/outbound-fetch-bounds` (accepted 2026-09-25; after #14; worktree `/home/claude/OpenAd-o`, now removed; merged first, as #17)
 - ✓ 39. L: one overall deadline on media fetches (`OPENAD_MEDIA_FETCH_DEADLINE_SECONDS`, 30 s) and a per-pass budget for indexer verification (`OPENAD_VERIFY_PASS_BUDGET_SECONDS`, 20 s); the domain meta check and `POST /v1/creatives/{id}/verify` read, commit, fetch, then write, so neither holds a pooled connection during network I/O; both fetchers read raw bytes (`Accept-Encoding: identity`, `aiter_raw`) under byte caps; `_check_meta` follows ≤ 3 hops under 38's rules with a 10 s deadline and a 256 KiB or `</head>` cap; the per-slot 30 s cooldown is one atomic `UPDATE` (429 `rate_limited`); T18. R1 FIX (2 L1, 3 L2) → R2 FIX (the tests missed their mutations) → R3 FIX (Opus coder; untested `Accept-Encoding`) → R4 PASS. `4bc78c1` + `687dbf4` + `7c11561` (base `2f313d9`), **PR #17 merged `3605473`**; worktree `-o` removed. api 269 passed / 6 skipped (274 / 1 with PG). **(as-shipped record below)**
 
-### Slice M — `fix/discover-auction-state` (added 2026-09-25; worktree `/home/claude/OpenAd-p`; independent of L and N; merges before Final)
-- [>] 40. M: Discover's state, SlotCard's timing copy and the slot page's period window follow the open-ended calendar (the next purchasable period, `sale_end`, overlapping windows when `lead > period`) instead of the first period. A unit table plus a brute-force cross-check; demo e2e rows found by their index cell. Web and e2e only; no ROADMAP edit (36b records it). **Coder launched** 2026-09-25 (Sonnet; Opus review) in `/home/claude/OpenAd-p` off `5f27fb8`; committed `50b0285` (observed at 07:40 UTC, not yet reported). `e2e/demo/capture-screenshots.mjs` has the same positional row as `buyFirstPeriod`. 36b item 4 fixes it unless this step's fix round takes it; either way merges cleanly. **Risk: medium.** **(compact spec below)**
+### Slice M — `fix/discover-auction-state` (added 2026-09-25; worktree `/home/claude/OpenAd-p`; independent of L and N; merged third, as #19)
+- ✓ 40. M: `auctionStatus(slot, now)` follows the open-ended calendar. Its check order is no terms → paused → CPC → no calendar (**paused wins over CPC**, the orchestrator's override of the spec), then ended, live, remainder or upcoming from `kLast`, `cur` and `next`. SlotCard's copy comes from it. The slot page lists `periodsWindowSize` + 1 (15–60) periods from the calendar-only `currentPeriodIndex`. A full-status per-period oracle checks it; demo e2e rows are found by their index cell. Reviews: R1 FIX (L1 paused CPC read 'cpc'; L2 `current` for paging; L2 the oracle compared states only; L3 a fixed window) → R2 PASS (two L3s: the ceil test line → 36b; the zero-period guard → Phase 7). Commits `50b0285` + `5511a0a` + `173a7c5`, **PR #19 merged `f50076d`**. web 236, test:demo 14/14, YAML 13/13, BigInt oracle 730,418 cases with 0 mismatches. **(as-shipped record below)**
 
-### Slice N — `fix/periods-range-cap` (accepted 2026-09-25; worktree `/home/claude/OpenAd-q`; independent of L and M; merges before Final)
-- [>] 41. N: cap `GET /v1/slots/{id}/periods` at 60 periods (422 `invalid_window`) and read its leases in one query; T19. Found while speccing 40: one unauthenticated request can hold a pooled DB connection indefinitely. **Accepted.** **Coder launched** 2026-09-25 (Sonnet) in `/home/claude/OpenAd-q` off `5f27fb8`; its Postgres tests use `openad_test_q`, and T19 goes directly after T17. Committed `5f31a5c` + `6b10332` (observed at 07:40 UTC, not yet reported). Merging main (with 39) in conflicts only in `docs/threat-model.md`: restore T17 → T18 → T19. **Risk: low.** **(compact spec below)**
+### Slice N — `fix/periods-range-cap` (accepted 2026-09-25; worktree `/home/claude/OpenAd-q`; independent of L and M; merged second, as #18)
+- ✓ 41. N: `GET /v1/slots/{id}/periods` rejects `to − from + 1 > 60` with 422 `invalid_window`, bounds `from` and `to` each at `UINT256_MAX`, and reads leases in one query (an index scan on `pk_leases`); T19. Reviews: R1 FIX (L2 the query's filters were untested; L3 a docstring; L3 a uint256 overflow gave a 500, pulled into scope) → R2 PASS (two L3s fixed anyway). Commits `5f31a5c` + `6b10332` + `7000e4a` (main merged in, T18 before T19) + `a6ba05f`, **PR #18 merged `289bb72`**. pytest 274/6, 279/1 with PG. Callers: web 15–60, sim 8, sim planner 5. **(as-shipped record below)**
 
 ### Final — `chore/launch-final` (started off `2f313d9` in parallel with 39; merges last, after 39, 40 and 41)
 - ✓ 36. Final, coder rounds 1–2 (primary tree, `chore/launch-final` off `2f313d9`, **draft PR #16**, so `#TBD-36` = #16). R1 FIX → fix round 1 → **R2 FIX**. All R1 findings are resolved, and the runbook's IAM grants now match every secret. The orchestrator folded the R2 leftovers into 36b instead of running another round now. It covers:
@@ -206,14 +212,16 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
   - Business docs (the launch checklist gains the custom-domain, XFF and budget user actions), ARCHITECTURE §7 truth fixes, a scorecard automated-checks section, AGENTS.md pointers.
   - The runbook's DB-password flow (§3/§5) and a DNS TXT truth fix (routed from 38); the web-origin host rule and a stale `api/README.md` (routed from 37).
   **Risk: low.** **(full spec below; its post-merge parts moved to 36b)**
-- ○ 36b. Final, post-merge pass. Same branch and PR; it starts once 40's and 41's PRs merge (39's already has). It covers:
-  - merge main; `#TBD-36` → #16;
-  - cite #17 and the 40/41 PRs in the ROADMAP (6.7, 6.9, Phase 7), README and the launch checklist;
+- ✱ 36b. Final, post-merge pass (same branch, draft PR #16). **Coder launched** 2026-09-25 (Sonnet; Opus review to follow) once #17, #18 and #19 had merged. The orchestrator did item 1 itself: `f50076d` merged cleanly as `44aa234` and was pushed, and the threat model reads T15 … T19. Addenda given to the coder: #19 left the capture script alone, so item 4's row fix stands; the `periodsWindowSize(88_200, 3600) === 25` test line; and Slide 10's text from the hosted deck's GTM slide. It covers:
+  - `#TBD-36` → #16;
+  - cite #17, #18 and #19 in the ROADMAP (6.7, 6.9, Phase 7), README and the launch checklist;
+  - Phase 7 gains 7.17 and 7.18, plus notes on 7.7 and 7.14;
   - 36's R2 leftovers;
   - rebase the GTM launch plan on launch actions, with deck Slide 10 to match;
   - the capture script finds the bought row by its index cell (the positional `nth()` breaks after 40), and `buy-leased.png` shows what its comment claims;
+  - one web test line that pins `ceil` in `periodsWindowSize` (40's R2 L3);
   - re-capture the screenshots.
-  Sonnet, with an Opus review. Then the planner's CLOSE archive lands in the same PR, and the orchestrator ships. **Risk: low.** **(spec below)**
+  Then the planner's CLOSE archive lands in the same PR, and the orchestrator ships. **Risk: low.** **(spec below)**
 
 ## 5. Active step — full spec
 
@@ -432,178 +440,120 @@ is removed. The full pre-implementation spec is in git history (`f7db32c`).
 - code comments cite "step 39", which only the archive's step → PR map resolves.
 
 
-### Step 40 — Discover and slot-page period state follow the open-ended calendar (slice M, compact spec)
+### Step 40 — Discover and slot-page period state follow the open-ended calendar (slice M): DONE, as-shipped record
 
-_Added by the orchestrator on 2026-09-25, from 36's review: the demo labels slot 0 "Ended" while
-period 4 is buyable. The planner verified it against `5f27fb8` and widened it to the slot page's
-period window, which is anchored to the first period in the same way._
+**Status:** R2 PASS. Branch `fix/discover-auction-state` (worktree `/home/claude/OpenAd-p`), off
+`5f27fb8`. **PR #19 merged as `f50076d`.** The full pre-implementation spec is in git history
+(`968a6fe`).
 
-**Where:**
-- Worktree `/home/claude/OpenAd-p`, branch `fix/discover-auction-state`, off `origin/main`
-  (`5f27fb8`).
-- It touches only `web/` and `e2e/demo/` (code, tests, fixtures). It edits no ROADMAP line; 36
-  records it.
-- Merge order (D13, amended): 39, 40 and 41 merge in whatever order they go green, each later
-  one merging main in first; 36 merges last.
+**Commits:**
+- `50b0285`: `auctionStatus`, the SlotCard copy, the slot page's window and the tests.
+- `5511a0a`: fix round 1.
+- `173a7c5`: main merged in, with no web overlap.
 
-**Coder model:** Sonnet, with an Opus review. **Risk: medium.** The state drives the Discover
-filter, the featured row, the SlotCard copy and the slot page's buy list. A wrong rule hides
-buyable inventory or offers closed periods.
+**Files:**
+- `web/src/lib/{auction.ts, auction.test.ts}`;
+- `web/src/components/{SlotCard.tsx, SlotCard.test.tsx}`;
+- `web/src/features/marketplace/{SlotPage.tsx, SlotPage.test.tsx, api.ts}`;
+- `e2e/demo/flows.spec.ts`.
 
-**Evidence** (at `5f27fb8`):
-- **Discover state:**
-  - `web/src/lib/auction.ts:47-58` `auctionState` looks only at `firstPeriodStart`. It returns
-    `'ended'` once `now ≥ firstPeriodStart + periodSeconds`.
-  - But PROTOCOL §4.1 says periods are unbounded upward
-    (`start(i) = first_period_start + i·period_seconds`). The horizon is bounded only by
-    `lead_seconds` and, optionally, `sale_end`: `buy` requires `end ≤ sale_end` when it is
-    non-zero.
-  - So in production every slot reads "Ended", and drops out of the Live filter, one period
-    after launch.
-- **Callers:**
-  - `SlotCard.tsx:12-13` shows the badge, and its "live in …" and "period starts …" copy also
-    use the first period (via `auctionOpenAt` and `firstPeriodStart`).
-  - `DiscoverPage.tsx:46,51` uses it for the filter and the featured row.
-  - The existing unit test (`auction.test.ts:52-58`) encodes the bug.
-- **Slot page:**
-  - `usePeriods` calls `api.listPeriods(slotId)` with the default `from=0, to=14`
-    (`lib/api.ts:95`).
-  - Once a calendar is 15 periods old, the page lists only closed periods. `nextOpenPeriod` is
-    then undefined, so the page falls back to the generic "Advertise here" copy, and nothing can
-    be bought from the UI.
-- **The rule to mirror:** `api/src/openad/services/periods.py` (`list_periods`, `dutch_price`),
-  which follows PROTOCOL's `buy` checks:
-  - no terms, or `lead_seconds == 0` → not sellable;
-  - paused;
-  - `sale_end ≠ 0 and end > sale_end` → beyond sale end;
-  - leased;
-  - `now < max(0, start − lead)` → not open;
-  - `now ≥ end` → closed;
-  - otherwise Dutch before `start`, remainder after.
+**As shipped:**
+- `auctionStatus(slot, now)` in `web/src/lib/auction.ts`, with `auctionState` as a thin wrapper.
+  **Check order, amended.** The spec put CPC before paused, which was wrong. The orchestrator's
+  fix-round-1 ruling, following PROTOCOL §11 (`paused` stops CPC serving):
+  1. no terms, or LEASE with `lead ≤ 0` → `'no terms'`;
+  2. paused → `'paused'` (a paused CPC slot reads paused);
+  3. CPC → `'cpc'`;
+  4. no calendar → `'no calendar'`;
+  5. then `'ended'`, `'live'`, `'remainder'` or `'upcoming'` from `kLast`, `cur` and `next`, as
+     specced. A slot with `sale_end == 0` never reads `'ended'`.
+- `currentPeriodIndex(slot, now)` is calendar-only: `floor((now − S0) / P)`, unset before the
+  calendar starts. It mirrors `models/slot.py` `current_period_index`, and matched it on 100k
+  cases.
+  - The slot page pages from it, not from `auctionStatus().current`, which is unset for paused
+    and no-terms slots.
+  - `usePeriods` waits for the slot to load.
+- `periodsWindowSize(lead, period) = min(59, max(14, ceil(lead / period)))`. The slot page
+  requests `from = current` (0 before the calendar starts) and `to = from + size`. That is 15–60
+  periods, within #18's cap.
+- SlotCard's copy comes from the status (upcoming, live, remainder, final period), with four
+  copy-line tests.
+- Demo e2e: slot 0's card reads live, and `buyFirstPeriod` finds rows by their index cell.
 
-**Items**
-1. **`lib/auction.ts`: a calendar-aware `auctionStatus(slot, now)`.** It returns
-   `{ state, current?, next?, opensAt?, startsAt?, endsAt? }`. Keep `auctionState(slot, now)` as
-   a thin wrapper.
-   - Notation: `P = periodSeconds`, `S0 = firstPeriodStart`, `L = leadSeconds`, `E = saleEnd`,
-     `start_k = S0 + k·P`, `end_k = start_k + P`, `open_k = max(0, start_k − L)`.
-   - Checked first:
-     - no terms, or LEASE with `L ≤ 0` → `'no terms'` (today, no terms reads `'paused'`);
-     - CPC → `'cpc'`;
-     - paused → `'paused'`;
-     - `calendarVersion == 0`, or `S0`/`P` null → `'no calendar'`.
-   - Then:
-     - `kLast = E == 0 ? ∞ : floor((E − S0) / P) − 1`, the last period with `end_k ≤ E`.
-     - `cur = now ≥ S0 ? floor((now − S0) / P) : −1`, and `next = cur + 1`.
-     - `'ended'` iff `E ≠ 0` and (`kLast < 0` or `now ≥ end_kLast`). A slot with `E == 0` is
-       never `'ended'`.
-     - `'live'` iff `next ≤ kLast` and `now ≥ open_next`: the next period's Dutch window is open.
-       With `L > P`, later windows are open too, and `next` is still the soonest start.
-     - `'remainder'` iff `cur ≥ 0` (so `cur ≤ kLast`) and not live.
-     - `'upcoming'` otherwise (`now < open_0`).
-   - SlotOut has no lease data, so the state describes the schedule, not whether a period is
-     sold. Say so in the doc comment; the slot page's list shows what's unsold.
-2. **`SlotCard` copy**, taken from the status:
-   - upcoming → "live {formatTimeLeft(open_0)}";
-   - live → "period starts {formatTimeLeft(start_next)}";
-   - remainder → "next auction {formatTimeLeft(open_next)}" when `next ≤ kLast`, otherwise
-     "final period ends {formatTimeLeft(end_cur)}".
-   - Remove the first-period `auctionOpenAt`, or re-implement it on the status. Its only
-     caller is SlotCard.
-3. **Slot page:** request the window around now.
-   - `from = max(0, cur)` (the current period first; also showing one earlier period is fine),
-     and `to = from + 14`. Put `from` in the query key.
-   - "Next open period" and the "Advertise here" copy then come from real, current periods.
-4. **Tests:**
-   - A table in `auction.test.ts`:
-     - `E = 0` at `k = 0, 1, 1000` never ends;
-     - `L < P` gives remainder, then live, within one period;
-     - `L == P` (the demo's case) is always live after `open_0`;
-     - `L > P` (e.g. 2.5·P) is live;
-     - `E` with `kLast`, and `E < S0 + P` → ended;
-     - boundaries: `now == open_next` → live, `now == start_k`, and `now == end_kLast` → ended;
-     - `open_0` saturating at 0;
-     - paused, CPC, no terms, `L = 0`, no calendar.
-     - Replace the test that encodes the bug.
-   - A brute-force cross-check: for random `(S0, P, L, E, now)`, enumerate the periods with the
-     per-period rule above (what `services/periods.py` does, minus leases) and compare the
-     derived state.
-   - A slot-page test that the periods request starts at the current index.
-5. **Demo and e2e:**
-   - Fixtures stay relative to `demoNow()`. With `L == P == DAY`, slots 0, 2 and 4 now read
-     "live"; slot 5 is paused, and slots 1 and 3 are CPC.
-   - Add a demo e2e assertion that slot 0's card is live (the reviewer's case).
-   - `flows.spec.ts` `buyFirstPeriod` finds rows by position (`tbody tr` `.nth(periodIndex)`),
-     which breaks once the list stops starting at period 0. Find rows by their index cell
-     instead, as the period-3 test already does.
-   - Run test:demo, and the YAML scenarios that click the state filters
-     (`gen1-discover-filters`, `gen4-ended-filter`) if docker is up.
+**Reviews:**
+- R1 FIX:
+  - L1: a paused CPC slot read `'cpc'` → paused wins over CPC (orchestrator override).
+  - L2: the slot page took `current` from `auctionStatus` → `currentPeriodIndex`, gated on the
+    slot having loaded.
+  - L2: the cross-check compared states only → an independent per-period-scan oracle derives the
+    whole `AuctionStatus` (`toEqual`, 5000 trials).
+  - L3: a fixed 15-row window → `periodsWindowSize`.
+- R2 PASS, with two L3s:
+  - (a) The "widens past 14" test uses an exact multiple (`86_400 / 3600`), so `floor` in place
+    of `ceil` would still pass → 36b adds `periodsWindowSize(88_200, 3600) === 25`.
+  - (b) `periodsWindowSize(0, 0)` is NaN, and `currentPeriodIndex` with period 0 gives Infinity or
+    NaN. This is unreachable, since `set_calendar` and the demo reducer require periods ≥ 3600 s
+    → §8, Phase 7 optional guard (7.18 via 36b).
 
-**Verify**
-```bash
-cd /home/claude/OpenAd-p
-npm run typecheck && npm run lint && npm run test && npm run build && npm run build:demo
-node web/scripts/check-demo-bundle.mjs
-PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:demo -w e2e
-grep -rn "firstPeriodStart" web/src/components web/src/features --include='*.tsx' && echo "REVIEW first-period logic in UI" || echo ui-ok
-git status --short   # web/ and e2e/ only
-```
+**Checks:**
+- typecheck and lint ok;
+- web 236, embed 5, sim 13 (+1 skipped);
+- build, build:demo and `check-demo-bundle` ok;
+- test:demo 14/14;
+- main YAML suite 13/13 (throwaway config, port 5175);
+- the reviewer's BigInt oracle: 730,418 cases, 0 mismatches.
 
-**Done when:**
-- No UI state is derived from the first period alone.
-- Slots with `E == 0` never read "Ended".
-- The slot page lists the current window, whatever the calendar's age.
-- The table, cross-check, slot-page and demo e2e tests are green.
-- Ship: PR, CI, merge before 36 (merging main in first if 39 or 41 merged before it).
+**Backlog notes** (§8), from the coder:
+- CI's prettier step covers only part of `web/`.
+- The new `'no terms'` state has no Discover filter chip.
 
 
-### Step 41 — Cap the periods range (slice N, accepted, compact spec)
+### Step 41 — Cap the periods range (slice N): DONE, as-shipped record
 
-_Planner finding while speccing 40, verified against `5f27fb8`. **Accepted** by the orchestrator
-on 2026-09-25._
+**Status:** R2 PASS. Branch `fix/periods-range-cap` (worktree `/home/claude/OpenAd-q`), off
+`5f27fb8`. **PR #18 merged as `289bb72`.** The full pre-implementation spec is in git history
+(`968a6fe`).
 
-**Evidence:**
-- `GET /v1/slots/{id}/periods` (`routers/slots.py:38-50`) takes `from` and `to` with only `ge=0`.
-- `services/periods.py` then loops over `range(from, to + 1)`, with one `session.get(Lease, …)`
-  per index.
-- So one unauthenticated request with `to=1000000000` holds a pooled DB connection, and builds an
-  unbounded list, until the process dies.
-- About 24 such requests take every api connection (38's budget), and serve fails.
+**Commits:**
+- `5f31a5c`: the cap, one lease query, and T19.
+- `6b10332`: fix round 1, with the query's filters pinned by tests and the uint256 bounds.
+- `7000e4a`: main merged in. The orchestrator resolved the threat-model order (T18 before T19).
+- `a6ba05f`: the final L3 round.
 
-**Where** (the orchestrator's override, 2026-09-25):
-- It runs now, in parallel with 39 and 40, in a new worktree `/home/claude/OpenAd-q` on branch
-  `fix/periods-range-cap` off `origin/main` (`5f27fb8`), with the api venv synced.
-- Its Postgres tests use a separate database, `openad_test_q`, on the same pgserver socket, so
-  they don't collide with 39's `openad_test`.
-- 39's T18 isn't on that base, so 41 adds T19 directly after T17. The orchestrator restores the
-  T17 → T18 → T19 order when merging.
-- api and docs only. No ROADMAP edit; 36 records it under 6.9.
-- It merges in whatever order it goes green relative to 39 and 40 (D13), merging main in first
-  if another merged before it, and always before 36.
+**Files:**
+- `api/src/openad/{routers/slots.py, services/periods.py}`;
+- `api/tests/{test_periods.py, test_public_reads.py}`;
+- `docs/ARCHITECTURE.md` §3.3 (public reads);
+- `docs/threat-model.md` T19.
 
-**Coder model:** Sonnet. **Risk: low.** The callers ask for 15 periods (web, after 40), 8 (sim)
-and 5 (sim planner), all under the cap.
+**As shipped:**
+- `GET /v1/slots/{id}/periods` rejects `to − from + 1 > 60` (`_MAX_PERIODS`) with a house-style
+  422 `invalid_window` (`InvalidWindowError`), before it builds the list. The API defaults are
+  unchanged (`from=0`, `to=7`).
+- `from` and `to` are each bounded with `le=UINT256_MAX`. A value above it used to give a 500
+  from the Uint256 bind. `from = to = UINT256_MAX` → 200.
+- Leases come from one query over (`slot_id`, `calendar_version`,
+  `period_index BETWEEN from AND to`). On Postgres this is an index scan on `pk_leases`.
+- T19 "Unbounded work per request", after T18.
 
-**Items**
-1. Reject ranges wider than 60 periods (`to − from + 1 > 60`) with a house-style 422. Reuse the
-   analytics `InvalidWindowError` (`invalid_window`). Keep the defaults.
-2. Replace the per-index lease reads with one query over
-   `(slot_id, calendar_version, period_index BETWEEN from AND to)`.
-3. Tests:
-   - 60 is accepted and 61 → 422;
-   - leases in the range are still reported;
-   - optionally, the query count no longer grows with the range.
-4. Docs:
-   - ARCHITECTURE §3.3 notes the cap;
-   - `docs/threat-model.md` gets **T19** "Unbounded work per request".
+**Reviews:**
+- R1 FIX:
+  - L2: none of the new query's three filters was tested.
+  - L3: an "(item 2)" docstring.
+  - L3: `from` or `to` above 2^256 − 1 gave a 500. The orchestrator pulled it into scope →
+    `le=UINT256_MAX` on both.
+- R2 PASS, with two L3s fixed anyway:
+  - The lease-filter test pinned the rendered SQL text → an ORM `load` listener asserts that only
+    (slot, cv, 55) is ever loaded.
+  - The uint256 test sent both params out of range → each param is bounded separately, plus
+    `from = to = UINT256_MAX` → 200.
 
-**Verify:** api ruff, format and mypy, plus pytest (also with `OPENAD_TEST_PG_URL` pointing at
-`openad_test_q`).
+**Checks:**
+- ruff, format (src and tests) and mypy clean.
+- pytest 274 passed / 6 skipped; with PG (`openad_test_q`) 279 / 1.
+- The reviewer found the old and new code identical on SQLite and PG for every in-cap window.
 
-**Done when:**
-- The cap and the single query are in, and T19 is added.
-- Checks are green.
-- Ship: PR, CI, merge before 36.
+**Callers under the cap:** web 15–60 (after #19), sim 8, sim planner 5.
 
 
 ### Step 36 — Launch finalization (replaces 17+18 and 32+33; one branch, one PR, the last step)
@@ -670,8 +620,9 @@ stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
   them.
 - PRs: #4 A, #5 E, #6 H, #7 F, #8 B, #9 D, #10 C1, #11 G, #12 I, #13 C2, #15 J (37, auth
   hardening), #14 K (38, capacity and deploy hardening), #17 L (39, outbound-fetch bounds, merged
-  `3605473`), and #16 is this PR. M (40) and N (41) get their numbers when they open. Take the
-  numbers from `git log --merges origin/main`.
+  `3605473`), #18 N (41, periods range cap, merged `289bb72`), #19 M (40, Discover and slot-page
+  calendar, merged `f50076d`), and #16 is this PR. Take the numbers from
+  `git log --merges origin/main`.
 - After 37 and 38:
   - SIWE is bound to allowed origins (strict EIP-4361 built with viem's `createSiweMessage` on
     web and sim, EIP-55 addresses, ±300 s skew); nonce use is atomic; auth rows are pruned.
@@ -689,10 +640,10 @@ stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
   per-pass budget. The domain meta check, and `POST /v1/creatives/{id}/verify`, hold no DB
   connection while they fetch. Both fetchers read raw bytes with `Accept-Encoding: identity`. The
   meta check is bounded and has a per-slot cooldown (T18).
-- 40 (merges before 36): Discover's state, SlotCard's timing copy and the slot page's period
+- 40 (PR #19, merged `f50076d`): Discover's state, SlotCard's timing copy and the slot page's period
   window follow the open-ended calendar. Before 40, every slot read "Ended" one period after its
   first. Demo slots 0, 2 and 4 now read "live".
-- 41 (merges before 36): `GET /v1/slots/{id}/periods` accepts at most 60
+- 41 (PR #18, merged `289bb72`): `GET /v1/slots/{id}/periods` accepts at most 60
   periods per request (T19).
 - Web-origin host rule: viem's `createSiweMessage` rejects IPv6 literals and single-label hosts
   other than `localhost` (e.g. `devbox:5173`, `LOCALHOST:5173`). So the web origin must be
@@ -940,44 +891,50 @@ git status --short   # no .cursor/ staged by the coder; no api/, contracts/ chan
 _Specced 2026-09-25 07:40 UTC at STEP_DONE 39, from 36's R2 findings and the orchestrator's
 additions. It supersedes 36's item 3 (its 39/40/41 lines), item 13 and the post-merge "Done
 when" bullets. Facts were checked against `origin/main` @ `3605473` (#17 merged), 40 @ `50b0285`
-and 41 @ `6b10332`._
+and 41 @ `6b10332`. Updated at STEP_DONE 40/41 (08:27 UTC) with the PR numbers, item 1's merge
+and the orchestrator's addenda._
+
+**Status (2026-09-25 08:27 UTC):**
+- **Launched:** Sonnet coder in the primary tree, with an Opus review to follow.
+- The orchestrator did item 1 itself. `origin/main` (`f50076d`) merged cleanly as `44aa234` and
+  was pushed, and the threat model reads T15 … T19.
+- PR numbers: 39 = **#17**, 41 = **#18**, 40 = **#19**.
+- Addenda given to the coder:
+  - #19 didn't touch the capture script, so item 4's row fix stands;
+  - item 4's test line;
+  - Slide 10's text is taken from the hosted deck's refreshed GTM slide (item 5).
+- Not yet in the coder's brief, so relay it: item 2's Phase 7 additions from STEP_DONE 40/41 (the
+  7.7 CI-prettier note and 7.18).
 
 **When and where:**
-- It starts once 40's and 41's PRs have merged. 39's has: #17 → `3605473`.
+- All three have merged: #17 → `3605473` (39), #18 → `289bb72` (41), #19 → `f50076d` (40).
 - Primary tree `/home/claude/OpenAd`, branch `chore/launch-final`, draft **PR #16**. Push to the
   same branch; don't open a new PR.
 - One coder round: Sonnet, with an Opus review. **Risk: low.** The work is docs, the capture
-  script and regenerated PNGs. There's no product code.
+  script, one web unit-test line and regenerated PNGs. There's no product code.
 - The coder does not stage `.cursor/`. The planner's CLOSE (item 8) lands in the same PR after the
   review passes, and the orchestrator commits it.
 
 **Items**
-1. **Merge main.** Run `git fetch && git merge origin/main`: a merge commit, not a rebase, because
-   #16 is pushed.
-   - Expect it to be clean. `git merge-tree` shows no conflicts for 36 against main at
-     `3605473`, against main plus 40, or against 41, including when 40 also fixes the capture
-     script.
-   - 41's own conflict with 39 (the T18 and T19 order in `docs/threat-model.md`) gets resolved on
-     41's branch before it merges.
-   - If anything does conflict, keep both sides' facts.
-   - After the merge, re-read these, since they now sit side by side:
-     - ARCHITECTURE §3.5–§3.6: 39's deadline, budget and cooldown text next to 36's DNS TXT truth
-       fix;
-     - ARCHITECTURE §3.3: 41's cap note next to 36's web-origin host rule;
-     - `.env.example`: 39's two settings next to 36's comments;
-     - `docs/threat-model.md`: the order must be T15 … T19.
-2. **PR numbers and claims.** Take the numbers from `git log --merges --oneline origin/main`
-   ("Merge pull request #N from …"). Then make these edits:
+1. **Merge main: done by the orchestrator.** `origin/main` (`f50076d`) merged cleanly as
+   `44aa234` and was pushed, as D13's check predicted. The threat model reads T15 … T19. The
+   coder still re-reads the text that now sits side by side:
+   - ARCHITECTURE §3.5–§3.6: 39's deadline, budget and cooldown text next to 36's DNS TXT truth
+     fix;
+   - ARCHITECTURE §3.3 (public reads): 41's cap note next to 36's web-origin host rule;
+   - `.env.example`: 39's two settings next to 36's comments.
+2. **PR numbers and claims.** The numbers are 39 = **#17**, 41 = **#18**, 40 = **#19** (from
+   `git log --merges --oneline origin/main`). Then make these edits:
    - Replace `#TBD-36` with `#16` in `docs/business/launch-checklist.md` (the Sourcemaps row and
      the republish row) and in `docs/business/market-fit.md` (blockers 1 and 5).
    - **ROADMAP 6.9** (R2 L2):
      - Its closing sentence cites **PR #17** instead of "the outbound-fetch-bounds PR". It also
        says that `POST /v1/creatives/{id}/verify` releases its connection before fetching, and
        that both fetchers read raw bytes under their caps.
-     - Add one sentence for 41's PR: `GET /v1/slots/{id}/periods` rejects windows wider than 60
+     - Add one sentence for #18: `GET /v1/slots/{id}/periods` rejects windows wider than 60
        periods (422 `invalid_window`) and reads leases in one query (**T19**).
      - Pointers gain T18 and T19.
-   - **ROADMAP 6.7:** add a dated line for 40's PR. Discover's state, the slot card's timing copy
+   - **ROADMAP 6.7:** add a dated line for #19. Discover's state, the slot card's timing copy
      and the slot page's period list follow the open-ended calendar (PROTOCOL §4.1). Before it,
      every slot read "Ended" one period after its first, and a calendar older than 15 periods
      showed nothing buyable.
@@ -993,17 +950,28 @@ and 41 @ `6b10332`._
      - A new **7.17 "Sim planner period window".** `sim/src/planner/snapshot.ts:48` lists
        periods 0–4 only, so sim activity stops after five periods. It should list from the
        current index, as 40 does. Pointers: `sim/src/planner/`.
+     - Added at STEP_DONE 40/41 (relay if it isn't in the coder's brief):
+       - 7.7 also notes that CI's prettier step covers only `web/src/demo`, `e2e/demo`,
+         `web/src/features/marketing` and `web/src/app/routes.tsx`, so the root `format:check`
+         (all of `web/`) never runs in CI. `web/src/lib/auction.ts` had a pre-existing
+         violation.
+       - A new **7.18 "Calendar UI follow-ups (from #19)":**
+         - the `'no terms'` state has no Discover filter chip, the same gap as `'no calendar'`;
+         - an optional guard for a zero period in `periodsWindowSize` and `currentPeriodIndex`
+           (NaN or Infinity). It is unreachable today, since `set_calendar` and the demo reducer
+           require periods ≥ 3600 s.
+         - Pointers: `web/src/lib/auction.ts`, `web/src/features/marketplace/DiscoverPage.tsx`.
    - **README "What's in the box",** the security bullet: replace "outbound-fetch time limits ship
      separately (ROADMAP 6.9, T18)" with what shipped:
      - outbound fetches have an overall deadline and hold no DB connection while they run
        (PR #17, T18);
-     - the periods endpoint caps its window (41's PR, T19).
+     - the periods endpoint caps its window (#18, T19).
    - **`launch-checklist.md` Done table:** add a row for each of these:
      - #15, auth hardening;
      - #14, capacity and deploy hardening;
      - #17, outbound-fetch bounds;
-     - 40's PR: Discover and the slot page follow the open-ended calendar;
-     - 41's PR: periods range cap.
+     - #19: Discover and the slot page follow the open-ended calendar;
+     - #18: periods range cap.
    - **`pitch-deck.md` Slide 11:** "Built" may say "auth, capacity and request-bound hardening".
      Change nothing else there.
    - **JIT process words that 39 added to docs:** in `docs/ARCHITECTURE.md` and `.env.example`,
@@ -1026,7 +994,7 @@ and 41 @ `6b10332`._
    - L3 (pre-existing), §14 Teardown: `gcloud run services delete` and `gcloud secrets delete`
      take one name each, so loop over the names. Add `openad-web-demo`
      (`infra/gcp/services/web-demo.yaml`).
-4. **Capture script** (`e2e/demo/capture-screenshots.mjs`):
+4. **Capture script** (`e2e/demo/capture-screenshots.mjs`), **plus one web test line** (last bullet):
    - **Row addressing (planner finding; it breaks after 40).**
      - The script finds the bought row by position (`page.locator('tbody tr').nth(periodIndex)`,
        with the comment "Rows list periods 0..n in order").
@@ -1035,12 +1003,17 @@ and 41 @ `6b10332`._
      - Find the row by its index cell instead, as 40's `flows.spec.ts` does:
        `page.locator('tbody tr', { has: page.getByRole('cell', { name: periodIndex, exact: true }) })`.
        Fix the comment too.
-     - If main already has this fix (the orchestrator may relay it to 40), keep main's version.
+     - #19 didn't touch the capture script, so this fix stands.
    - **`buy-leased.png`** (R2 L3): the comment promises the Leased row next to the wallet balance,
      but after scrolling to the top, that row is below the fold.
      - Take the shot full-page, like `discover-categories.png`, as long as it stays ≤ 400 KB.
      - Otherwise, keep the viewport shot and reword the comment to describe what it shows.
      - Either way, keep the wait on the row's "Leased" button.
+   - **Web test line** (40's R2 L3 (a); the orchestrator added it to this step). In
+     `web/src/lib/auction.test.ts`'s `periodsWindowSize` block, add
+     `expect(periodsWindowSize(88_200, 3600)).toBe(25)`. That is 24.5 periods: `ceil` gives 25
+     where `floor` would give 24, so a non-multiple lead pins `ceil`. The existing
+     `86_400 / 3600` case is an exact multiple.
 5. **GTM launch plan** (orchestrator): rebase `docs/business/gtm-marketing.md` "Launch plan"
    (L39–49) on launch actions, matching the hosted deck's refreshed GTM slide:
    - **Days 0–30, go live:** launch on Base Sepolia and Google Cloud (ROADMAP 6.10), and
@@ -1069,7 +1042,7 @@ and 41 @ `6b10332`._
        (user-run), Phase 7 listed.
    - Its **Decisions** section condenses D1–D13.
    - Its **Outcome** section contains:
-     - The PR list, each with its slice and merge commit: #4–#17, plus 40's and 41's PRs.
+     - The PR list, each with its slice and merge commit: #4–#19.
      - A **step → PR map**, so the "step NN" references in code and docs resolve:
 
        | Steps | PR |
@@ -1088,8 +1061,8 @@ and 41 @ `6b10332`._
        | 37 | #15 |
        | 38 | #14 |
        | 39 | #17 |
-       | 40 | M's PR |
-       | 41 | N's PR |
+       | 40 | #19 |
+       | 41 | #18 |
 
        Steps 2, 17+18 and 32+33 were folded into other steps.
      - The demo and deck links, which stay private until the owner shares them.
@@ -1110,7 +1083,7 @@ and 41 @ `6b10332`._
        - T18's per-address verify limit and concurrency;
        - DNS TXT doesn't work;
        - the same-site guard isn't PSL-aware.
-     - A pointer to Phase 7 (ROADMAP 7.1–7.17).
+     - A pointer to Phase 7 (ROADMAP 7.1–7.18).
    - Its **Identity fence** section is as in §6.
    - Delete `.cursor/JIT_PLAN.md`, as `45645e1` did. The full plan stays in git history.
    - Refresh `.cursor/JIT_INDEX.md`:
@@ -1122,7 +1095,8 @@ and 41 @ `6b10332`._
 **Verify:** run 36's Verify block in full (after the merge), plus the following.
 ```bash
 cd /home/claude/OpenAd
-git log --merges --oneline origin/main | head -5          # PR numbers for item 2
+git log --merges --oneline origin/main | head -5          # #19, #18, #17 at the top
+grep -n 'periodsWindowSize(88_200, 3600)' web/src/lib/auction.test.ts || echo "FAIL ceil test line"
 (cd api && uv run ruff check src tests && uv run mypy src && uv run pytest -q)   # main's api code after the merge
 grep -rn 'TBD-36' --exclude-dir=node_modules --exclude-dir=.cursor . && echo "FAIL placeholders" || echo tbd-ok
 grep -n "nth(" e2e/demo/capture-screenshots.mjs && echo "REVIEW positional rows" || echo rows-ok
@@ -1134,10 +1108,11 @@ git diff --stat origin/main...HEAD                         # 36's files only (pl
 ```
 
 **Done when:**
-- Main is merged in, and 36's Verify block and the checks above pass.
+- Main is merged in (`44aa234`, done), and 36's Verify block and the checks above pass.
 - The screenshots are re-captured: deterministic, ≤ 400 KB each, and Discover shows 40's labels.
-- No `#TBD-36` remains. README, ROADMAP (6.7, 6.9, Phase 7) and the launch checklist cite #16,
-  #17 and 40's and 41's PRs.
+- No `#TBD-36` remains. README, ROADMAP (6.7, 6.9, Phase 7 through 7.18) and the launch
+  checklist cite #16, #17, #18 and #19.
+- The `periodsWindowSize(88_200, 3600) === 25` test line is in, and web tests pass.
 - The R2 leftovers are fixed. The GTM plan and Slide 10 match the hosted deck.
 - The Opus review passes.
 - Then the planner's CLOSE (item 8) is committed on the branch, and the orchestrator:
@@ -1188,6 +1163,7 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - 2026-09-25 06:55 UTC — REVISE and progress. #15 merged `2c4101b`; main merged into #14 as `2f313d9` (conflicts only in ROADMAP and threat-model ordering, as predicted); #14 merged `5f27fb8`. 39 was coded off `2f313d9` and is in fix round 1 after R1 FIX. Its scope grew to `POST /v1/creatives/{id}/verify`, raw-byte reads with `Accept-Encoding: identity`, and an atomic cooldown; recorded as F1–F4. 36 was coded off `2f313d9` and is in fix round 1 after R1 FIX (set-password syntax, onramp claim, screenshot scroll offset, GLOSSARY DNS TXT, `VITE_API_URL` in the host note, `VITE_SOURCEMAP` is shell-only, the 6.7 amended note, and a new deploy bug: the settler lacks `secretAccessor` on the database-URL secret). Shipped extras are recorded. **New step 40** (slice M, `fix/discover-auction-state` in `/home/claude/OpenAd-p`): Discover state anchored to the first period. The planner verified it and widened it to the slot page, which lists periods 0–14 only, so older calendars show nothing buyable. It also found that `buyFirstPeriod` in the demo e2e addresses rows by position. **Proposed 41** (slice N): `GET /v1/slots/{id}/periods` has no range cap and does one DB read per index, so one unauthenticated request can hold a pooled connection indefinitely. Added D13 (merge order 39 → 40 (→ 41) → 36). Backlog: the sim planner lists periods 0–4 only.
 - 2026-09-25 07:00 UTC — REVISE: **41 accepted** and launched now (orchestrator override of its Where): Sonnet coder in the new worktree `/home/claude/OpenAd-q` on `fix/periods-range-cap` off `5f27fb8`. Its PG tests use `openad_test_q` on the same pgserver socket, and T19 goes directly after T17 (the orchestrator restores T17 → T18 → T19 on merge). **D13 amended**: 39, 40 and 41 are independent and merge in whatever order they go green, each later one merging main in first; 36 merges last, then merges main in, re-captures the screenshots and replaces `#TBD-36`. **40 launched** (Sonnet) in `/home/claude/OpenAd-p`. 39 and 36 are still in fix round 1. D13 now lists the expected textual overlaps: threat-model (39/41), `routers/slots.py` (39/41), ARCHITECTURE §3.3 (36/41) and `.env.example` (36/39).
 - 2026-09-25 07:40 UTC — STEP_DONE 39 plus 36's R2 status. **39 DONE**: R1 FIX → R2 FIX → R3 FIX (coder escalated to Opus) → R4 PASS; `4bc78c1` + `687dbf4` + `7c11561`; **PR #17**, which `origin/main` already shows merged as `3605473` (the orchestrator reported CI pending); api 269/6 (274/1 with PG). §5's spec is replaced by an as-shipped record; the T18 residuals and three backlog notes go to §8. **36 R2 FIX**: all R1 findings resolved and IAM matches every secret; draft **PR #16** (`#TBD-36` = #16). The R2 leftovers and the orchestrator's GTM launch-plan re-base fold into a new **36b** post-merge pass, specced now (merge main, re-capture, `#TBD-36` → #16, PR citations for #17/40/41, the CLOSE archive in the same PR). Planner findings while speccing it: `capture-screenshots.mjs` finds the bought row by position, so it times out once 40 lists periods from the current index (36b item 4, or relay to 40); `git merge-tree` shows 36's main merge clean and main vs 41 conflicting only in the threat-model T18/T19 order, so D13's overlap list is updated. Observed, not yet reported: 40 committed `50b0285`, 41 `5f31a5c` + `6b10332`.
+- 2026-09-25 08:27 UTC — STEP_DONE 40 and 41; 36b launched. **41 DONE**: R1 FIX (L2 the new query's three filters were untested; L3 a docstring; L3 `from`/`to` above 2^256 − 1 gave a 500, pulled into scope → `le=UINT256_MAX`) → R2 PASS, two L3s fixed anyway (an ORM `load` listener instead of SQL text; each param bounded separately); `5f31a5c` + `6b10332` + `7000e4a` (main merged in, T18 before T19) + `a6ba05f`; **PR #18 merged `289bb72`**; pytest 274/6, PG 279/1; EXPLAIN is an index scan on `pk_leases`. **40 DONE**: R1 FIX (L1 a paused CPC slot read 'cpc' — the spec's CPC-before-paused order was wrong, the orchestrator ruled paused wins, and the as-shipped record carries the amended order; L2 a calendar-only `currentPeriodIndex` for the slot page; L2 a full-status oracle; L3 `periodsWindowSize`) → R2 PASS with two L3s (the ceil test line → 36b; the zero-period guard → Phase 7); `50b0285` + `5511a0a` + `173a7c5`; **PR #19 merged `f50076d`**; web 236, test:demo 14/14, YAML 13/13, BigInt oracle 730,418 cases with 0 mismatches. §5's compact specs are replaced by as-shipped records. **36b launched** (Sonnet; Opus review to follow); the orchestrator merged `f50076d` into #16 cleanly as `44aa234`, as D13's check predicted. PR numbers 39 = #17, 41 = #18, 40 = #19 are recorded in 36b and in the CLOSE step → PR map. Added to 36b's ROADMAP pass (relay, not in the coder's brief yet): a 7.7 note that CI's prettier covers only part of `web/`, and a new 7.18 (the missing 'no terms' filter chip and the zero-period guard).
 
 ## 8. Backlog (found during the run; not scheduled)
 
@@ -1221,11 +1197,14 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - `OPENAD_SESSION_SECRET` is read by no code (only `config.py` defines it; ADR-0009, ADR-0017, the runbook and `api.yaml` still set it) → Phase 7: drop it or use it.
 - viem's `createSiweMessage` rejects IPv6 literals and single-label hosts other than `localhost` → web-origin host rule documented in 36.
 - `api/README.md` is stale: the migration list stops at 0002, and it says the Dockerfile migrates on start → **scheduled in 36**.
-- The slot page lists periods 0–14 only (`lib/api.ts:95` defaults), so a calendar older than 15 periods shows nothing buyable → **in step 40**.
-- `GET /v1/slots/{id}/periods` has no range cap and reads leases one index at a time (`routers/slots.py:38-50`, `services/periods.py:47-49`) → **step 41 (accepted; coding in `/home/claude/OpenAd-q`)**. Severity on main until it merges: one unauthenticated request can hold a pooled DB connection indefinitely; about 24 take the api's whole pool.
+- The slot page lists periods 0–14 only (`lib/api.ts:95` defaults), so a calendar older than 15 periods shows nothing buyable → **fixed by step 40 (PR #19, `f50076d`)**: the page lists 15–60 periods from the current index.
+- `GET /v1/slots/{id}/periods` had no range cap and read leases one index at a time (`routers/slots.py:38-50`, `services/periods.py:47-49`) → **fixed by step 41 (PR #18, `289bb72`)**: a 60-period cap, uint256-bounded params, one lease query (T19).
 - The sim planner lists periods 0–4 only (`sim/src/planner/snapshot.ts:48`), so sim activity dies out after five periods → Phase 7 as **7.17** (36b).
 - 39 notes: an unscoped `ruff format --check` flags `0002_cpc.py` (known, 7.7). Prettier table alignment already fails at base on `docs/ARCHITECTURE.md` and `docs/threat-model.md`, and CI doesn't check docs → 7.7 (36b).
 - Code comments cite JIT step numbers ("step 39", "PLAN step 40"), which only the archive's step → PR map resolves → a 7.7 note plus the CLOSE map (36b).
 - T18 residual: no per-address or per-session limit on `POST /v1/creatives/{id}/verify` → 7.14 (36b).
-- `e2e/demo/capture-screenshots.mjs` finds the bought row by position (`nth(periodIndex)`). Once 40 lists periods from the current index (3 in the demo), the "Leased" wait times out → **36b item 4**, or 40's fix round (either way the merge is clean, per the D13 check).
-- The remaining unscheduled items above → ROADMAP Phase 7 in 36 (36b adds the 7.7 and 7.14 notes and 7.17).
+- `e2e/demo/capture-screenshots.mjs` finds the bought row by position (`nth(periodIndex)`). Once 40 lists periods from the current index (3 in the demo), the "Leased" wait times out → **36b item 4** (#19 didn't touch the script).
+- 40 R2 L3 (b): `periodsWindowSize(0, 0)` is NaN, and `currentPeriodIndex` with a zero period gives Infinity or NaN. Unreachable (`set_calendar` and the demo reducer require periods ≥ 3600 s) → Phase 7 optional guard (7.18 via 36b).
+- CI's prettier step covers only `web/src/demo`, `e2e/demo`, `web/src/features/marketing` and `web/src/app/routes.tsx`, so the root `format:check` (all of `web/`) never runs in CI (`web/src/lib/auction.ts` had a pre-existing violation) → 7.7 (36b).
+- The new `'no terms'` state has no Discover filter chip, the same pre-existing gap as `'no calendar'` → 7.18 (36b).
+- The remaining unscheduled items above → ROADMAP Phase 7 in 36 (36b adds the 7.7 and 7.14 notes, 7.17 and 7.18).
