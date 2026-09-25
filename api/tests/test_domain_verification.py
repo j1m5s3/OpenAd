@@ -452,14 +452,22 @@ async def test_check_meta_stops_reading_at_head_close(monkeypatch: pytest.Monkey
 
 
 async def test_check_meta_finds_tag_before_head_close(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The happy path: a small page with the tag inside `<head>` verifies."""
+    """The happy path: a small page with the tag inside `<head>` verifies. The request must ask
+    for `Accept-Encoding: identity`: without it httpx sends `gzip, deflate`, most real hosts then
+    gzip the HTML, and `_content_encoding_ok` refuses it, so verification would quietly fail for
+    nearly every real site. The handler only records the header and the test asserts it after
+    the call, because `_check_meta`'s broad `except Exception` would swallow an assertion raised
+    inside the transport (fix round 3, ROADMAP 6.9 step 39)."""
     token = "tok123"
     meta = f'<meta name="openad-site-verification" content="{token}">'.encode()
     page = b"<html><head>" + meta + b"</head><body></body></html>"
+    accept_encodings: list[str | None] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        accept_encodings.append(request.headers.get("accept-encoding"))
         return _content_response(200, page)
 
     monkeypatch.setattr(offchain_service.httpx, "AsyncClient", _mock_client(handler))
     ok = await offchain_service._check_meta("pub.example", token, is_dev=False)
     assert ok is True
+    assert accept_encodings == ["identity"]
