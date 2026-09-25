@@ -10,3 +10,7 @@ proxy — verified media is served from the API cache.
 
 Place the snippet from Supply on the page that matches the **slot** domain and
 size. Demo locally at `http://localhost:5174/demo/`.
+
+See [Embed code](embed-code.md) for the copy-paste snippet, platform-specific
+instructions (WordPress, Ghost, Notion/Substack), the "Advertise here" badge
+for script-free platforms, and troubleshooting.

@@ -155,6 +155,13 @@ protocol contract changes in this phase (anything that would need one is recorde
       Acceptance: copy-paste embed snippet generator with CMS instructions; public `/slot/:id`
       share page with OG meta and current price; off-chain publisher profile (site URL,
       audience description, category tags) via a SIWE-guarded API endpoint; no chain writes.
+      Progress (step 14+15): serve CORS fixed (`ServeCorsMiddleware`, `docs/ARCHITECTURE.md`
+      §3.4), the web build ships a versioned embed script (`embed/open-ad.v1.js`,
+      `lib/embedSnippet.ts`), `EmbedCodePanel` (platform tabs + "Advertise here" badge) replaces
+      Supply's old snippet, `SlotPage` has a Share row (copy link + X/Farcaster), static
+      `og:*`/`twitter:card` defaults on `index.html`, and `docs/guide/publisher/embed-code.md`.
+      Per-slot OG previews need server rendering — not done here (backlog). Publisher off-chain
+      profile (step 16) next.
 - [x] **6.4 Analytics read model (API + UI).** _Done 2026-09-25._
       Pointers: `ARCHITECTURE.md` §3.1, §3.10 · `api/src/openad/schemas/analytics.py` ·
       `api/src/openad/services/analytics.py` · `web/src/lib/analytics.ts` ·

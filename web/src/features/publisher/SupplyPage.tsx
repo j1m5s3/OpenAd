@@ -3,16 +3,13 @@ import { useAccount, useWriteContract } from 'wagmi';
 import { useState } from 'react';
 
 import { Field, FieldLabel } from '../../components/Field';
-import { api, API_URL } from '../../lib/api';
+import { api } from '../../lib/api';
 import { formatUsdc, parseUsdc } from '../../lib/format';
 import { getContract, hasProtocol } from '../../lib/deployments';
-import {
-  SALE_CPC,
-  approvalStatusLabel,
-  datetimeLocalToUnix,
-} from '../../lib/labels';
+import { SALE_CPC, approvalStatusLabel, datetimeLocalToUnix } from '../../lib/labels';
 import { targetChainId } from '../../lib/wagmi';
 import { approvalActionLabel } from './components/ApproveDialog';
+import { EmbedCodePanel } from './components/EmbedCodePanel';
 import { SlotPerformance } from './components/SlotPerformance';
 import { SlotSetupWizard } from './components/SlotSetupWizard';
 import { usePublisher, usePublisherApprovals } from './api';
@@ -152,8 +149,8 @@ export function SupplyPage() {
         <h1 className="mt-1 text-3xl font-semibold">Supply</h1>
         <p className="mt-2 text-muted">
           Mint slots, set calendars and terms (Lease Dutch or CPC), approve creatives. Lease
-          proceeds arrive in the same buy transaction; CPC proceeds arrive when the settler
-          settles payable clicks — no Net-60 invoice.
+          proceeds arrive in the same buy transaction; CPC proceeds arrive when the settler settles
+          payable clicks — no Net-60 invoice.
         </p>
       </div>
       {!isConnected && <p className="text-muted">Connect the wallet that owns your slots.</p>}
@@ -229,7 +226,12 @@ export function SupplyPage() {
       </section>
 
       <FormCard title="Allowlist" onSubmit={(e) => void setAllowlist(e)} pending={isPending}>
-        <Field name="advertiser" label="Advertiser address" placeholder="0x…" hintKey="advertiserAllowlist" />
+        <Field
+          name="advertiser"
+          label="Advertiser address"
+          placeholder="0x…"
+          hintKey="advertiserAllowlist"
+        />
         <label className="flex items-center gap-2 text-sm text-muted">
           <input type="checkbox" name="allowed" defaultChecked className="accent-accent" />
           Allowed
@@ -246,14 +248,7 @@ export function SupplyPage() {
         <Field name="slotId" label="Slot id" defaultValue="1" hintKey="verifyDomain" />
       </FormCard>
 
-      <section className="rounded-2xl border border-line bg-surface p-5">
-        <h2 className="font-medium">Embed snippet</h2>
-        <p className="mt-2 text-sm text-muted">
-          Place this on the publisher page. The embed talks only to the serve API — it never reads
-          the chain. Demo: http://localhost:5174/demo/
-        </p>
-        <pre className="mt-3 overflow-x-auto rounded-xl bg-canvas p-3 text-xs text-muted">{`<open-ad slot-id="${pub.data?.slotIds[0] ?? '1'}" api="${API_URL}" width="300" height="250"></open-ad>`}</pre>
-      </section>
+      <EmbedCodePanel slotIds={pub.data?.slotIds ?? ['1']} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useHref, useParams } from 'react-router';
 
+import { routes } from '../../app/paths';
 import { withDevWalletParam } from '../../lib/devWalletQuery';
 import { FieldHint, GuideLink } from '../../components/FieldHint';
 import { formatDuration, formatUnixSeconds, formatUsdc } from '../../lib/format';
@@ -8,11 +9,33 @@ import { SALE_CPC, approvalModeLabel, saleModeLabel } from '../../lib/labels';
 import { BuyDialog } from './components/BuyDialog';
 import { usePeriods, useSlot } from './api';
 
+/** Absolute page URL for `slotId`. `useHref` resolves it the same way `<Link>` would — `#/…`
+ * under the hash router (ADR-0016 hosting amendment), a plain path otherwise — so joining it
+ * against `document.baseURI` (which already reflects any sub-path base) gives a correct,
+ * shareable absolute URL either way. */
+function useSlotShareUrl(slotId: string): string {
+  const href = useHref(routes.slot(slotId));
+  return new URL(href, document.baseURI).href;
+}
+
 export function SlotPage() {
   const { slotId = '' } = useParams();
   const slot = useSlot(slotId);
   const periods = usePeriods(slotId);
   const [buy, setBuy] = useState<{ periodIndex: string; remainder: boolean } | null>(null);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'selected'>('idle');
+  const linkInputRef = useRef<HTMLInputElement>(null);
+  const slotUrl = useSlotShareUrl(slotId);
+  const domain = slot.data?.domain;
+
+  useEffect(() => {
+    if (!domain) return;
+    const previous = document.title;
+    document.title = `${domain} — ad slot on OpenAd`;
+    return () => {
+      document.title = previous;
+    };
+  }, [domain]);
 
   if (slot.isPending) return <p className="text-muted">Loading slot…</p>;
   if (slot.isError || !slot.data) {
@@ -21,6 +44,21 @@ export function SlotPage() {
 
   const s = slot.data;
   const cpc = s.terms?.saleMode === SALE_CPC;
+  const nextOpenPeriod = (periods.data?.items ?? []).find((p) => !p.leased && p.sellable);
+  const tweetText = `Advertise on ${s.domain} via OpenAd`;
+  const xIntentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(slotUrl)}`;
+  const farcasterIntentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(`${tweetText} ${slotUrl}`)}`;
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(slotUrl);
+      setCopyStatus('copied');
+    } catch {
+      linkInputRef.current?.select();
+      setCopyStatus('selected');
+    }
+    setTimeout(() => setCopyStatus('idle'), 2000);
+  }
 
   return (
     <div className="space-y-6">
@@ -48,6 +86,52 @@ export function SlotPage() {
           </p>
         )}
       </div>
+
+      <section className="rounded-2xl border border-line bg-surface p-5">
+        <h2 className="font-medium">Share this slot</h2>
+        <p className="mt-2 text-sm text-muted">
+          {nextOpenPeriod
+            ? `Next open period ${formatUnixSeconds(nextOpenPeriod.start)}, from ${formatUsdc(BigInt(nextOpenPeriod.indicativePrice))}.`
+            : 'Advertise here — reach this page’s audience directly, non-custodially, in one transaction.'}
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            ref={linkInputRef}
+            readOnly
+            value={slotUrl}
+            aria-label="Slot page URL"
+            className="min-w-0 flex-1 rounded-lg border border-line bg-canvas px-3 py-1.5 text-xs text-muted"
+            onFocus={(e) => e.currentTarget.select()}
+          />
+          <button
+            type="button"
+            onClick={() => void copyLink()}
+            className="shrink-0 rounded-full border border-line px-3 py-1 text-sm text-ink"
+          >
+            {copyStatus === 'copied'
+              ? 'Copied'
+              : copyStatus === 'selected'
+                ? 'Selected'
+                : 'Copy link'}
+          </button>
+          <a
+            href={xIntentUrl}
+            target="_blank"
+            rel="noopener"
+            className="rounded-full border border-line px-3 py-1 text-sm text-ink"
+          >
+            Share on X
+          </a>
+          <a
+            href={farcasterIntentUrl}
+            target="_blank"
+            rel="noopener"
+            className="rounded-full border border-line px-3 py-1 text-sm text-ink"
+          >
+            Share on Farcaster
+          </a>
+        </div>
+      </section>
 
       {cpc ? (
         <section className="rounded-2xl border border-line bg-surface p-5 text-sm text-muted">

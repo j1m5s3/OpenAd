@@ -199,6 +199,19 @@ Origin enforcement: when `OPENAD_SERVE_ENFORCE_ORIGIN=true`, requests whose `Ori
 host does not match the slot's `domain` (or a subdomain of it) are answered with the house ad
 and logged with `origin_ok=false`. Disabled by default in local development.
 
+**Serve CORS.** `<open-ad>` runs on a publisher's own domain, so `GET /v1/serve/{slot_id}` and
+`/v1/serve/{slot_id}/media` must be readable cross-origin. `ServeCorsMiddleware`
+(`api/src/openad/main.py`) answers every origin on those two routes with
+`Access-Control-Allow-Origin: *`, no `Access-Control-Allow-Credentials`, and handles the
+`OPTIONS` preflight itself. It is a small ASGI middleware added after (so it wraps outside)
+the app's credentialed `CORSMiddleware`, which stays unchanged — and unaware of this — for
+every other route, still gated by `OPENAD_CORS_ORIGINS`. CORS (who may read the response) and
+origin enforcement above (paid vs house) are independent: the middleware forwards the real
+`Origin`/`Referer` headers to the handler unchanged and only rewrites the response's CORS
+headers, discarding any the inner `CORSMiddleware` added for the same request (it otherwise sets
+`Access-Control-Allow-Credentials: true` on a serve response whenever an `Origin` header is
+present, even for an origin outside its own allowlist).
+
 ### 3.5 Creative verification and media cache
 
 Triggered by the indexer on `CreativeRegistered` and re-run on a schedule
