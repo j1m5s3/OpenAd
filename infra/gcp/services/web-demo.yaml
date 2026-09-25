@@ -17,6 +17,12 @@ metadata:
     run.googleapis.com/ingress: all
 spec:
   template:
+    metadata:
+      annotations:
+        # Static nginx site, no database connection: capped for cost control only, same
+        # reasoning as openad-web (docs/deploy-gcp.md "Connection budget", ROADMAP 6.9). This
+        # is also the default `--only demo` target, so it's public and scale-to-zero-capable.
+        autoscaling.knative.dev/maxScale: "10"
     spec:
       containers:
         - image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/openad/web-demo:${IMAGE_TAG}

@@ -35,6 +35,14 @@ class Settings(BaseSettings):
 
     # --- database
     database_url: str = "postgresql+asyncpg://openad:openad@127.0.0.1:15432/openad"
+    # Pool settings (ROADMAP 6.9; docs/deploy-gcp.md "Connection budget"). SQLite (unit tests,
+    # `db/bootstrap.py` local runs) always uses `StaticPool` and ignores these — see
+    # `Database.__init__` in `db/session.py`. Per-service overrides for Cloud Run live in
+    # `infra/gcp/services/*.yaml` env vars, not in these defaults.
+    db_pool_size: int = Field(default=5, ge=1)
+    db_max_overflow: int = Field(default=5, ge=0)
+    db_pool_timeout: int = Field(default=30, ge=1)
+    db_pool_recycle: int = Field(default=1800, ge=1)
 
     # --- api
     api_host: str = "127.0.0.1"

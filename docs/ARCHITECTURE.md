@@ -255,8 +255,19 @@ Triggered by the indexer on `CreativeRegistered` and re-run on a schedule
 
 `MEDIA`:
 
-1. Fetch `uri` (`https://` directly; `ipfs://` through `OPENAD_IPFS_GATEWAY`). Enforce
-   `OPENAD_MAX_MEDIA_BYTES` (default 2 MiB) and a 10 s timeout.
+1. Fetch `uri` (`https://` directly outside dev/test, `http://` also allowed in dev/test;
+   `ipfs://` through `OPENAD_IPFS_GATEWAY`) with `follow_redirects=False`; up to 3 redirects are
+   followed manually, with each hop re-validated the same way as the initial URL (ROADMAP 6.9,
+   `docs/threat-model.md` T17). Outside dev/test the host is also checked, after stripping any
+   trailing dot (`localhost.` is `localhost`): a hop fails if the host is empty, contains
+   whitespace or a control character, or is `localhost`/`*.localhost`/`*.internal`, or if it is
+   an IP literal that is not `ipaddress.is_global` (private/loopback/link-local/CGNAT), is
+   multicast, is reserved (IPv4 `240.0.0.0/4`; IPv6 `::/8`, which covers IPv4-compatible
+   `::a.b.c.d` and NAT64 `64:ff9b::/96` — `is_global` calls those global on Python 3.12) or is
+   IPv6 site-local `fec0::/10`. Legacy numeric IPv4 forms are normalized and IPv4-mapped IPv6
+   is unwrapped first. Dev/test skips these host checks entirely so local Anvil/sim creatives at
+   `http://127.0.0.1:*` still verify (ADR-0012). Enforce `OPENAD_MAX_MEDIA_BYTES` (default 2 MiB)
+   and a 10 s timeout.
 2. `keccak256(bytes) == content_hash`, else `failed:hash_mismatch`.
 3. Sniff MIME; must equal `mime` and be in the allowlist (`image/png`, `image/jpeg`,
    `image/webp`, `image/gif`). Decode and check `width × height` equals the registered

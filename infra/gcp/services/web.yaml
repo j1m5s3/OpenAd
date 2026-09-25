@@ -15,6 +15,11 @@ metadata:
     run.googleapis.com/ingress: all
 spec:
   template:
+    metadata:
+      annotations:
+        # Static nginx site, no database connection: capped for cost control only, not a
+        # connection budget concern (docs/deploy-gcp.md "Connection budget", ROADMAP 6.9).
+        autoscaling.knative.dev/maxScale: "10"
     spec:
       containers:
         - image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/openad/web:${IMAGE_TAG}

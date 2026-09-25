@@ -230,6 +230,30 @@ protocol contract changes in this phase (anything that would need one is recorde
       the web origin (`OPENAD_SIM_WEB_ORIGIN`). Tests: `api/tests/test_auth_hardening.py`.
       Deferred: the limiter stays off on Cloud Run until the `X-Forwarded-For` chain is
       verified in staging (`docs/deploy-gcp.md` §11); Cloud Armor for a global limit.
+- [x] **6.9 Capacity and deploy hardening (DB pool budget, Cloud Run scale caps, same-site
+      domain, media redirect hops).** _Done 2026-09-25._
+      Pointers: `api/src/openad/db/session.py` · `api/src/openad/config.py` ·
+      `api/src/openad/services/media.py` · `infra/gcp/services/*.yaml` ·
+      `infra/gcp/jobs/migrate.yaml` · `docs/deploy-gcp.md` ("Connection budget", §9) ·
+      ADR-0017 amendment · `docs/threat-model.md` T17 · `scripts/deploy-gcp.sh`.
+      Acceptance: `Database` sizes its pool from settings (`OPENAD_DB_POOL_SIZE`,
+      `OPENAD_DB_MAX_OVERFLOW`, `OPENAD_DB_POOL_TIMEOUT`, `OPENAD_DB_POOL_RECYCLE`,
+      `pool_pre_ping=True`) at all four call sites (`api`, indexer, settler,
+      `db/bootstrap.py`), SQLite unaffected; Cloud Run `maxScale` set for `api` (4) and `web`/
+      `web-demo` (10 each), with `api` pool 4/2, indexer and settler 2/1 each, and no pool env
+      on the `migrate` job (`alembic/env.py` opens exactly one connection itself); a documented,
+      cited connection budget with a steady-state total of 31 connections (34 counting
+      Postgres's 3 superuser-reserved slots), leaving 16 spare in steady state even if
+      `max_connections` were as low as 50, plus a separately documented rollout-overlap worst
+      case (≈64); `max_connections=100` set explicitly when the Cloud SQL instance is created
+      (`--database-flags`) and verified with `gcloud sql instances describe` (no database
+      connection) before deploying; web and api required to share a registrable domain in
+      production (`SameSite=Lax`), guarded by `scripts/deploy-gcp.sh` refusing a cross-site
+      `--only stack|all` deploy unless `--allow-cross-site-auth` is passed; every media redirect
+      hop (not just the first URL) re-validated for scheme and, outside dev/test, for a blocked
+      hostname (after stripping trailing dots) or an IP literal that is not globally routable or
+      is multicast, reserved or IPv6 site-local (including legacy numeric forms and IPv4-mapped
+      IPv6); T17 added; all checks green.
 
 ---
 

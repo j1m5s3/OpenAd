@@ -53,9 +53,12 @@ gcloud services vpc-peerings connect \
 ```
 
 ```bash
+# max_connections is set explicitly rather than left to the tier default: the connection
+# budget below requires at least 100, verified before every deploy.
 gcloud sql instances create openad-<ENV> \
   --database-version=POSTGRES_16 --tier=db-custom-1-3840 \
-  --region=<REGION> --no-assign-ip --network=default
+  --region=<REGION> --no-assign-ip --network=default \
+  --database-flags=max_connections=100
 
 gcloud sql databases create openad --instance=openad-<ENV>
 
@@ -68,6 +71,111 @@ Build the connection string as
 `postgresql+asyncpg://openad:<PASSWORD>@/openad?host=/cloudsql/<PROJECT_ID>:<REGION>:openad-<ENV>`
 (Cloud SQL Auth Proxy / unix socket — no public IP) and store it in Secret Manager (step 5);
 never in a plain Cloud Run env var.
+
+### Connection budget
+
+`api`, `indexer` and `settler` call `Database(url, settings)` (`api/src/openad/db/session.py`),
+which opens up to `OPENAD_DB_POOL_SIZE + OPENAD_DB_MAX_OVERFLOW` connections to Cloud SQL per
+instance. The `openad-migrate` job does **not**: `alembic/env.py` builds its own engine
+directly (`async_engine_from_config`) and opens exactly one connection regardless of any
+`OPENAD_DB_*` setting, so it isn't configurable and contributes a flat 1. `web`/`web-demo` open
+no database connection at all and aren't in this budget; their `maxScale: "10"` is for cost
+control only (they're static nginx sites with no per-request backend work).
+
+At Cloud Run's per-service scale caps, the sum across every process must stay under Postgres's
+`max_connections` — Cloud SQL for Postgres enforces the same setting, it isn't a separate quota.
+
+**Formula (steady state — see the rollout-overlap note below for the worst case):**
+
+```
+budget = api_maxScale × (api pool + overflow)
+       + indexer (pool + overflow) + settler (pool + overflow) + migrate (always 1)
+       + Cloud SQL reserved connections
+```
+
+**This tier's numbers** (`infra/gcp/services/*.yaml`, `infra/gcp/jobs/migrate.yaml`):
+
+| Process                | Max instances / tasks | Pool + overflow | Connections |
+| ----------------------- | ---------------------: | ----------------: | -----------: |
+| `openad-api`            | 4 (`maxScale`)         | 4 + 2             | 24           |
+| `openad-indexer`        | 1 (pinned)             | 2 + 1             | 3            |
+| `openad-settler`        | 1 (pinned)             | 2 + 1             | 3            |
+| `openad-migrate` (job)  | 1 (one execution)      | n/a (see above)   | 1            |
+| **Steady-state total**  |                        |                   | **31**       |
+
+Postgres also holds back `superuser_reserved_connections` slots (default **3**) out of
+`max_connections` for superuser roles only **(Postgres's default; inferred for Cloud SQL —
+verify before deploy)**. Every OpenAd process connects as the ordinary `openad` user, which is
+not a superuser, so it can never use those slots. The usable ceiling for our processes is
+therefore `max_connections − 3`. The steady-state total (31) must stay below that ceiling, and
+the headroom left over is `max_connections − 3 − 31`.
+
+**Steady state fits even a conservative floor.** If `max_connections` were as low as **50**,
+steady state would still leave `50 − 3 − 31 = 16` connections of headroom. The rollout-overlap
+worst case below would not fit under 50, which is why §3 sets `max_connections=100` explicitly
+and the check further down verifies it before every deploy.
+
+**Rollout overlap (inferred; not counted in the table above).** `maxScale` bounds instances of
+one revision; Cloud Run's default rolling deploy briefly runs the old and new revisions of
+`openad-api`, `openad-indexer` and `openad-settler` side by side while traffic shifts, so those
+three processes' connections can roughly double for that window: `(24 + 3 + 3) × 2 = 60`, plus
+`openad-migrate`'s 1 (it runs to completion *before* traffic shifts, per this runbook's
+ordering, so it is not itself doubled) and the 3 reserved connections, **≈ 64 worst case**.
+Confirm this against Cloud Run's actual rollout behavior for this project before relying on it.
+
+**Required: `max_connections` ≥ 100, verified before deploying.** §3 creates the instance with
+`--database-flags=max_connections=100` instead of relying on the tier's default, which for
+`db-custom-1-3840` is believed to be about 100 anyway **(inferred; verify before deploy — see
+"Cloud SQL for PostgreSQL: Quotas and limits / database flags")**. Setting the flag makes the
+value part of the instance's own configuration, so it can be checked without a database
+connection. The instance has no public IP and §3 never prints the `openad` password, so read the
+configuration through the Cloud SQL Admin API instead of connecting:
+
+```bash
+gcloud sql instances describe openad-<ENV> --format='value(settings.databaseFlags)'
+```
+
+Expect a `max_connections` entry with value `100` (or higher). An empty result means no flag is
+set and the tier's unverified default applies: set the flag as below rather than trusting that
+default. As an optional cross-check of the live value, run `SHOW max_connections;` from Cloud
+SQL Studio in the Cloud console, or with `psql` from a host inside the VPC (both need a database
+login).
+
+If the flag is missing or below 100 (for example, on an instance created before this section
+existed), set it before deploying:
+
+```bash
+gcloud sql instances patch openad-<ENV> --database-flags=max_connections=100
+```
+
+**(inferred; verify before deploy):** `--database-flags` on `patch` replaces the instance's
+whole flag list rather than merging into it, so repeat any other flags already set, and
+changing `max_connections` restarts the instance, so do it outside peak traffic. If
+`max_connections` has to stay below 100, the ≈64 rollout worst case has too little margin:
+lower `openad-api`'s `OPENAD_DB_POOL_SIZE`/`OPENAD_DB_MAX_OVERFLOW` and recompute both totals
+above before deploying.
+
+`openad-api` keeps Cloud Run's default `containerConcurrency` (80) rather than lowering it to
+match the pool. With `OPENAD_DB_POOL_SIZE + OPENAD_DB_MAX_OVERFLOW = 6` per instance, more than
+6 concurrent requests on one instance wait for a pooled connection; if none frees up within
+`OPENAD_DB_POOL_TIMEOUT`, that wait **fails as a 500** rather than opening an extra connection —
+it is not a queue that always eventually succeeds. That failure mode is the intended trade for
+staying inside the budget; if it shows up under load, raise `maxScale` (recomputing every total
+above) before lowering `containerConcurrency`, since the latter only spreads the same
+instance-level connection cap over fewer concurrent requests per instance.
+
+**Before scaling up**, in order of effort:
+
+1. Raise the `max_connections` flag (`gcloud sql instances patch`, with the caveats above),
+   moving to a larger tier first if the new value needs more memory. Because §3 sets the flag
+   explicitly, a bigger tier on its own does **not** raise `max_connections` **(inferred;
+   verify before deploy against the same "Quotas and limits / database flags" page above)**.
+   Recompute every total above before raising `openad-api`'s `maxScale`.
+2. Move to PgBouncer (transaction-mode pooling) in front of Cloud SQL, or Cloud SQL's own
+   managed connection pooling **(inferred; verify availability for this Postgres
+   version/tier — see "Cloud SQL for PostgreSQL: About connection pooling")**, so each
+   instance's `OPENAD_DB_POOL_SIZE` physical connections multiplex many more logical
+   sessions — the fix once instance count alone can't grow further inside the budget.
 
 ## 4. GCS media bucket + service accounts
 
@@ -191,10 +299,10 @@ subset of `.env.example`; adjust per environment (`OPENAD_CHAIN_ID`, `OPENAD_RPC
 gcloud run deploy openad-api \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/api:latest \
   --region=<REGION> --platform=managed --allow-unauthenticated \
-  --port=8000 --min-instances=1 \
+  --port=8000 --min-instances=1 --max-instances=4 \
   --service-account=openad-api-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com \
   --set-cloudsql-instances=<PROJECT_ID>:<REGION>:openad-<ENV> \
-  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=openad-media-<ENV>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_PUBLIC_URL=https://api.<ENV>.example.com,OPENAD_CORS_ORIGINS=https://<ENV>.example.com \
+  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=openad-media-<ENV>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_PUBLIC_URL=https://api.<ENV>.example.com,OPENAD_CORS_ORIGINS=https://<ENV>.example.com,OPENAD_DB_POOL_SIZE=4,OPENAD_DB_MAX_OVERFLOW=2 \
   --set-secrets=OPENAD_DATABASE_URL=openad-database-url-<ENV>:latest,OPENAD_SESSION_SECRET=openad-session-secret-<ENV>:latest,OPENAD_CLICK_HMAC_SECRET=openad-click-hmac-secret-<ENV>:latest
 
 # No --port here: Cloud Run injects $PORT (default 8080) into every container regardless of
@@ -207,7 +315,7 @@ gcloud run deploy openad-indexer \
   --command="uv,run,python,-m,openad.indexer" \
   --service-account=openad-indexer-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com \
   --set-cloudsql-instances=<PROJECT_ID>:<REGION>:openad-<ENV> \
-  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=openad-media-<ENV>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL> \
+  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_MEDIA_BACKEND=gcs,OPENAD_MEDIA_GCS_BUCKET=openad-media-<ENV>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_DB_POOL_SIZE=2,OPENAD_DB_MAX_OVERFLOW=1 \
   --set-secrets=OPENAD_DATABASE_URL=openad-database-url-<ENV>:latest
 
 gcloud run deploy openad-settler \
@@ -217,25 +325,73 @@ gcloud run deploy openad-settler \
   --command="uv,run,python,-m,openad.settler" \
   --service-account=openad-settler-<ENV>@<PROJECT_ID>.iam.gserviceaccount.com \
   --set-cloudsql-instances=<PROJECT_ID>:<REGION>:openad-<ENV> \
-  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL> \
+  --set-env-vars=OPENAD_ENV=<ENV>,OPENAD_CHAIN_ID=<CHAIN_ID>,OPENAD_RPC_URL=<RPC_URL>,OPENAD_DB_POOL_SIZE=2,OPENAD_DB_MAX_OVERFLOW=1 \
   --set-secrets=OPENAD_DATABASE_URL=openad-database-url-<ENV>:latest,OPENAD_SETTLER_KEY=openad-settler-key-<ENV>:latest
 
 gcloud run deploy openad-web \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/openad/web:latest \
-  --region=<REGION> --platform=managed --allow-unauthenticated
+  --region=<REGION> --platform=managed --allow-unauthenticated --max-instances=10
 ```
+
+`--max-instances` on `openad-api` matches the connection budget above; on `openad-web` (and
+`openad-web-demo`, not shown here since §8 only covers the stack — see
+`infra/gcp/services/web-demo.yaml`) it's for cost control only, since neither opens a database
+connection.
 
 `openad-settler` is the **only** service with `OPENAD_SETTLER_KEY` bound, and its service
 account is the only one with `secretAccessor` on that secret (step 5) — matches ADR-0014 and
 `AGENTS.md`'s non-custodial invariant. Confirm with
 `gcloud secrets get-iam-policy openad-settler-key-<ENV>` before going further.
 
-## 9. Domain mapping / CDN in front of serve
+## 9. Domain mapping: web and api must share a registrable domain (required)
+
+**This section is required, not optional, before publishers or advertisers sign in.** The
+session cookie is `Set-Cookie: ...; SameSite=Lax` (`routers/auth.py`), so it is only sent back
+on requests that are same-site with the page that set it. Cloud Run's default `*.run.app`
+service URLs are **not** same-site with each other: `run.app` is itself on the Public Suffix
+List **(inferred; verify before deploy — check `publicsuffix.org`'s list for `run.app`)**, so
+every Cloud Run service's default URL (`openad-api-xyz.a.run.app`,
+`openad-web-xyz.a.run.app`, …) is its own separate registrable domain even when both are in the
+same project and region. Left on default URLs, sign-in **silently** breaks: the browser accepts
+the session cookie from `POST /v1/auth/verify` but never sends it back on the next api request
+from the web origin — there is no error, just a signed-out app.
+
+Map both services under one registrable domain instead, e.g. `app.<domain>` and
+`api.<domain>`:
 
 ```bash
-gcloud run domain-mappings create --service=openad-api --domain=api.<ENV>.example.com --region=<REGION>
-gcloud run domain-mappings create --service=openad-web --domain=<ENV>.example.com --region=<REGION>
+gcloud run domain-mappings create --service=openad-api --domain=api.<domain> --region=<REGION>
+gcloud run domain-mappings create --service=openad-web --domain=app.<domain> --region=<REGION>
 ```
+
+Then point the api's CORS allowlist and the web build's api URL at those same hosts:
+`OPENAD_CORS_ORIGINS=https://app.<domain>` (rendered into `api.yaml` as `WEB_URL`) and
+`VITE_API_URL=https://api.<domain>` for the web build. `scripts/deploy-gcp.sh`'s same-site guard
+(below) checks these same `API_URL`/`WEB_URL` values.
+
+Domain mappings aren't available in every region (see `gcloud run domain-mappings create
+--help`, or the Cloud Run docs, for the current region list). Where they aren't, front both
+services with a global external Application Load Balancer using serverless NEGs instead — one
+NEG per Cloud Run service, both reachable under the load balancer's own custom domain, so they
+still share a registrable domain. This also enables Cloud Armor rate limiting in front of both
+services, which is the global complement to the auth rate limiter's per-instance limit
+(ADR-0009 amendment; `docs/threat-model.md` T16).
+
+`scripts/deploy-gcp.sh --only stack|all` refuses to proceed when `API_URL` and `WEB_URL` don't
+look same-site (both default `*.run.app` hosts, or their last two DNS labels differ — a
+heuristic, not real Public Suffix List logic). Pass `--allow-cross-site-auth` only when that's
+genuinely fine, e.g. deploying `--only stack` before any web build points at it.
+
+The last-two-labels heuristic is a false-*reject* risk in one direction (it can refuse a
+genuinely same-site pair it doesn't recognize) but a false-*accept* risk in the other, for any
+public suffix longer than one label: `last_two_labels` reduces both `api.foo.co.uk` and
+`app.bar.co.uk` to the same `co.uk` (the real registrable domains are `foo.co.uk` and
+`bar.co.uk` — not same-site), and reduces both `foo.web.app` and `bar.web.app` to the same
+`web.app` (itself a multi-part public suffix like `run.app` — also not same-site), so the guard
+can wrongly *accept* a genuinely cross-site pair on domains shaped like these.
+`--allow-cross-site-auth` exists for the documented false-reject case above, not for this
+false-accept gap — a domain on a multi-label public suffix should be checked by hand rather than
+trusted to this heuristic.
 
 Optional: put a global HTTPS load balancer + Cloud CDN in front of `openad-api` scoped to
 `/v1/serve/*` and `/v1/serve/*/media`, since those responses are already

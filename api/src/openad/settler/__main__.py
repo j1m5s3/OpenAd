@@ -27,7 +27,7 @@ async def main() -> None:
     deployment = load_deployment(settings.deployments_path, settings.chain_id)
     liveness = Liveness(stale_after_seconds(settings.settler_poll_seconds))
     start_liveness_server_from_env(liveness)  # no-op unless Cloud Run's $PORT is set
-    db = Database(settings.database_url)
+    db = Database(settings.database_url, settings)
     try:
         runner = SettlerRunner(
             settings,

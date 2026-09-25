@@ -22,7 +22,7 @@ async def main() -> None:
     log = get_logger(__name__)
     if settings.env == "prod":
         raise SystemExit("refusing to create_all in prod; use alembic")
-    db = Database(settings.database_url)
+    db = Database(settings.database_url, settings)
     try:
         await db.create_all()
         log.info("db.bootstrap.done", url=settings.database_url.split("@")[-1])
