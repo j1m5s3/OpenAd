@@ -216,15 +216,16 @@ export const WIZARD_COPY = {
     terms: {
       title: 'Terms',
       description: 'Choose Lease (Dutch) or CPC, prices, and whether creatives need approval.',
-      whatNext: 'The slot can be sold. Lease: the auction opens lead-time before each period; first buy wins.',
+      whatNext:
+        'The slot can be sold. Lease: the auction opens lead-time before each period; first buy wins.',
     },
-    termsCpcWhatNext:
-      'The slot can be sold. Campaigns compete at serve time at your floor CPC.',
+    termsCpcWhatNext: 'The slot can be sold. Campaigns compete at serve time at your floor CPC.',
   },
   creativeSetup: {
     registerMedia: {
       title: 'Register media',
-      description: 'Hash the image in your browser, then register the public URI as a media creative. Raster only.',
+      description:
+        'Hash the image in your browser, then register the public URI as a media creative. Raster only.',
       whatNext: 'The creative is on-chain. Request approval if the publisher requires it.',
     },
     registerNft: {
@@ -276,3 +277,11 @@ export const WIZARD_COPY = {
     },
   },
 } as const;
+
+/** The buy receipt's "when will this show up" note (ROADMAP 6.2 step 35): the indexer lags a real
+ * chain, but demo mode applies the write in-process, so the calendar updates immediately. */
+export function leaseIndexerNote(demoMode: boolean): string {
+  return demoMode
+    ? 'It appears on the slot calendar immediately.'
+    : 'It appears on the slot calendar once the indexer catches up.';
+}
