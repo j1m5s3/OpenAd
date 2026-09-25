@@ -19,8 +19,15 @@ const STANDARD_SIZES = [
   { width: 320, height: 50, label: 'Mobile banner 320×50' },
 ] as const;
 
+/** In demo mode, the embed's `api` attribute must resolve to the page's own base — not
+ * `location.origin` — so `GET {api}/v1/serve/{id}` lands on the exact sub-path the network
+ * guard's serve responder matches (`isServeRoute`, ADR-0016 hosting amendment): under a relative
+ * `base` (`npm run build:demo`), `document.baseURI` already reflects that sub-path.
+ * `new URL('.', document.baseURI)` always has a trailing slash; strip it since the embed appends
+ * its own `/v1/serve/...`. */
 function embedApiBase(): string {
-  return DEMO_MODE ? window.location.origin : API_URL;
+  if (!DEMO_MODE) return API_URL;
+  return new URL('.', document.baseURI).href.replace(/\/$/, '');
 }
 
 /** Matches `SupplyPage.tsx`'s own embed snippet: just the `<open-ad>` element, plus a placeholder
@@ -42,7 +49,17 @@ function snippet(slotId: string, width: number, height: number): string {
  * already exists on the element, which throws for a getter-only one. Attributes are exactly what
  * the unedited embed contract expects (see `embed/src/open-ad.ts`), so this changes nothing about
  * how a publisher would actually use it. */
-function OpenAdEmbed({ slotId, api, width, height }: { slotId: string; api: string; width: number; height: number }) {
+function OpenAdEmbed({
+  slotId,
+  api,
+  width,
+  height,
+}: {
+  slotId: string;
+  api: string;
+  width: number;
+  height: number;
+}) {
   const ref = useCallback(
     (el: HTMLElement | null) => {
       if (!el) return;
@@ -108,9 +125,10 @@ export function EmbedDemoPage() {
         <p className="text-sm text-accent">Embed</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">See the embed live</h1>
         <p className="mt-2 max-w-2xl text-muted">
-          This is the real <code>&lt;open-ad&gt;</code> element — the same 5 KB, zero-dependency
-          web component a publisher drops on their page — pointed at a slot below.
-          {DEMO_MODE && ' Nothing here is re-implemented for the demo: the fetch it makes is answered in-process, not proxied.'}
+          This is the real <code>&lt;open-ad&gt;</code> element — the same 5 KB, zero-dependency web
+          component a publisher drops on their page — pointed at a slot below.
+          {DEMO_MODE &&
+            ' Nothing here is re-implemented for the demo: the fetch it makes is answered in-process, not proxied.'}
         </p>
       </div>
 
@@ -164,8 +182,11 @@ export function EmbedDemoPage() {
         <h2 className="font-semibold">What just happened</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
           <li>
-            The element called <code>GET {api}/v1/serve/{'{slotId}'}</code> — the only endpoint it
-            ever talks to.
+            The element called{' '}
+            <code>
+              GET {api}/v1/serve/{'{slotId}'}
+            </code>{' '}
+            — the only endpoint it ever talks to.
           </li>
           <li>Serving never reads the chain, and never proxies the advertiser&apos;s media URL.</li>
           <li>

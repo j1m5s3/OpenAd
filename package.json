@@ -17,6 +17,7 @@
     "dev:web": "npm run dev -w web",
     "dev:embed": "npm run dev -w embed",
     "build": "npm run build --workspaces --if-present",
+    "build:demo": "npm run build:demo -w web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test -w web -w embed -w sim",

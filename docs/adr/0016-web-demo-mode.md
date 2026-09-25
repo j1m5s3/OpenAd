@@ -78,14 +78,68 @@ misleading.
 
 ## Consequences
 
-- ROADMAP 6.2. `web/src/demo/` holds the flag, installer, network guard, banner, and (6.2, in
-  progress) the fixtures, fixture API adapter, and in-memory chain simulator behind the demo wallet's
-  `injected` connector.
-- `npm run build:demo` (6.2, in progress) will produce a static `web/dist-demo` bundle (SPA
-  fallback) with no RPC URL or API base baked in; CI will build it to guard the tree-shaking
+- ROADMAP 6.2 (done). `web/src/demo/` holds the flag, installer, network guard, banner, fixtures,
+  fixture API adapter, and in-memory chain simulator behind the demo wallet's `injected` connector.
+- `npm run build:demo` produces a static `web/dist-demo` bundle — hash router, relative base, **no
+  server-side fallback needed** (see the hosting amendment below) — with no RPC URL or real API
+  base baked in; CI builds and checks it (`check-demo-bundle.mjs`) to guard the tree-shaking
   invariant.
 - Demo mode is additive: it changes bootstrapping (`main.tsx`), the request resolver seam in
   `lib/api.ts`, and the wagmi config factory, but no feature-folder business logic.
+
+## Amendment (2026-09-25): Hosting — static build for any sub-path, no server fallback
+
+ROADMAP 6.2 step 12+13. The orchestrator publishes `web/dist-demo` as a **multi-file static site
+on a host with no SPA fallback, served from an unknown sub-path** (a claude.ai Artifact today; the
+`web-demo` nginx image, slice F, later). Three things would otherwise break there:
+`createBrowserRouter` 404s a deep link with no server rewrite; Vite's default absolute `base: '/'`
+makes every asset URL wrong under a sub-path; and the fixture creative URIs were absolute
+(`/demo/creatives/*.svg`), which breaks the same way for both the React `<img>`s and the
+`<open-ad>` shadow-DOM image.
+
+1. **`npm run build:demo`** (`web/scripts/build-demo.mjs`) runs the same sync + type-check steps
+   as `npm run build`, then `vite build --outDir dist-demo` with three env vars set in the child
+   process only: `VITE_DEMO_MODE=1`, `VITE_ROUTER=hash`, `VITE_BASE=./`. It also sets
+   `VITE_API_URL=http://demo.invalid` so `lib/api.ts`'s real-API fallback string never bakes into
+   the demo bundle at all (an unreachable, obviously-fake host — the same convention
+   `demo/demoApi.ts` already uses as its internal URL-parsing base). Output: `web/dist-demo`,
+   gitignored, never the same directory as the normal build's `web/dist`.
+2. **Router.** `web/src/app/routes.tsx` picks `createHashRouter` when
+   `import.meta.env.VITE_ROUTER === 'hash'`, else `createBrowserRouter` — one route table either
+   way. A hash router needs no server-side rewrite: every route lives in the fragment, which the
+   server never sees.
+3. **Base path.** `web/vite.config.ts` sets `base: process.env.VITE_BASE ?? '/'`; the normal build
+   is unchanged (`'/'`). `publicDir` is `public-demo` only when `VITE_DEMO_MODE=1`, else `public`
+   (`web/public` no longer exists — it held only the demo creative SVGs, moved to
+   `web/public-demo/demo/`), so the demo assets never ship in the normal `dist`.
+4. **Base-relative media.** Fixture creative `uri`s (`fixtures.ts`) are base-relative
+   (`demo/creatives/x.svg`, no leading slash). `demo/assetUrl.ts` resolves one to an absolute URL
+   at read time (`new URL(uri, document.baseURI).href`), used by `demoServe.ts` when it builds a
+   `ServeCreative`. `EmbedDemoPage.tsx` sets the embed's `api` attribute the same way
+   (`new URL('.', document.baseURI)`), so `GET {api}/v1/serve/{id}` lands on the page's own
+   sub-path.
+5. **Network guard, sub-path aware.** `isServeRoute` (`demo/install.ts`) matches
+   `.../v1/serve/{id}` from the end of the pathname, not the start, so it still matches under a
+   sub-path. `isAllowedDemoUrl`'s same-origin denial (`networkGuard.ts`) was already wrong here —
+   it matched `/v1`/`/anvil` only as a *leading* prefix, which would have let a sub-path request
+   like `/openad-demo/v1/slots` straight through to a real (missing) static file instead of
+   denying it — fixed to match them as a path *segment* anywhere in the pathname.
+6. **`web/scripts/check-demo-bundle.mjs`** (CI and local) checks: `dist-demo` bakes in no real
+   API/RPC host, except two inert literals matched by exact surrounding substring — the viem
+   `foundry` chain definition's own RPC URLs, and `@openad/embed`'s own `DEFAULT_API` fallback
+   (used only when an `<open-ad>` has no `api` attribute, never true here); `dist-demo/index.html`'s
+   asset URLs are all relative; and the normal `dist` carries no demo marker or `demo/creatives/*`
+   asset.
+7. **Playwright, static sub-path mode.** `e2e/demo/demo.config.ts` builds `dist-demo` and serves it
+   with a ~30-line static file server (`e2e/demo/static-server.mjs`, no SPA fallback) under
+   `/openad-demo/`. A `demoPath(route)` helper maps a route to its `#/route` URL under that mount.
+   A dedicated test loads `.../openad-demo/#/embed-demo` cold (no prior page) and asserts the
+   embed's image resolves under `/openad-demo/demo/creatives/`.
+8. **The nginx image variant (slice F) is unaffected.** `VITE_DEMO_MODE=1 npm run build -w web`
+   (no `VITE_ROUTER`/`VITE_BASE`) still outputs `dist` with the browser router and an absolute
+   base, which is fine behind nginx's `try_files $uri /index.html` fallback; only the standalone
+   static-Artifact path needs `build:demo`. The demo variant's CSP (`connect-src 'self'`, slice F)
+   holds regardless: demo mode never opens an outside connection either way.
 
 ## References
 

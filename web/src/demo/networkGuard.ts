@@ -9,15 +9,55 @@
 
 export class DemoNetworkError extends Error {
   constructor(url: string) {
-    super(`Demo mode: blocked network request to "${url}" — demo builds must not reach a real API or chain.`);
+    super(
+      `Demo mode: blocked network request to "${url}" — demo builds must not reach a real API or chain.`,
+    );
     this.name = 'DemoNetworkError';
   }
 }
 
-/** Same-origin request paths that are still denied even though they resolve to the page's own
- * origin: the real API mounts under `/v1`, and the dev Vite proxy forwards `/anvil` to Anvil. A
- * demo build talking to either, same-origin or not, is a leak. */
-const DENIED_SAME_ORIGIN_PATH_PREFIXES = ['/v1', '/anvil'];
+/** Same-origin request path segments that are still denied even though they resolve to the
+ * page's own origin: the real API mounts under `/v1`, and the dev Vite proxy forwards `/anvil` to
+ * Anvil. A demo build talking to either, same-origin or not, is a leak. Matched as a path
+ * *segment* (`(^|/)v1(/|$)`), not only a leading prefix, so this still denies `/v1/...` when the
+ * page itself is served from a sub-path (`/openad-demo/v1/...`, ADR-0016 hosting amendment) —
+ * `registerDemoResponder`'s one exception (below) is checked separately, before this denies it.
+ * Checked against the pathname *relative to the page's own base* (`stripBasePath`, below), not
+ * the raw pathname: a hosting sub-path that itself happens to contain a "v1" segment (e.g. an
+ * artifact host at `/v1/artifacts/<id>/`) must not deny every asset under it. */
+const DENIED_SAME_ORIGIN_PATH_SEGMENTS = ['v1', 'anvil'];
+
+function hasDeniedPathSegment(pathname: string): boolean {
+  return DENIED_SAME_ORIGIN_PATH_SEGMENTS.some((segment) =>
+    new RegExp(`(^|/)${segment}(/|$)`).test(pathname),
+  );
+}
+
+/** The directory portion of `document.baseURI` — e.g. `/v1/artifacts/<id>/` for a page whose
+ * `<base href>` (or own URL) lives there — or `/` when it can't be determined (no `document`, an
+ * unparsable `baseURI`, or one that resolves to a different origin than `origin`). Kept as a
+ * function, like `configuredDeniedOrigins`, so it re-reads the live `document` per call and stays
+ * test-friendly (`isAllowedDemoUrl`'s `basePath` parameter overrides it directly). */
+function documentBasePath(origin: string): string {
+  if (typeof document === 'undefined') return '/';
+  try {
+    const base = new URL(document.baseURI);
+    if (base.origin !== origin) return '/';
+    return base.pathname.endsWith('/') ? base.pathname : base.pathname.replace(/[^/]*$/, '');
+  } catch {
+    return '/';
+  }
+}
+
+/** `pathname` with `basePath` (always ending in `/`) removed from the front, if present — turning
+ * an absolute pathname into one relative to the page's own base, with its leading slash kept
+ * (`/v1/artifacts/<id>/assets/x.js` under base `/v1/artifacts/<id>/` → `/assets/x.js`). Pathnames
+ * that don't start with `basePath` (an absolute-rooted URL reaching outside the page's own base)
+ * are returned unchanged — the same, more conservative, rule this guard already applied before
+ * base-relative matching existed. */
+function stripBasePath(pathname: string, basePath: string): string {
+  return pathname.startsWith(basePath) ? pathname.slice(basePath.length - 1) : pathname;
+}
 
 /** A registered exception: `matcher` decides whether a same-origin `fetch()` request is answered
  * in-process instead of being denied, and `handler` builds the `Response`. Used only by
@@ -34,7 +74,10 @@ let responder: DemoResponder | null = null;
 /** Registers the one same-origin exception `guardFetch` may answer in-process. Passing no
  * arguments clears it (used by tests, and safe to call outside `DEMO_MODE` where it is simply
  * never installed). */
-export function registerDemoResponder(matcher?: DemoResponder['matcher'], handler?: DemoResponder['handler']): void {
+export function registerDemoResponder(
+  matcher?: DemoResponder['matcher'],
+  handler?: DemoResponder['handler'],
+): void {
   responder = matcher && handler ? { matcher, handler } : null;
 }
 
@@ -61,6 +104,7 @@ export function isAllowedDemoUrl(
   url: string,
   origin: string = window.location.origin,
   deniedOrigins: readonly string[] = configuredDeniedOrigins(),
+  basePath: string = documentBasePath(origin),
 ): boolean {
   let resolved: URL;
   try {
@@ -70,9 +114,7 @@ export function isAllowedDemoUrl(
   }
   if (resolved.origin !== origin) return false;
   if (deniedOrigins.includes(resolved.origin)) return false;
-  if (DENIED_SAME_ORIGIN_PATH_PREFIXES.some((prefix) => resolved.pathname.startsWith(prefix))) {
-    return false;
-  }
+  if (hasDeniedPathSegment(stripBasePath(resolved.pathname, basePath))) return false;
   return true;
 }
 
@@ -94,14 +136,20 @@ function guardFetch(win: typeof window): () => void {
   win.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = resolveRequestUrl(input);
     if (!isAllowedDemoUrl(url, win.location.origin)) {
-      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      const method = (
+        init?.method ?? (input instanceof Request ? input.method : 'GET')
+      ).toUpperCase();
       let resolved: URL | null = null;
       try {
         resolved = new URL(url, win.location.origin);
       } catch {
         resolved = null;
       }
-      if (resolved && resolved.origin === win.location.origin && responder?.matcher(method, resolved.pathname, resolved.origin)) {
+      if (
+        resolved &&
+        resolved.origin === win.location.origin &&
+        responder?.matcher(method, resolved.pathname, resolved.origin)
+      ) {
         return Promise.resolve(responder.handler(resolved));
       }
       const error = new DemoNetworkError(url);
@@ -120,7 +168,12 @@ function guardFetch(win: typeof window): () => void {
 function guardXhrOpen(win: typeof window): () => void {
   const proto = win.XMLHttpRequest.prototype;
   const original = proto.open;
-  proto.open = function open(this: XMLHttpRequest, method: string, url: string | URL, ...rest: unknown[]) {
+  proto.open = function open(
+    this: XMLHttpRequest,
+    method: string,
+    url: string | URL,
+    ...rest: unknown[]
+  ) {
     assertAllowed(url.toString(), win);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- matching XHR.open's own overloaded signature.
     return (original as any).call(this, method, url, ...rest);

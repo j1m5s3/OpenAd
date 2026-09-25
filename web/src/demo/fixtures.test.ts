@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { feeSplit } from '../lib/auction';
 import { SALE_CPC } from '../lib/labels';
+import { assetUrl } from './assetUrl';
 import { computePeriod, seedDemoState } from './fixtures';
 
 const NOW = 1_800_000_000;
@@ -76,7 +77,7 @@ describe('seedDemoState', () => {
     expect(all.some((p) => p.sellable && p.reason === 'remainder')).toBe(true); // unsold remainder
   });
 
-  it("publisher payout plus fee equals the sale price for every leased period", () => {
+  it('publisher payout plus fee equals the sale price for every leased period', () => {
     const state = seedDemoState(NOW);
     for (const { leases } of state.slots) {
       for (const lease of Object.values(leases)) {
@@ -87,10 +88,13 @@ describe('seedDemoState', () => {
     }
   });
 
-  it('every creative URI is same-origin under /demo/', () => {
+  it('every creative URI is base-relative, and resolves same-origin under demo/creatives/*.svg', () => {
     const state = seedDemoState(NOW);
     for (const creative of Object.values(state.creatives)) {
-      expect(creative.uri.startsWith('/demo/')).toBe(true);
+      expect(creative.uri.startsWith('/')).toBe(false);
+      const resolved = new URL(assetUrl(creative.uri));
+      expect(resolved.origin).toBe(window.location.origin);
+      expect(resolved.pathname.endsWith('.svg')).toBe(true);
     }
   });
 

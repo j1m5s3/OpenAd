@@ -140,15 +140,16 @@ protocol contract changes in this phase (anything that would need one is recorde
       `market-fit.md` maps to a 6.x task below; no fabricated customers/traction/quotes;
       glossary vocabulary only (never "sell a slot").
       _Done 2026-09-24._
-- [ ] **6.2 Demo mode + static showcase (ADR-0016).**
+- [x] **6.2 Demo mode + static showcase (ADR-0016).**
       Pointers: ADR-0016 (new) · `web/src/demo/` · `ARCHITECTURE.md` §7.
       Acceptance: `VITE_DEMO_MODE=1` build uses in-memory seeded fixtures and a simulated
       wallet; never opens an RPC connection, never calls the API, never signs or requests a
       real wallet signature; persistent "Demo — simulated data, no real funds" banner; demo
-      code tree-shaken out of normal builds; `web/dist-demo` static-hostable with SPA fallback.
-      _In progress: ADR-0016 accepted; flows + persona switcher done; tour + /why + /embed-demo
-      done (`npm run test:demo -w e2e`). Remaining: format + static `dist-demo` build + CI wiring
-      (step 12+13)._
+      code tree-shaken out of normal builds; `npm run build:demo` produces a static
+      `web/dist-demo` that runs from any sub-path with **no server-side fallback** (hash router
+      + relative base, ADR-0016 hosting amendment), proven by `npm run test:demo -w e2e`
+      (`e2e/demo/`, served with no SPA fallback) including a cold deep link.
+      _Done 2026-09-25._
 - [ ] **6.3 Publisher growth (embed code, share page, off-chain profile).**
       Pointers: `web/src/features/publisher/` · `docs/guide/publisher/`.
       Acceptance: copy-paste embed snippet generator with CMS instructions; public `/slot/:id`

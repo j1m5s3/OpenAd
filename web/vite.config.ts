@@ -23,40 +23,45 @@ function demoIndexHtml(demo: boolean): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) => ({
-  plugins: [
-    react(),
-    tailwindcss(),
-    demoIndexHtml(
-      (process.env.VITE_DEMO_MODE ?? loadEnv(mode, repoRoot, 'VITE_').VITE_DEMO_MODE) === '1',
-    ),
-  ],
-  envDir: repoRoot,
-  resolve: {
-    alias: {
-      // `@openad/embed`'s package "exports" points at its build output (`dist/open-ad.js`),
-      // which does not exist in dev or CI unless `embed`'s own build ran first. Resolve straight
-      // to its source instead, so `/embed-demo` renders the real `<open-ad>` element with no
-      // prebuilt dist required (ROADMAP 6.2 step 10+11).
-      '@openad/embed': fileURLToPath(new URL('../embed/src/open-ad.ts', import.meta.url)),
-    },
-  },
-  server: {
-    host: true,
-    port: 5173,
-    strictPort: true,
-    proxy: {
-      '/anvil': {
-        target: 'http://127.0.0.1:8545',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/anvil/, '') || '/',
+export default defineConfig(({ mode }) => {
+  const isDemo =
+    (process.env.VITE_DEMO_MODE ?? loadEnv(mode, repoRoot, 'VITE_').VITE_DEMO_MODE) === '1';
+  return {
+    plugins: [react(), tailwindcss(), demoIndexHtml(isDemo)],
+    envDir: repoRoot,
+    // Demo builds ship no demo assets in the normal `dist` (`web/public`): `web/public-demo/demo/**`
+    // holds the fixture creative SVGs, and only `build:demo` (VITE_DEMO_MODE=1) serves it as the
+    // public dir (ADR-0016 hosting amendment). `web/public` need not exist for the demo build.
+    publicDir: isDemo ? 'public-demo' : 'public',
+    // The normal build keeps the default absolute base ('/'); `build:demo` passes `VITE_BASE=./`
+    // (ADR-0016 hosting amendment) so `dist-demo` works unpacked under any sub-path.
+    base: process.env.VITE_BASE ?? '/',
+    resolve: {
+      alias: {
+        // `@openad/embed`'s package "exports" points at its build output (`dist/open-ad.js`),
+        // which does not exist in dev or CI unless `embed`'s own build ran first. Resolve straight
+        // to its source instead, so `/embed-demo` renders the real `<open-ad>` element with no
+        // prebuilt dist required (ROADMAP 6.2 step 10+11).
+        '@openad/embed': fileURLToPath(new URL('../embed/src/open-ad.ts', import.meta.url)),
       },
     },
-  },
-  build: { sourcemap: true, target: 'es2022' },
-  test: {
-    environment: 'jsdom',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    setupFiles: ['src/test/setup.ts'],
-  },
-}));
+    server: {
+      host: true,
+      port: 5173,
+      strictPort: true,
+      proxy: {
+        '/anvil': {
+          target: 'http://127.0.0.1:8545',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/anvil/, '') || '/',
+        },
+      },
+    },
+    build: { sourcemap: true, target: 'es2022' },
+    test: {
+      environment: 'jsdom',
+      include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+      setupFiles: ['src/test/setup.ts'],
+    },
+  };
+});

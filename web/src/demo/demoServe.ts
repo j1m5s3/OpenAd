@@ -10,6 +10,7 @@
  * campaigns on the slot, else the slot's house ad, else empty.
  */
 import type { ServeCreative, ServeResponse, ServeStatus } from '../../../embed/src/types';
+import { assetUrl } from './assetUrl';
 import type { DemoCampaign, DemoState } from './fixtures';
 
 const SERVE_TTL = 30;
@@ -56,7 +57,7 @@ function creativeToServe(state: DemoState, creativeId: string): ServeCreative | 
   if (!creative || creative.revoked) return null;
   return {
     kind: 'image',
-    mediaUrl: creative.uri,
+    mediaUrl: assetUrl(creative.uri),
     clickUrl: creative.clickUrl,
     width: creative.width,
     height: creative.height,
@@ -70,7 +71,14 @@ function creativeToServe(state: DemoState, creativeId: string): ServeCreative | 
 export function buildServeResponse(state: DemoState, slotId: string, now: number): ServeResponse {
   const fixture = findFixture(state, slotId);
   if (!fixture) {
-    return { slotId, status: 'unknown', creative: null, lease: null, campaign: null, ttl: SERVE_TTL };
+    return {
+      slotId,
+      status: 'unknown',
+      creative: null,
+      lease: null,
+      campaign: null,
+      ttl: SERVE_TTL,
+    };
   }
 
   const lease = activeLease(state, slotId, now);
@@ -81,7 +89,10 @@ export function buildServeResponse(state: DemoState, slotId: string, now: number
         slotId,
         status: 'lease' satisfies ServeStatus,
         creative,
-        lease: { advertiser: lease.advertiser, expiresAt: new Date(lease.end * 1000).toISOString() },
+        lease: {
+          advertiser: lease.advertiser,
+          expiresAt: new Date(lease.end * 1000).toISOString(),
+        },
         campaign: null,
         ttl: SERVE_TTL,
       };
@@ -122,5 +133,12 @@ export function buildServeResponse(state: DemoState, slotId: string, now: number
     };
   }
 
-  return { slotId, status: 'empty' satisfies ServeStatus, creative: null, lease: null, campaign: null, ttl: SERVE_TTL };
+  return {
+    slotId,
+    status: 'empty' satisfies ServeStatus,
+    creative: null,
+    lease: null,
+    campaign: null,
+    ttl: SERVE_TTL,
+  };
 }

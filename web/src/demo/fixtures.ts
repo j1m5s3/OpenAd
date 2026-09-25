@@ -12,13 +12,7 @@ import { getAddress } from 'viem';
 
 import { dutchPrice, feeSplit, remainderPrice } from '../lib/auction';
 import { DEMO_CONTRACTS, DEMO_TREASURY } from './deployment';
-import type {
-  AdvertiserOut,
-  ApprovalOut,
-  CreativeOut,
-  PublisherOut,
-  SlotOut,
-} from '../lib/api';
+import type { AdvertiserOut, ApprovalOut, CreativeOut, PublisherOut, SlotOut } from '../lib/api';
 
 // ---------------------------------------------------------------------------------------------
 // Personas
@@ -132,7 +126,13 @@ export function computePeriod(
       } else if (now < start) {
         sellable = true;
         reason = '';
-        price = dutchPrice(BigInt(terms.startPrice), BigInt(terms.floorPrice), terms.leadSeconds, start, now);
+        price = dutchPrice(
+          BigInt(terms.startPrice),
+          BigInt(terms.floorPrice),
+          terms.leadSeconds,
+          start,
+          now,
+        );
       } else {
         sellable = true;
         reason = 'remainder';
@@ -182,7 +182,13 @@ export interface DemoCampaign {
   closed: boolean;
   closeAfter: number;
   serves: number;
-  settlements: { batchId: string; charged: string; fee: string; payableClicks: number; slotId: string }[];
+  settlements: {
+    batchId: string;
+    charged: string;
+    fee: string;
+    payableClicks: number;
+    slotId: string;
+  }[];
 }
 
 export interface DemoSlotFixture {
@@ -361,7 +367,7 @@ export function seedDemoState(now: number): DemoState {
       creativeId: '1',
       advertiser: ADV_WALLET,
       kind: 0,
-      uri: '/demo/creatives/nimbus-728x90.svg',
+      uri: 'demo/creatives/nimbus-728x90.svg',
       contentHash: `0x${'a'.repeat(64)}`,
       mime: 'image/svg+xml',
       width: 728,
@@ -374,7 +380,7 @@ export function seedDemoState(now: number): DemoState {
       creativeId: '2',
       advertiser: ADV_L2,
       kind: 0,
-      uri: '/demo/creatives/fastlane-320x50.svg',
+      uri: 'demo/creatives/fastlane-320x50.svg',
       contentHash: `0x${'b'.repeat(64)}`,
       mime: 'image/svg+xml',
       width: 320,
@@ -387,7 +393,7 @@ export function seedDemoState(now: number): DemoState {
       creativeId: '3',
       advertiser: ADV_WALLET,
       kind: 0,
-      uri: '/demo/creatives/nimbus-300x250.svg',
+      uri: 'demo/creatives/nimbus-300x250.svg',
       contentHash: `0x${'c'.repeat(64)}`,
       mime: 'image/svg+xml',
       width: 300,
@@ -400,7 +406,7 @@ export function seedDemoState(now: number): DemoState {
       creativeId: '4',
       advertiser: ADV_L2,
       kind: 0,
-      uri: '/demo/creatives/fastlane-728x90.svg',
+      uri: 'demo/creatives/fastlane-728x90.svg',
       contentHash: `0x${'d'.repeat(64)}`,
       mime: 'image/svg+xml',
       width: 728,
@@ -413,7 +419,7 @@ export function seedDemoState(now: number): DemoState {
       creativeId: '5',
       advertiser: ADV_WALLET,
       kind: 0,
-      uri: '/demo/creatives/nimbus-320x50.svg',
+      uri: 'demo/creatives/nimbus-320x50.svg',
       contentHash: `0x${'e'.repeat(64)}`,
       mime: 'image/svg+xml',
       width: 320,
@@ -439,7 +445,13 @@ export function seedDemoState(now: number): DemoState {
   // campaign (CampaignVault invariant: nothing but `remaining` and paid-out settlements came out
   // of the escrowed budget).
   function settlement(batchId: string, slotId: string, charged: string, payableClicks: number) {
-    return { batchId, slotId, charged, payableClicks, fee: feeSplit(BigInt(charged)).fee.toString() };
+    return {
+      batchId,
+      slotId,
+      charged,
+      payableClicks,
+      fee: feeSplit(BigInt(charged)).fee.toString(),
+    };
   }
 
   const campaigns: Record<string, DemoCampaign> = {
@@ -556,7 +568,9 @@ function slotEarnings(state: DemoState, slotId: string): bigint {
 
 export function buildPublisherOut(state: DemoState, address: string): PublisherOut {
   const addr = address.toLowerCase();
-  const slotIds = state.slots.filter((s) => s.slot.owner.toLowerCase() === addr).map((s) => s.slot.slotId);
+  const slotIds = state.slots
+    .filter((s) => s.slot.owner.toLowerCase() === addr)
+    .map((s) => s.slot.slotId);
   const pendingApprovals = state.approvals.filter(
     (a) => a.publisher.toLowerCase() === addr && a.status === 1,
   ).length;
@@ -603,7 +617,11 @@ export function buildAdvertiserOut(state: DemoState, address: string): Advertise
   return { address, creativeIds, leaseCount, delivery, campaigns };
 }
 
-export function suggestPrices(state: DemoState, slotId: string, now: number): Record<string, string> {
+export function suggestPrices(
+  state: DemoState,
+  slotId: string,
+  now: number,
+): Record<string, string> {
   const fixture = state.slots.find((s) => s.slot.slotId === slotId);
   const t = fixture?.slot.terms;
   const sold = fixture ? Object.values(fixture.leases).map((l) => BigInt(l.price)) : [];

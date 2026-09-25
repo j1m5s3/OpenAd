@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router';
+import { createBrowserRouter, createHashRouter, type RouteObject } from 'react-router';
 
 import { CampaignsPage } from '../features/advertiser/CampaignsPage';
 import { EmbedDemoPage } from '../features/marketing/EmbedDemoPage';
@@ -11,7 +11,7 @@ import { routes } from './paths';
 
 export { routes } from './paths';
 
-export const router = createBrowserRouter([
+const routeTable: RouteObject[] = [
   {
     path: '/',
     Component: Layout,
@@ -24,4 +24,12 @@ export const router = createBrowserRouter([
       { path: routes.embedDemo.replace(/^\//, ''), Component: EmbedDemoPage },
     ],
   },
-]);
+];
+
+/** `VITE_ROUTER=hash` (set by `npm run build:demo`, ADR-0016 hosting amendment) picks a hash
+ * router, so `dist-demo` works from a static host with no server-side SPA fallback and from any
+ * sub-path. The normal build keeps `createBrowserRouter`. Same route table either way. */
+export const router =
+  import.meta.env.VITE_ROUTER === 'hash'
+    ? createHashRouter(routeTable)
+    : createBrowserRouter(routeTable);

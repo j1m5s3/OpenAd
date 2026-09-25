@@ -16,13 +16,16 @@ function installDemoRequestHandler(): void {
   setRequestHandler(createDemoRequestHandler(demoStore));
 }
 
-/** Matches exactly `GET /v1/serve/{id}` — one path segment after `serve`, nothing more (rules
- * out `POST /v1/serve/0`, a trailing sub-path like `/v1/serve/0/x`, and a near-miss route like
- * `/v1/serves/0`). Exported so it is unit-tested directly (`networkGuard.test.ts`), separately
- * from the guard's own same-origin check (`isAllowedDemoUrl`), which is what actually rules out a
- * cross-origin request before this matcher is ever consulted. */
+/** Matches `GET .../v1/serve/{id}` — one path segment after `serve`, nothing more (rules out
+ * `POST /v1/serve/0`, a trailing sub-path like `/v1/serve/0/x`, and a near-miss route like
+ * `/v1/serves/0`) — and matched from the end of the pathname, not the start, so it still matches
+ * when the page (and so `<open-ad api="...">`) is served from a sub-path
+ * (`/openad-demo/v1/serve/0`, ADR-0016 hosting amendment). Exported so it is unit-tested directly
+ * (`networkGuard.test.ts`), separately from the guard's own same-origin check
+ * (`isAllowedDemoUrl`), which is what actually rules out a cross-origin request before this
+ * matcher is ever consulted. */
 export function isServeRoute(method: string, pathname: string): boolean {
-  return method === 'GET' && /^\/v1\/serve\/[^/]+$/.test(pathname);
+  return method === 'GET' && /(^|\/)v1\/serve\/[^/]+$/.test(pathname);
 }
 
 /** The network guard's only same-origin exception (ROADMAP 6.2 step 10+11, `/embed-demo`): the
@@ -53,7 +56,8 @@ function installDemoWalletConnector(): void {
 
 /** The simulator `installDemo()` created. Throws if called before `installDemo()`. */
 export function getDemoProvider(): DemoProvider {
-  if (!demoProvider) throw new Error('installDemo() must run before the demo wagmi config is built');
+  if (!demoProvider)
+    throw new Error('installDemo() must run before the demo wagmi config is built');
   return demoProvider;
 }
 

@@ -1,10 +1,17 @@
-/** Demo-mode end-to-end flows (ADR-0016, ROADMAP 6.2 step 8+9). Every test runs against the
- * static demo build and asserts, after it finishes, that nothing left the preview origin: no
- * outside request, no WebSocket, no console error, no page error, no network-guard block.
+/** Demo-mode end-to-end flows (ADR-0016, ROADMAP 6.2 step 8+9, 12+13). Every test runs against
+ * the static `dist-demo` bundle, served under a sub-path with **no SPA fallback**
+ * (`demo.config.ts`), and asserts, after it finishes, that nothing left the server's origin: no
+ * outside request, no WebSocket, no console error, no page error, no network-guard block, no
+ * HTTP error (which would also catch a 404 from the no-fallback static server).
  *
  * Navigation after the first `goto` is always client-side (clicking links): a full reload
- * re-seeds the in-memory demo store and disconnects the demo wallet, by design. */
+ * re-seeds the in-memory demo store and disconnects the demo wallet, by design. Every route is
+ * reached through `demoPath`, which maps it to its hash-router URL under the mount path
+ * (`demo.config.ts`); an in-page anchor's own `href` is just `#/path` (the hash router has no
+ * `basename`, so it never carries the mount path). */
 import { expect, test as base, type Page } from '@playwright/test';
+
+import { demoPath } from './demo.config';
 
 const ORIGIN = 'http://localhost:4173';
 const USDC = 1_000_000n;
@@ -56,7 +63,7 @@ function publisherShare(price: bigint): bigint {
 }
 
 async function connect(page: Page): Promise<void> {
-  await page.goto('/');
+  await page.goto(demoPath('/'));
   await expect(page.getByRole('status').filter({ hasText: 'simulated data' })).toBeVisible();
   await page
     .getByRole('button', { name: /connect wallet/i })
@@ -95,7 +102,7 @@ async function nav(page: Page, name: 'Discover' | 'Supply' | 'Campaigns'): Promi
 
 async function openSlot(page: Page, slotId: string): Promise<void> {
   await nav(page, 'Discover');
-  await page.locator(`a[href="/slots/${slotId}"]`).first().click();
+  await page.locator(`a[href="#/slots/${slotId}"]`).first().click();
   await expect(page.getByText(`Slot #${slotId}`)).toBeVisible();
 }
 
@@ -127,12 +134,12 @@ test('advertiser: discover → slot → buy a Dutch period with permit → lease
   await connect(page);
   // Discover filters.
   await page.getByRole('button', { name: 'CPC', exact: true }).click();
-  await expect(page.locator('a[href="/slots/1"]')).toBeVisible();
-  await expect(page.locator('a[href="/slots/0"]')).toHaveCount(0);
+  await expect(page.locator('a[href="#/slots/1"]')).toBeVisible();
+  await expect(page.locator('a[href="#/slots/0"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'paused', exact: true }).click();
-  await expect(page.locator('a[href="/slots/5"]')).toBeVisible();
+  await expect(page.locator('a[href="#/slots/5"]')).toBeVisible();
   await page.getByRole('button', { name: 'all', exact: true }).click();
-  await expect(page.locator('a[href^="/slots/"]')).toHaveCount(6);
+  await expect(page.locator('a[href^="#/slots/"]')).toHaveCount(6);
 
   await expect(rail(page)).toContainText('Leases 2');
   const before = await walletBalance(page);
@@ -159,7 +166,7 @@ test('advertiser CPC: register creative → request approval → open, top up an
     buffer: Buffer.from('openad demo creative'),
   });
   await expect(page.getByText(/keccak: 0x[0-9a-f]{64}/)).toBeVisible();
-  await page.getByLabel('Public URI').fill('/demo/creatives/nimbus-300x250.svg');
+  await page.getByLabel('Public URI').fill('demo/creatives/nimbus-300x250.svg');
   await page.getByLabel('Click URL').fill('https://nimbuswallet.example/demo-landing');
   await page.getByRole('button', { name: 'Register', exact: true }).click();
   await expect(page.getByText('Creative registered')).toBeVisible();
@@ -269,7 +276,7 @@ test('publisher: SIWE → supply dashboard → mint, calendar, terms → approve
 
   // The new slot is on Discover and live; slot 1 shows the new CPC floor.
   await nav(page, 'Discover');
-  const card = page.locator('a[href="/slots/6"]');
+  const card = page.locator('a[href="#/slots/6"]');
   await expect(card).toContainText('pressroom.example');
   await expect(card).toContainText('live');
   await openSlot(page, '1');
@@ -350,7 +357,11 @@ test('embed-demo: the real <open-ad> element renders a demo creative with no out
   await connect(page);
   // Client-side navigation only: /embed-demo is reached from /why, not the main nav, and a full
   // reload would re-seed the store and disconnect the demo wallet (see the file header).
-  await page.getByRole('navigation').first().getByRole('link', { name: 'Why OpenAd', exact: true }).click();
+  await page
+    .getByRole('navigation')
+    .first()
+    .getByRole('link', { name: 'Why OpenAd', exact: true })
+    .click();
   await page.getByRole('link', { name: 'See the embed live' }).click();
   await expect(page.getByRole('heading', { name: 'See the embed live' })).toBeVisible();
 
@@ -361,20 +372,24 @@ test('embed-demo: the real <open-ad> element renders a demo creative with no out
   const img = embed.locator('img');
   await expect
     .poll(async () => img.evaluate((el: HTMLImageElement) => el.getAttribute('src')))
-    .toMatch(/^\/demo\/creatives\//);
+    .toMatch(/^http:\/\/localhost:4173\/openad-demo\/demo\/creatives\//);
 
   // Slot 0's current period is already leased in the fixture; switch to a slot whose current
   // period is still open so a buy visibly changes what the embed serves.
   await select.selectOption('4');
   const embed4 = page.locator('open-ad[slot-id="4"]').first();
-  const before = await embed4.locator('img').evaluate((el: HTMLImageElement) => el.getAttribute('src'));
+  const before = await embed4
+    .locator('img')
+    .evaluate((el: HTMLImageElement) => el.getAttribute('src'));
 
   await page.getByRole('link', { name: 'Buy the next period as the advertiser →' }).click();
   // Buy period 3 specifically: it is slot 4's *current* period (remainder phase, unsold in the
   // fixture), so buying it is what changes what the embed serves right now. Its dialog ends in a
   // "Buy remainder" button, not "Buy with permit" (`buyFirstPeriod` assumes the latter — a Dutch
   // buy — so this is inlined rather than reusing it).
-  const period3Row = page.locator('tbody tr', { has: page.getByRole('cell', { name: '3', exact: true }) }).first();
+  const period3Row = page
+    .locator('tbody tr', { has: page.getByRole('cell', { name: '3', exact: true }) })
+    .first();
   await period3Row.getByRole('button', { name: 'Buy', exact: true }).click();
   const buyDialog = page.getByRole('dialog');
   await expect(buyDialog.locator('p.text-2xl')).toContainText('USDC');
@@ -390,13 +405,42 @@ test('embed-demo: the real <open-ad> element renders a demo creative with no out
   await page.goBack();
   await select.selectOption('4');
   const after = page.locator('open-ad[slot-id="4"]').first().locator('img');
-  await expect.poll(() => after.evaluate((el: HTMLImageElement) => el.getAttribute('src'))).not.toBe(before);
+  await expect
+    .poll(() => after.evaluate((el: HTMLImageElement) => el.getAttribute('src')))
+    .not.toBe(before);
 });
 
-test('/why: the earnings calculator updates with integer USDC and shows the disclaimer', async ({ page }) => {
-  await page.goto('/why');
+test('cold deep link: .../openad-demo/#/embed-demo loads with no server fallback, and the embed image resolves under the sub-path', async ({
+  page,
+}) => {
+  // A fresh navigation straight to the hash route — no prior page load, so there is nothing for
+  // the static server (which serves no SPA fallback) to redirect: it must serve index.html for
+  // the mount path itself, and the hash router must then render /embed-demo client-side. This is
+  // exactly what a static host with no rewrite rule (e.g. the hosted demo Artifact) does.
+  await page.goto(demoPath('/embed-demo'));
+  await expect(page.getByRole('heading', { name: 'See the embed live' })).toBeVisible();
+
+  const select = page.getByLabel('Slot');
+  await select.selectOption('0');
+  const embed = page.locator('open-ad[slot-id="0"]').first();
+  await expect(embed).toBeVisible();
+  await expect
+    .poll(async () =>
+      embed.locator('img').evaluate((el: HTMLImageElement) => el.getAttribute('src')),
+    )
+    .toMatch(/^http:\/\/localhost:4173\/openad-demo\/demo\/creatives\//);
+});
+
+test('/why: the earnings calculator updates with integer USDC and shows the disclaimer', async ({
+  page,
+}) => {
+  await page.goto(demoPath('/why'));
   await expect(page.getByRole('heading', { name: /Keep about 97.5%/ })).toBeVisible();
-  await expect(page.getByText(/Illustrative\. Network take rates are approximate public ranges and vary\./).first()).toBeVisible();
+  await expect(
+    page
+      .getByText(/Illustrative\. Network take rates are approximate public ranges and vary\./)
+      .first(),
+  ).toBeVisible();
 
   const impressions = page.getByLabel('Monthly impressions');
   const ecpm = page.getByLabel('eCPM (USD)');

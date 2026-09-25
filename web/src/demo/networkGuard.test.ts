@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { DemoNetworkError, installNetworkGuard, isAllowedDemoUrl, registerDemoResponder } from './networkGuard';
+import {
+  DemoNetworkError,
+  installNetworkGuard,
+  isAllowedDemoUrl,
+  registerDemoResponder,
+} from './networkGuard';
 import { isServeRoute } from './install';
 
 const ORIGIN = 'http://localhost:3000';
@@ -20,6 +25,16 @@ describe('isServeRoute', () => {
 
   it('rejects a near-miss route', () => {
     expect(isServeRoute('GET', '/v1/serves/0')).toBe(false);
+  });
+
+  it('matches under a sub-path (static hosting with no SPA fallback)', () => {
+    expect(isServeRoute('GET', '/openad-demo/v1/serve/0')).toBe(true);
+  });
+
+  it('still rejects a trailing sub-path or a near-miss route under a sub-path', () => {
+    expect(isServeRoute('GET', '/openad-demo/v1/serve/0/x')).toBe(false);
+    expect(isServeRoute('GET', '/openad-demo/v1/serves/0')).toBe(false);
+    expect(isServeRoute('POST', '/openad-demo/v1/serve/0')).toBe(false);
   });
 });
 
@@ -48,9 +63,33 @@ describe('isAllowedDemoUrl', () => {
     expect(isAllowedDemoUrl('/anvil/eth_chainId', ORIGIN)).toBe(false);
   });
 
+  it('blocks /v1 and /anvil under a sub-path (static hosting with no SPA fallback)', () => {
+    expect(isAllowedDemoUrl('/openad-demo/v1/health', ORIGIN)).toBe(false);
+    expect(isAllowedDemoUrl('/openad-demo/anvil/eth_chainId', ORIGIN)).toBe(false);
+  });
+
+  it('does not deny a same-origin asset merely because the hosting sub-path itself contains "v1" (e.g. an artifact host at /v1/artifacts/<id>/)', () => {
+    const basePath = '/v1/artifacts/abc123/';
+    expect(isAllowedDemoUrl(`${basePath}assets/main.js`, ORIGIN, [], basePath)).toBe(true);
+    expect(isAllowedDemoUrl(`${basePath}demo/creatives/x.svg`, ORIGIN, [], basePath)).toBe(true);
+  });
+
+  it('still denies an actual /v1 or /anvil path within the app itself under that same sub-path', () => {
+    const basePath = '/v1/artifacts/abc123/';
+    expect(isAllowedDemoUrl(`${basePath}v1/health`, ORIGIN, [], basePath)).toBe(false);
+    expect(isAllowedDemoUrl(`${basePath}anvil`, ORIGIN, [], basePath)).toBe(false);
+  });
+
+  it('denies an absolute-rooted path that escapes the sub-path base, unchanged (the pre-existing, more conservative rule)', () => {
+    const basePath = '/v1/artifacts/abc123/';
+    expect(isAllowedDemoUrl('/v1/health', ORIGIN, [], basePath)).toBe(false);
+  });
+
   it('allows same-origin static assets', () => {
     expect(isAllowedDemoUrl('/assets/x.js', ORIGIN)).toBe(true);
     expect(isAllowedDemoUrl(`${ORIGIN}/assets/x.js`, ORIGIN)).toBe(true);
+    // A sub-path segment that merely starts with "v1" or "anvil" is not the denied segment.
+    expect(isAllowedDemoUrl('/v10/assets/x.js', ORIGIN)).toBe(true);
   });
 
   it('rejects an unparsable URL', () => {
@@ -133,9 +172,7 @@ describe('installNetworkGuard', () => {
   it('blocks navigator.sendBeacon() to a local chain RPC', () => {
     const win = fakeWindow();
     installNetworkGuard(win);
-    expect(() => win.navigator.sendBeacon('http://127.0.0.1:8545', 'x')).toThrow(
-      DemoNetworkError,
-    );
+    expect(() => win.navigator.sendBeacon('http://127.0.0.1:8545', 'x')).toThrow(DemoNetworkError);
   });
 
   it('answers a matched same-origin serve path in-process, with no real fetch', async () => {
@@ -144,7 +181,10 @@ describe('installNetworkGuard', () => {
     installNetworkGuard(win);
     registerDemoResponder(
       (method, pathname) => method === 'GET' && pathname === '/v1/serve/0',
-      () => new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } }),
+      () =>
+        new Response(JSON.stringify({ ok: true }), {
+          headers: { 'content-type': 'application/json' },
+        }),
     );
     try {
       const res = await win.fetch('/v1/serve/0');
@@ -164,7 +204,9 @@ describe('installNetworkGuard', () => {
     );
     try {
       await expect(win.fetch('/v1/slots')).rejects.toBeInstanceOf(DemoNetworkError);
-      await expect(win.fetch('http://localhost:8000/v1/serve/0')).rejects.toBeInstanceOf(DemoNetworkError);
+      await expect(win.fetch('http://localhost:8000/v1/serve/0')).rejects.toBeInstanceOf(
+        DemoNetworkError,
+      );
     } finally {
       registerDemoResponder();
     }

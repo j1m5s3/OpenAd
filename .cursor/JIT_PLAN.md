@@ -72,130 +72,173 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 | A Market fit + GTM + pitch source | `docs/market-fit-gtm` | 6.1 | — |
 | B Demo mode + static showcase | `feat/web-demo-mode` | 6.2 | A |
 | C Publisher growth (embed code, share page) | `feat/publisher-growth` | 6.3 | B (demo fixtures reuse) |
-| D Analytics (API + UI) | `feat/analytics` | 6.4 | — (API), B for demo fixtures |
+| D Analytics (API + UI) | `feat/analytics` | 6.4 | — (API), B for demo fixtures; H ✓ merged in `57e2aea` |
 | E Cross-platform scripts + one-command stack | `feat/bash-stack-scripts` | 6.5 | — |
 | F Production deploy (GCP) | `feat/gcp-deploy` | 6.6 | E |
 | G Docs polish (README, demo script, guide) | `docs/launch-polish` | 6.7 | A–F |
+| H Fix: fresh-DB Alembic chain (found in review) | `fix/alembic-fresh-db` | 6.6 prerequisite | — (merge before D ships and before F) |
 
-## 4. Micro-steps (one line each; ✱ active, ○ pending, ✓ done)
+## 4. Micro-steps (one line each; ✱ active, [>] active in parallel, ○ pending, ✓ done)
 
 ### Slice A — `docs/market-fit-gtm`
 - ✓ 1. A: `docs/business/{README,market-fit,gtm-marketing,pitch-deck}.md` + ROADMAP Phase 6 (6.1–6.7). Review FIX r1 (10) → PASS r2.
 - → 2. A: moved to slice G as step 31b (competitive table already in pitch deck; standalone doc not needed to ship A).
-- ✱ 3. A ship (orchestrator, no coder): commit `docs(business): market fit, GTM plan, pitch-deck source; ROADMAP Phase 6` incl. `.cursor/JIT_PLAN.md` + `JIT_INDEX.md` → push `docs/market-fit-gtm` → PR → merge (squash) after CI. Exclude `package-lock.json` drift.
+- ✓ 3. A ship — PR #4 merged `801440e`. (orchestrator, no coder): commit `docs(business): market fit, GTM plan, pitch-deck source; ROADMAP Phase 6` incl. `.cursor/JIT_PLAN.md` + `JIT_INDEX.md` → push `docs/market-fit-gtm` → PR → merge (squash) after CI. Exclude `package-lock.json` drift.
 
-### Slice B — `feat/web-demo-mode`
-- ○ 4. B: ADR-0016 demo mode + `ARCHITECTURE.md` §7 env row + `.env.example` `VITE_DEMO_MODE`.
-- ○ 5. B: `web/src/demo/fixtures.ts` — seeded slots/terms/periods/leases/creatives/campaigns/earnings typed against generated OpenAPI types; unit test shapes + fee math.
-- ○ 6. B: `web/src/demo/demoApi.ts` — fetch-layer adapter so `lib/api.ts` resolves from fixtures when demo; test that no `fetch` is called.
-- ○ 7. B: `web/src/demo/demoChain.ts` — in-memory EIP-1193 simulator behind wagmi `mock` connector + `custom` transport (eth_chainId/accounts/call/sendTransaction/getTransactionReceipt/signTypedData_v4); decodes calldata with deployment ABIs, mutates fixture store, returns fake hashes; feature code unchanged; tests.
-- ○ 8. B: wire Discover/Slot/Buy into demo (buy updates fixture state, receipt shows split publisher/fee).
-- ○ 9. B: wire Supply (mint, calendar, approve creative) + Campaigns (register creative, fund CPC) into demo.
-- ○ 10. B: `DemoBanner` + guided tour overlay ("You are the publisher → now the advertiser") with persona switcher.
-- ○ 11. B: showcase routes `/why` (value prop + earnings calculator: network take 30–50% vs 2.5%, inputs impressions/eCPM) and `/embed-demo` (live `<open-ad>` fed by demo serve JSON); calculator tests.
-- ○ 12. B: `npm run build:demo` (root + web) producing static `web/dist-demo` with SPA fallback; test asserting demo bundle contains no RPC URL / API base; CI builds it.
-- ○ 13. B ship: full web checks + build + build:demo → PR → merge.
+### Slice B — `feat/web-demo-mode` (merged steps; one coder pass each)
+- ✓ 4. B: ADR-0016 + scaffolding (flag, lazy install, network guard over fetch/XHR/WS/EventSource/sendBeacon, `setRequestHandler`, `DemoBanner`). Review FIX r1 → PASS r2 (L3 nits open: redundant `/v1/` prefix check; `install.test` restores only fetch — fold into 5+6). `aafaad7`.
+- ✓ 5+6. B: demo clock/fixtures/store/demoApi; `lib/auction.ts` gains `dutchPrice`/`remainderPrice`/`feeSplit`/`FEE_BPS`/shared `computeOpenAt` (`auctionOpenAt` clamps at 0 per PROTOCOL §4.2). Review FIX r1 (8) → PASS r2. `5204b86`.
+- ✓ 7. B: `demoChain.ts` EIP-1193 simulator, `reducers.ts` (`applyCall → {state,result}`, `DemoState.ledger`), committed `abis.generated.ts`, synthetic 31337 deployment, `wagmiDemo.ts` (injected target, custom transport), `App` takes `config` prop, `app/queryClient.ts`. Opus coder; review PASS r1 (Playwright smoke: buy on `/slots/0` confirmed, wallet down exactly the quote). `09d3209`.
+- ✓ 8+9. B: demo flows for both personas, `PersonaSwitcher`, demo fonts/favicon strip, `e2e/demo` Playwright suite (4 tests, frozen clock, strict guard); demoApi 401/403/404 parity; **real bug fixed** in shared `components/Wizard.tsx` (per-step key; stale uncontrolled inputs caused `set_calendar` "period too short" for real users) + regression test. Opus coder; PASS r1. `7e5c328`.
+- ✓ 10+11. B: guided tour (started from the banner, not auto-opened), `/why` calculator (`lib/earnings.ts`, exact non-custodial wording, "default 2.5%, capped at 10%"), `/embed-demo` (real element via Vite alias, tsconfig paths and workspace dep; in-process `isServeRoute` responder); PersonaSwitcher `accountsChanged` fix. FIX r1 → verified; 128 web tests, test:demo 7/7. `71e0869`.
+- ✱ 12+13. B: prettier; hash router + relative base + base-relative media + demo-only `publicDir` so `dist-demo` runs from any sub-path without fallback (Artifact hosting); `check-demo-bundle.mjs`; Playwright in static sub-path mode; CI (ABI check, build:demo, bundle check, test:demo, scoped prettier); ADR-0016 hosting; ROADMAP 6.2 `[x]` → ship PR; publish demo Artifact; merge main into D and F. **Risk: medium.** **(full spec below)**
 
 ### Slice C — `feat/publisher-growth`
-- ○ 14. C: `web/src/features/publisher/components/EmbedCodePanel.tsx` — "Get code" (script tag + `<open-ad slot=…>` + size), copy button, HTML/WordPress/Ghost/Substack-limits instructions; tests.
-- ○ 15. C: public shareable slot page polish (`/slot/:id` OG meta, "Advertise here" CTA, current price, audience blurb field shown if set off-chain) — reuse SlotPage; tests.
-- ○ 16. C: publisher off-chain profile (site URL, audience description, category tags) — API model + Alembic + SIWE-guarded PUT, Discover filter by category; tests (no chain writes).
-- ○ 17. C: guide pages `docs/guide/publisher/embed-code.md` + SUMMARY entry; demo fixtures updated.
-- ○ 18. C ship.
+- ○ 14+15. C: `EmbedCodePanel` replacing SupplyPage's inline `<pre>` snippet ("Get code": script tag + `<open-ad>` with size presets, copy, HTML/WordPress/Ghost instructions) + shareable slot page (OG meta, "Advertise here" CTA, current price); demo fixtures updated; tests. **Risk: low.**
+- ○ 16. C: publisher off-chain profile (site URL, audience blurb, category tags) — model + Alembic + SIWE-guarded PUT + Discover category filter; web form; pytest + vitest. **Risk: medium** (migration, auth).
+- ○ 17+18. C: guide `docs/guide/publisher/embed-code.md` + SUMMARY; ROADMAP 6.3 `[x]` → ship. **Risk: low.**
 
 ### Slice D — `feat/analytics`
-- ○ 19. D: spec in `ARCHITECTURE.md` (analytics read model, D4 formulas) + schemas `api/src/openad/schemas/analytics.py`.
-- ○ 20. D: `services/analytics.py` + `GET /v1/analytics/slots/{id}` and `/v1/analytics/advertisers/{addr}` (impressions, clicks, CTR, spend/earnings, eCPM, daily buckets); pytest.
-- ○ 21. D: web `features/*/components/PerformancePanel.tsx` (stat tiles + sparkline, no chart lib >20 KB) on Supply and Campaigns; demo fixtures; tests.
-- ○ 22. D ship.
+- ✓ 19+20. D: analytics schemas/service/router + `0003` indexes (`IF NOT EXISTS`), ORM `__table_args__` indexes; day bucket `col - col % 86400`; serve match on (slot, calendar_version, period); `by_slot` window-limited; `SlotNotFoundError`/`InvalidWindowError`. FIX r1 → PASS r2; 72 api tests. Committed on `feat/analytics` (`/home/claude/OpenAd-d`). Ship after 21+22.
+- ○ 21+22. D (same branch, after slice B merges; `git merge origin/main` first): `PerformancePanel` (stat tiles + inline-SVG sparkline) on Supply and Campaigns; demo handler routes; tests; ROADMAP 6.4 `[x]` → ship. **Risk: low–medium.**
 
 ### Slice E — `feat/bash-stack-scripts`
-- ○ 23. E: `scripts/setup.sh`, `dev-up.sh`, `dev-down.sh` (parity with .ps1, shellcheck-clean) + npm `stack:*:sh` + `stack:docker`; ADR-0007 amendment.
-- ○ 24. E ship.
+- ✓ 23+24. E: bash twins + `lib.sh` + `stack-docker.sh` + `check-sh.sh` (CI), ADR-0007 amendment, ROADMAP 6.5. Review FIX r1 → PASS r2; CI shellcheck SC1091 fixed (`# shellcheck source=` + `shellcheck -x`, `811bc8e`). PR #5 — **merge pending CI** (orchestrator). Worktree `/home/claude/OpenAd-e` can be removed after merge.
+
+### Slice H — `fix/alembic-fresh-db` (PARALLEL; blocks F and D's ship)
+- ✓ 34. H: froze `0001_baseline` to an explicit schema (models @ `95163d9`); `test_migrations.py` covers fresh upgrade, `compare_metadata` parity and round trip, plus Postgres via `OPENAD_TEST_PG_URL`; CONVENTIONS rule added. Opus; PASS r1 (old-path and new-path DDL identical on SQLite and PG16). PR #6 merged `e8a34b8`. Nits (not scheduled): parity doesn't compare server defaults; 0002 isn't ruff-formatted (alembic/ is outside the lint scope).
 
 ### Slice F — `feat/gcp-deploy`
-- ○ 25. F: ADR-0017 GCP topology + `docs/deploy-gcp.md` runbook (projects, APIs, Artifact Registry, Cloud SQL, Secret Manager, GCS, Cloud Run, domain, rollback).
-- ○ 26. F: media cache storage interface + GCS backend (`OPENAD_MEDIA_BACKEND=local|gcs`), local default; pytest with fake client.
-- ○ 27. F: `web/Dockerfile` (nginx static, SPA fallback, demo variant build-arg) + `infra/gcp/cloudbuild.yaml` + `infra/gcp/*.service.yaml` (api/indexer/settler/web) + `scripts/deploy-gcp.sh`.
-- ○ 28. F: CI `deploy` job gated on `GCP_WORKLOAD_IDENTITY_PROVIDER` secret presence; demo site deploy only; no mainnet broadcast; api health check post-deploy.
-- ○ 29. F ship (orchestrator: actual `gcloud` deploy is user-run — record in outcome).
+- ✓ 25+26. F: ADR-0017 + `docs/deploy-gcp.md` + `MediaStore` (local/GCS, ref validation, cached client) + `openad/health.py` (stdlib liveness listener started only when `PORT` is set; indexer and settler never listened on `$PORT`) + objectUser for the indexer + a service account for the migrate job + WIF attribute-condition. FIX r1 → PASS r2; 80 passed, 4 skipped. `48f84f4`.
+- ✓ 27+28. F: api CMD without migrations + compose `migrate`; `web/Dockerfile` + nginx template (5 security headers, CSP per variant, `/healthz`, SPA fallback); `infra/gcp/` (cloudbuild with `_TAG`, services, migrate job); `scripts/deploy-gcp.sh` (prod and CI guards); `deploy.yml` (WIF, push-only same-repo gate, staging only); CI `docker` job. FIX r1 → PASS r2 (real docker build and run of the web image). `279070a`.
+- [>] 29. F ship (orchestrator, running): PR, then CI green including the new `docker` job, then merge. The real `gcloud` deploy stays user-run per `docs/deploy-gcp.md`. After merging, ROADMAP 6.6 needs a tick or a note ("artifacts done; live deploy pending user GCP setup"). If B merges first, merge main in before merging.
 
 ### Slice G — `docs/launch-polish`
-- ○ 30. G: README rewrite (value prop, 60-second demo link, screenshots placeholders, quickstart bash+PowerShell, docs map).
-- ○ 31b. G: `docs/business/competitive.md` (moved from step 2) — take-rate/payout/tracking ranges vs major networks, "approx., public list rates", no fabricated sources.
-- ○ 31. G: `docs/business/demo-script.md` (5-min and 15-min talk tracks over demo mode: publisher earns, advertiser buys, embed renders, CPC) + `docs/business/launch-checklist.md`.
-- ○ 32. G: final pass — ROADMAP 6.x ticked, JIT_INDEX, guide SUMMARY, `docs/qa/scorecard.md` round 4 note for demo mode.
-- ○ 33. G ship; archive plan to `jit_history/2026-09-24-market-fit-launch.md`.
+- ○ 30+31. G: README rewrite (value prop, demo link, quickstart bash+PowerShell, docs map) + `docs/business/{demo-script,launch-checklist,competitive}.md` (competitive = old step 2/31b: approx. public list-rate ranges, no fabricated sources). **Risk: low.**
+- ○ 32+33. G: ROADMAP 6.x ticked, JIT_INDEX, guide SUMMARY, `docs/qa/scorecard.md` round-4 note → ship; archive plan to `jit_history/2026-09-24-market-fit-launch.md`. **Risk: low.**
 
 ## 5. Active step — full spec
 
-### Step 3 — Ship slice A (orchestrator-run, no coder)
+### Step 12+13 — `build:demo` for any static host, CI wiring, ship slice B (`feat/web-demo-mode` @ `71e0869`)
 
-`git add docs/business docs/ROADMAP.md .cursor/JIT_PLAN.md .cursor/JIT_INDEX.md` (not
-`package-lock.json`) → Conventional Commit with attribution trailer → push → PR → wait CI →
-squash-merge → `git switch main && git pull`. Done when: merged on `main`; ROADMAP 6.1 `[x]`.
+**Coder model:** Sonnet. **Risk:** medium.
+- The orchestrator will publish `web/dist-demo` as a **multi-file static site on a host with no
+  SPA fallback, served from an unknown sub-path** (a claude.ai Artifact), and later as the
+  `web-demo` nginx image.
+- Three things break there today:
+  1. `createBrowserRouter` deep links 404 without a fallback.
+  2. Vite's default base `/` makes asset URLs absolute.
+  3. Fixture media URIs are absolute (`/demo/creatives/*.svg` in `fixtures.ts` L364–416). They
+     break both the React `<img>`s and the `<open-ad>` shadow-DOM image under a sub-path.
+- The in-process serve responder (`isServeRoute`) must keep matching when the page lives under a
+  sub-path.
 
-### Step 4 (next; spec ready) — ADR-0016 demo mode + scaffolding (slice B, `feat/web-demo-mode`)
-
-**Coder model:** Sonnet. **Risk:** medium — the danger is demo code leaking a real network
-call or shipping into normal builds. Guard both with tests.
-
-**Branch:** `git switch -c feat/web-demo-mode` from updated `main`.
-
-**Decision recorded in the ADR (so steps 5–12 follow it):**
-- Flag: `VITE_DEMO_MODE=1` (string compare `=== '1'`), read once in `web/src/demo/flag.ts`
-  (`export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === '1'`).
-- Boot: `main.tsx` does `if (DEMO_MODE) { const { installDemo } = await import('./demo/install'); installDemo(); }`
-  before importing `App` — mirrors the existing DEV `installDevWallet` pattern, so Rollup drops
-  the chunk when the flag is off (static `false`).
-- Reads: `lib/api.ts` `request()` gets a pluggable resolver (`setRequestHandler(fn)`), default is
-  the current `fetch` path; demo installs a fixture handler (step 6). Feature `api.ts` modules
-  untouched.
-- Writes: wagmi `mock` connector + `custom` transport backed by an in-memory EIP-1193 simulator
-  (step 7); `lib/wagmi.ts` exports a config factory choosing demo vs real. Feature write code
-  untouched. No `http()` transport is constructed in demo.
-- Network guard: in demo, `installDemo()` wraps `window.fetch` to throw `DemoNetworkError` for any
-  URL that is not same-origin static assets — a leak fails loudly, not silently.
-- UX: persistent `DemoBanner` ("Demo — simulated data, no real funds or chain") + persona switcher
-  slot (filled in step 10).
-- Rejected: MSW (runtime dep + service worker for a static site), separate demo app package
-  (duplicates UI, drifts), hitting a public testnet (needs RPC + faucet; not zero-backend).
+**Read first:**
+- `web/vite.config.ts`, `web/src/app/{routes.tsx,paths.ts,Layout.tsx}`, `web/src/main.tsx`.
+- `web/src/demo/{fixtures,demoApi,demoServe,networkGuard,install}.ts`.
+- `web/src/features/marketing/EmbedDemoPage.tsx`.
+- `e2e/demo/{demo.config.ts,flows.spec.ts}`.
+- `web/package.json` and the root `package.json`, `.github/workflows/ci.yml`.
+- `docs/adr/0016-web-demo-mode.md`.
 
 **Files**
-1. `docs/adr/0016-web-demo-mode.md` — Status Accepted, context (market-fit blocker #1), decision
-   (bullets above), invariants (never RPC, never API, never real signatures, banner always,
-   tree-shaken), consequences, rejected alternatives.
-2. `docs/ARCHITECTURE.md` §5 web: short "Demo mode (ADR-0016)" paragraph; §7 environments: add
-   "Demo (static)" row.
-3. `.env.example` — commented `# VITE_DEMO_MODE=1  # static demo build, no API/chain (ADR-0016)`
-   near the other `VITE_*` lines.
-4. `web/src/vite-env.d.ts` — `readonly VITE_DEMO_MODE?: string;`
-5. `web/src/demo/flag.ts`, `web/src/demo/install.ts` (installs fetch guard + banner mount hook;
-   request handler/connector hooks are TODO-free no-ops until steps 6–7 — export functions that
-   later steps fill), `web/src/demo/networkGuard.ts`, `web/src/demo/DemoBanner.tsx`.
-6. `web/src/lib/api.ts` — add `setRequestHandler`/default fetch handler; behaviour unchanged when
-   not set.
-7. `web/src/main.tsx` — demo branch before `App` import.
-8. `web/src/app/Layout.tsx` — render `DemoBanner` when `DEMO_MODE` (lazy import).
-9. Tests: `web/src/demo/networkGuard.test.ts` (blocks `http://localhost:8000/v1/...` and
-   `http://127.0.0.1:8545`, allows same-origin `/assets/x.js`); `web/src/lib/api.test.ts` or
-   extend existing (custom handler used, default path unchanged);
-   `web/src/demo/DemoBanner.test.tsx` (text present, role=status).
-10. `docs/ROADMAP.md` — 6.2 stays `[ ]`, append "_In progress: ADR-0016 accepted._".
+1. Formatting first: `npx prettier --write web/src/demo e2e/demo web/src/features/marketing`.
+   Commit this as its own formatting-only commit, so review diffs stay clean.
+2. Router mode:
+   - `web/src/app/routes.tsx` picks `createHashRouter` when `import.meta.env.VITE_ROUTER === 'hash'`,
+     else `createBrowserRouter`. It stays a single route table.
+   - Add `VITE_ROUTER?` to `vite-env.d.ts`, and a commented line to `.env.example`.
+   - Audit every raw `href`, `window.location` and string navigation in `web/src` (Layout
+     search → `navigate(...)`, `withDevWalletParam`, EmbedDemoPage). They must work under hash
+     routing. Use router APIs (`Link`, `navigate`, `useHref`), never hard-coded `/path` anchors.
+3. Base path:
+   - `web/vite.config.ts` sets `base: process.env.VITE_BASE ?? '/'`.
+   - `build:demo` uses `./`. The normal build is unchanged.
+   - Media under a relative base: fixture `uri`s become **base-relative** (`demo/creatives/x.svg`),
+     resolved at read time with `new URL(uri, document.baseURI).href` in one helper,
+     `demo/assetUrl.ts`, used by `demoApi` and `demoServe`. That produces absolute URLs for
+     `<img>`s and the embed shadow DOM, which has its own base.
+   - Update the fixture test (it currently asserts a `/demo/` prefix) to assert that resolved
+     URLs are same-origin and end in `.svg`.
+   - `isServeRoute`: match on `pathname.endsWith('/v1/serve/<id>')` for same-origin URLs, so the
+     sub-path works, while keeping cross-origin and other `/v1` paths denied. Add tests for
+     sub-path and denied cases.
+   - `EmbedDemoPage`: set `api` to `new URL('.', document.baseURI)` without the trailing slash,
+     so the embed requests `<sub-path>/v1/serve/<id>`, which the responder answers. The snippet
+     shown to users keeps the real `API_URL` placeholder wording from the 10+11 fix.
+4. Demo-only public dir: move `web/public/demo/**` → `web/public-demo/demo/**`. `vite.config.ts`
+   sets `publicDir: DEMO ? 'public-demo' : 'public'`, keyed on `process.env.VITE_DEMO_MODE`, so
+   the normal dist ships no demo SVGs (closes the Backlog item). If `web/public` then doesn't
+   exist, that's fine.
+5. Scripts:
+   - `web/package.json`: `"build:demo": "node scripts/build-demo.mjs"`. This is a tiny Node
+     wrapper, with no `cross-env` dependency. It sets `VITE_DEMO_MODE=1`, `VITE_ROUTER=hash` and
+     `VITE_BASE=./` in the child env, runs the same sync steps as `build` plus `tsc --noEmit`,
+     then `vite build --outDir dist-demo`. `vite.config.ts` reads `process.env.VITE_DEMO_MODE`
+     and `VITE_BASE`.
+   - Root: `"build:demo": "npm run build:demo -w web"`.
+   - `web/.gitignore` / root `.gitignore`: `web/dist-demo`.
+   - Slice F's `web/Dockerfile` (not on this branch) keeps working. A plain
+     `VITE_DEMO_MODE=1 vite build` still outputs `dist` with the browser router, which is fine
+     behind nginx fallback. Note this in ADR-0016.
+6. `web/scripts/check-demo-bundle.mjs`, run by CI and callable locally:
+   - (a) `dist-demo`: no `localhost:8000` or `127.0.0.1:8545`, except occurrences inside
+     whitelisted viem chain-definition literals. The whitelist is by exact surrounding substring
+     and documented.
+   - (b) `dist-demo`: all `<script src>`/`<link href>` in `index.html` are relative.
+   - (c) `dist`: none of the demo markers (`openad-demo`, `DEMO_ABIS`, `PersonaSwitcher`,
+     `demoServe`, `tour/steps`) and no `demo/creatives`.
+   - Exits non-zero with a clear report.
+7. Playwright demo suite in **static sub-path mode**:
+   - `e2e/demo/demo.config.ts` `webServer` runs `npm run build:demo` and then serves `web/dist-demo`
+     under `/openad-demo/` with **no SPA fallback**. Use a ~30-line Node static server
+     `e2e/demo/static-server.mjs` (correct MIME for .js, .css, .svg and .woff2; 404 for unknown
+     paths).
+   - `baseURL` is `http://localhost:4173/openad-demo/`.
+   - A `demoPath(p)` helper maps routes to `#/p`. Update all `goto` and URL assertions.
+   - Keep the no-off-origin guard, and add one test: a deep link `…/openad-demo/#/embed-demo`
+     loads cold, and the embed image resolves under `/openad-demo/demo/creatives/`.
+8. CI (`.github/workflows/ci.yml`):
+   - The contracts job, after `mox compile`, runs setup-node, then
+     `node web/scripts/gen-demo-abis.mjs --check`.
+   - The web job runs `npm run build:demo`, `node web/scripts/check-demo-bundle.mjs`, and
+     `npx prettier --check web/src/demo e2e/demo web/src/features/marketing`.
+   - The e2e job runs `npm run test:demo -w e2e`, after the existing YAML suite, with browsers
+     already installed there.
+9. Docs:
+   - ADR-0016 "Hosting" amendment: static build (`build:demo`, hash router, relative base, no
+     fallback needed); the nginx image variant; the CSP `connect-src 'self'` from slice F.
+   - `docs/ARCHITECTURE.md` §7 demo row: `npm run build:demo` → `web/dist-demo`.
+   - ROADMAP **6.2 `[x]`** `_Done 2026-09-25._`.
+   - Don't touch the JIT files; the planner updates them.
+10. Ship. The orchestrator commits (formatting commit + feature commit), pushes
+    `feat/web-demo-mode`, opens the PR ("feat(web): zero-backend demo mode (ADR-0016)"), waits for
+    all CI jobs including the new ones, and squash-merges or merge-commits. Then:
+    - (a) publish `web/dist-demo` as the hosted demo Artifact, from main after merge;
+    - (b) `git merge origin/main` into `feat/analytics` (D) and `feat/gcp-deploy` (F).
 
 **Verify**
 ```bash
 cd /home/claude/OpenAd
-npm run typecheck && npm run lint && npm run test && npm run build
-grep -rl "DemoBanner\|networkGuard" web/dist/assets && echo "LEAK: demo in normal build" || echo ok
-VITE_DEMO_MODE=1 npm run build -w web && grep -rl "Demo — simulated" web/dist/assets >/dev/null && echo demo-ok
-git status --short   # only files listed above
+npm run typecheck && npm run lint && npm run test && npm run build && npm run build:demo
+node web/scripts/check-demo-bundle.mjs
+ls web/dist | grep -q demo && echo "FAIL demo files in normal dist" || echo ok
+grep -o 'src="[^"]*"' web/dist-demo/index.html          # all ./assets/...
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:demo -w e2e
+npx prettier --check web/src/demo e2e/demo web/src/features/marketing
+(cd contracts && uv run mox compile) && node web/scripts/gen-demo-abis.mjs --check
+# optional (docker daemon now available): docker compose up -d && npm run test:e2e   # LEASE/CPC YAML suite still green
+git status --short
 ```
-(Restore normal `web/dist` after the demo build check; don't commit `dist`.)
 
-**Done when:** ADR-0016 Accepted and linked from ARCHITECTURE; checks green; normal build has
-no demo chunk; demo build contains banner; fetch guard test proves API/RPC URLs throw; no
-feature-folder files changed.
+**Done when:**
+- `dist-demo` works from any sub-path with no server fallback, proven by Playwright including a
+  cold deep link.
+- The normal `dist` contains no demo code or assets.
+- The check script and CI wiring are in place, and CI is green on the PR.
+- ROADMAP 6.2 is ticked and ADR-0016 is amended.
+- The PR is merged.
+
 
 ## 6. Identity fence (unchanged)
 
@@ -208,3 +251,23 @@ chain or API (D3).
 
 - 2026-09-24 10:40 — Plan created (CREATE). Active: step 1.
 - 2026-09-24 11:35 — Step 1 DONE (review FIX r1 → PASS r2; treasury is owner-settable, not immutable — §1 fixed; CPC pays at settle batch). Step 2 moved to G (31b). Active: step 3 ship A. Step 4 spec written; step 7 re-scoped to wagmi mock connector + in-memory EIP-1193.
+- 2026-09-24 13:10 — Slice A shipped (PR #4 → `801440e`). Step 4 DONE (FIX r1 → PASS r2, `aafaad7`). Re-paced: adjacent steps merged (5+6, 8+9, 10+11, 12+13, 14+15, 17+18, 19+20, 21+22, 23+24, 25+26, 27+28, 30+31, 32+33); old step 31b folded into 30+31. Active: 5+6.
+- 2026-09-24 14:20 — Step 5+6 DONE (FIX r1 → PASS r2, `5204b86`; `auctionOpenAt` clamps at 0, only SlotCard uses it). Found: static/CI builds have empty `generated/deployments` → step 7 adds committed `demo/abis.generated.ts` + synthetic 31337 demo deployment; ABI drift check wired in 12+13. Active: 7.
+- 2026-09-24 14:45 — REVISE (parallel track): step 23+24 (slice E) runs alongside 7 in worktree `/home/claude/OpenAd-e` on `feat/bash-stack-scripts` off `801440e`; JIT files stay on slice B's branch. Spec written; verification is static (`bash -n`, `--dry-run`, `check:sh`) since there's no docker daemon.
+- 2026-09-24 16:05 — Step 7 DONE (Opus coder, PASS r1, `09d3209`). Slice E PASS; PR #5 open, shellcheck SC1091 fix `811bc8e`, merge pending CI. L3s folded: Google Fonts → 8+9 (demo-only strip); reload-resets-demo → ADR note in 8+9; viem foundry literal whitelist → 12+13. Persona switcher pulled forward from 10+11 into 8+9 (flows need both personas). Active: 8+9.
+- 2026-09-24 16:30 — REVISE (parallel track 2): 19+20 (slice D API) in worktree `/home/claude/OpenAd-d` on `feat/analytics`; 21+22 on the same branch after slice B merges. Web OpenAPI types are generated at build time and git-ignored, so there's no conflict. Spec written.
+- 2026-09-24 17:40 — Step 8+9 DONE (Opus, PASS r1, `7e5c328`). It also fixed a bug in the shared `Wizard.tsx` that affected real users. Slice D 19+20 is in FIX r1. Active: 10+11 (spec written). Follow-ups: the `useSiwe` race is in the Backlog; running prettier on `web/src/demo` is folded into 12+13; the missing SVG file type is not a bug, because the product is raster-only.
+
+## 8. Backlog (found during the run; not scheduled)
+
+- Web image ships ~166 `.map` sourcemaps; set `build.sourcemap: false` (or upload them privately) for prod images. Candidate for slice G or a follow-up.
+- `20260914_0002_cpc.py` is not ruff-formatted (`alembic/` is outside the lint scope). Consider widening the ruff scope.
+- Parity test doesn't compare server defaults (`compare_server_default`).
+
+- `features/auth/useSiwe.ts`: an in-flight SIWE request can race an account switch (real app and demo). Fix with an abort keyed to the account. Candidate for slice C or a small fix PR.
+- `web/public/demo/creatives/*.svg` ship in the normal `dist`. Harmless; could move to a demo-only public directory in 12+13.
+- 2026-09-24 18:00 — 19+20 DONE (PASS r2, on `feat/analytics`). Pre-existing bug on main found by the reviewer: `alembic upgrade head` fails on an empty database because 0001 uses `create_all` on the live models. New slice H `fix/alembic-fresh-db` (step 34, parallel, worktree `/home/claude/OpenAd-h`) blocks D's ship and F. Hazard recorded in JIT_INDEX.
+- 2026-09-24 18:50 — Slice H DONE (PR #6 → `e8a34b8`, CI green, worktree removed). `feat/analytics` merged main (`57e2aea`): 75 passed, 4 skipped. REVISE: 25+26 (slice F) is parallel in `/home/claude/OpenAd-f`; spec written. Removed the finished 19+20/34 specs from §5 (they're in git history). Active: 10+11 ✱, 25+26 [>].
+- 2026-09-24 19:40 — 25+26 DONE (FIX r1 → PASS r2, `48f84f4`). Spec for 27+28 written; replaced the 25+26 spec in §5. Finding: `84532.json`/`8453.json` are not committed yet (no Sepolia deploy), so CI auto-deploys only the static demo; the stack deploy is gated on the deployments file. 10+11 still coding; no report yet.
+- 2026-09-25 09:10 — 10+11 DONE (`71e0869`). 27+28 is in FIX r1 (.dockerignore, pip/python in bookworm-slim, nginx add_header inheritance, `_TAG`, deploy gate). New fact: dockerd can run in this container; recorded in JIT_INDEX. 12+13 spec written: `dist-demo` must run on a static host with no fallback under a sub-path, so the orchestrator can publish it as a hosted demo Artifact today. Active: 12+13 ✱, 27+28 [>].
+- 2026-09-25 10:20 — 27+28 DONE (`279070a`, PASS r2). Step 29 is shipping (orchestrator). 12+13 is still coding. Backlog: sourcemaps in the web image, 0002 formatting, server-default parity.
