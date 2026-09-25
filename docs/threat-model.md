@@ -51,6 +51,7 @@ serve path, and the Vite web app. Specified (not implemented): `CampaignVault` +
 | T11 | Settler reports fake payable clicks | Caps (`MAX_BATCH_CHARGE`, clicks/hour); public `click_events`; advertiser pause/close; settler ≠ HTTP API (ADR-0014) |
 | T12 | CampaignVault holds USDC | Balance = sum(`remaining`); tests; finalize refunds leftover |
 | T13 | Click token replay / publisher self-click | One-time HMAC token; TTL; optional IP+slot burst HMAC; house clicks never payable |
+| T14 | Serve CORS wildcard misused | `Access-Control-Allow-Origin: *` on `/v1/serve/*` only, with no `Access-Control-Allow-Credentials`, so a malicious page can read only the same public, cookie-free JSON/media any visitor could fetch directly; every other route keeps the credentialed allowlist |
 
 ## Residual risk
 

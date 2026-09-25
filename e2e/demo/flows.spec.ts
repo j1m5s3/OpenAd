@@ -458,6 +458,15 @@ function statValue(page: Page, label: string) {
     .locator('xpath=following-sibling::p[1]');
 }
 
+/** SlotPerformance's own slot selector, scoped to its "Performance" panel: Supply also has an
+ * EmbedCodePanel with its own "Slot to embed" selector, whose accessible name otherwise
+ * substring-matches a bare `{ name: 'Slot' }` role query. */
+function performanceSlotSelect(page: Page) {
+  return page.locator('section', { hasText: 'Performance' }).getByRole('combobox', {
+    name: 'Slot',
+  });
+}
+
 test('performance: buying a period moves Campaigns spend and Supply earnings by exactly the quote', async ({
   page,
 }) => {
@@ -468,7 +477,7 @@ test('performance: buying a period moves Campaigns spend and Supply earnings by 
 
   await switchPersona(page, PUBLISHER);
   await nav(page, 'Supply');
-  await page.getByRole('combobox', { name: 'Slot' }).selectOption('0');
+  await performanceSlotSelect(page).selectOption('0');
   await expect(statValue(page, 'Earnings')).not.toHaveText('');
   const earningsBefore = usdc((await statValue(page, 'Earnings').textContent()) ?? '');
 
@@ -491,7 +500,7 @@ test('performance: buying a period moves Campaigns spend and Supply earnings by 
 
   await switchPersona(page, PUBLISHER);
   await nav(page, 'Supply');
-  await page.getByRole('combobox', { name: 'Slot' }).selectOption('0');
+  await performanceSlotSelect(page).selectOption('0');
   await expect
     .poll(async () => usdc((await statValue(page, 'Earnings').textContent()) ?? ''))
     .toBe(earningsBefore + publisherShare(price));

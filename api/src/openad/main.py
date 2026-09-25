@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from openad import __version__
 from openad.config import Settings, get_settings
@@ -30,6 +31,83 @@ from openad.routers import (
 )
 
 log = get_logger(__name__)
+
+SERVE_PATH_PREFIX = "/v1/serve"
+
+
+def _is_serve_path(path: str) -> bool:
+    """True when ``path`` is exactly ``/v1/serve`` or a sub-path of it — never merely a string
+    with that prefix (``/v1/serve-x`` is a different, same-prefixed route).
+
+    This matches Starlette's own routing exactly, so it is deliberately *not* more clever than
+    the router: ``scope["path"]`` arrives percent-decoded (an ASGI server decodes it before the
+    app ever sees it) but with any ``..``/``.`` segments left unresolved, because Starlette's
+    router does not resolve them either — a path containing them never matches a route and
+    simply 404s. Normalizing dot segments here, ahead of a router that does not, would only let
+    this check disagree with what actually gets served.
+    """
+    return path == SERVE_PATH_PREFIX or path.startswith(SERVE_PATH_PREFIX + "/")
+
+
+class ServeCorsMiddleware:
+    """Public, credential-free CORS for the serve edge (docs/ARCHITECTURE.md section 3.4).
+
+    ``<open-ad>`` runs on a publisher's own domain, so ``GET /v1/serve/{id}`` and
+    ``/v1/serve/{id}/media`` must be readable from any origin. This is a small, path-scoped
+    ASGI middleware placed *outside* the credentialed :class:`CORSMiddleware`, so it can
+    short-circuit serve requests before that middleware's origin allowlist ever applies.
+    Every other route is untouched and keeps the credentialed allowlist.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or not _is_serve_path(scope["path"]):
+            await self.app(scope, receive, send)
+            return
+
+        request_headers = dict(scope.get("headers") or [])
+        if scope["method"] == "OPTIONS" and b"access-control-request-method" in request_headers:
+            preflight_headers: list[tuple[bytes, bytes]] = [
+                (b"access-control-allow-origin", b"*"),
+                (b"access-control-allow-methods", b"GET, OPTIONS"),
+                (b"access-control-allow-headers", b"*"),
+                (b"access-control-max-age", b"86400"),
+                (b"vary", b"origin"),
+                (b"content-length", b"0"),
+            ]
+            await send({"type": "http.response.start", "status": 200, "headers": preflight_headers})
+            await send({"type": "http.response.body", "body": b""})
+            return
+
+        # The route handler still needs the real Origin/Referer headers for
+        # `serve_enforce_origin` (paid vs house is unrelated to CORS), so the request is
+        # forwarded unchanged. The inner CORSMiddleware sees it too and, since it unconditionally
+        # sets `Access-Control-Allow-Credentials: true` on any response whose request carried an
+        # Origin header — even one outside its allowlist — its CORS headers on the response are
+        # discarded below and replaced with our own credential-free ones.
+        stripped_cors_headers = {
+            b"access-control-allow-origin",
+            b"access-control-allow-credentials",
+            b"access-control-expose-headers",
+        }
+
+        async def send_with_cors(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                response_headers: list[tuple[bytes, bytes]] = [
+                    (name, value)
+                    for name, value in (message.get("headers") or [])
+                    if name.lower() not in stripped_cors_headers
+                ]
+                response_headers.append((b"access-control-allow-origin", b"*"))
+                has_vary = any(k.lower() == b"vary" for k, _ in response_headers)
+                if not has_vary:
+                    response_headers.append((b"vary", b"origin"))
+                message = {**message, "headers": response_headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_cors)
 
 
 def create_app(settings: Settings | None = None, database: Database | None = None) -> FastAPI:
@@ -64,6 +142,10 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
         allow_headers=["*"],
         allow_credentials=True,
     )
+    # Added after CORSMiddleware so it wraps outside it (Starlette's add_middleware makes the
+    # most-recently-added middleware outermost) and can short-circuit /v1/serve before the
+    # credentialed allowlist above ever applies.
+    app.add_middleware(ServeCorsMiddleware)
 
     @app.exception_handler(DomainError)
     async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
