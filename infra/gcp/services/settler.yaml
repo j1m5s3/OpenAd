@@ -44,3 +44,9 @@ spec:
                 secretKeyRef:
                   name: openad-settler-key-${ENV}
                   key: latest
+            # Connection budget (docs/deploy-gcp.md "Connection budget", ROADMAP 6.9): one
+            # always-on instance, so this is its whole share of the budget, not per-instance.
+            - name: OPENAD_DB_POOL_SIZE
+              value: "2"
+            - name: OPENAD_DB_MAX_OVERFLOW
+              value: "1"

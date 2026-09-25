@@ -19,6 +19,16 @@ spec:
       annotations:
         # Cold starts on the serve path are a bad publisher/advertiser experience (ADR-0017).
         autoscaling.knative.dev/minScale: "1"
+        # Connection budget (docs/deploy-gcp.md "Connection budget", ROADMAP 6.9): capped so
+        # api instances × (pool + overflow) stays under Cloud SQL's max_connections, with
+        # margin for a rolling deploy briefly running two revisions at once. Raise this only
+        # after re-checking that budget.
+        autoscaling.knative.dev/maxScale: "4"
+        # Cloud Run's default containerConcurrency (80) is intentionally left as-is: with a
+        # pool of OPENAD_DB_POOL_SIZE + OPENAD_DB_MAX_OVERFLOW = 6 per instance, concurrent
+        # requests beyond that wait for a pooled connection and fail after
+        # OPENAD_DB_POOL_TIMEOUT if none frees up, rather than opening an extra one — that's
+        # the tradeoff that keeps the connection budget under Cloud SQL's max_connections.
         run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:${REGION}:openad-${ENV}
     spec:
       serviceAccountName: openad-api-${ENV}@${PROJECT_ID}.iam.gserviceaccount.com
@@ -57,3 +67,8 @@ spec:
                 secretKeyRef:
                   name: openad-click-hmac-secret-${ENV}
                   key: latest
+            # Connection budget (docs/deploy-gcp.md "Connection budget", ROADMAP 6.9).
+            - name: OPENAD_DB_POOL_SIZE
+              value: "4"
+            - name: OPENAD_DB_MAX_OVERFLOW
+              value: "2"

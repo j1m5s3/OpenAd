@@ -26,7 +26,7 @@ async def main() -> None:
         )
     liveness = Liveness(stale_after_seconds(settings.indexer_poll_seconds))
     start_liveness_server_from_env(liveness)  # no-op unless Cloud Run's $PORT is set
-    db = Database(settings.database_url)
+    db = Database(settings.database_url, settings)
     try:
         runner = IndexerRunner(
             settings, db.sessions, deployment, make_web3(settings.rpc_url), liveness=liveness

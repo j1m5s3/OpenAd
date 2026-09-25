@@ -208,3 +208,49 @@ itself, never an advertiser URL.
 publisher's `<script type="module" src="…">` snippet (`lib/embedSnippet.ts`) therefore points at
 the same origin as the app by default, with no separate hosting step. A CDN or an `@openad/embed`
 npm publish is a later option (`docs/business/*` backlog), not required to ship.
+
+## Amendment (step 38, ROADMAP 6.9): connection budget, per-service scale caps, same-site domain
+
+Three gaps found in a pre-launch capacity review, closed without changing the topology above:
+
+- **Unbounded `maxScale`.** `api.yaml` set `minScale: "1"` with no `maxScale`, so Cloud Run's own
+  default maximum instance count applies (commonly documented as 100; confirm against current
+  Cloud Run docs before relying on it). At that scale, `api`'s connections alone could exceed
+  `db-custom-1-3840`'s `max_connections` many times over, since every instance opens its own
+  connection pool. `api.yaml` now sets `maxScale: "4"`; `web.yaml` and `web-demo.yaml` (no
+  database, static sites) each get `maxScale: "10"` for cost control only. `docs/deploy-gcp.md`
+  "Connection budget" has the worked numbers and cites the Cloud SQL docs page for this tier's
+  default `max_connections`. In steady state the budget (31 connections, plus Postgres's 3
+  superuser-reserved slots) fits even under a conservative 50-connection floor. A rolling deploy
+  briefly runs old and new revisions side by side, and that worst case is ≈64, which does not
+  fit under 50. So the runbook requires `max_connections` ≥ 100: §3 sets it explicitly with
+  `--database-flags=max_connections=100` when creating the instance, and it is verified with
+  `gcloud sql instances describe` (no database connection needed) before deploying.
+- **Unbounded per-process pools.** `Database(url)` took no settings and always got
+  `create_async_engine`'s own defaults (pool 5 + overflow 10) regardless of how many instances
+  were running it. `Database` now takes an optional `settings` argument (a `PoolSettings`
+  protocol satisfied by both `openad.config.Settings` and `openad.settler.settings.SettlerSettings`)
+  and reads `OPENAD_DB_POOL_SIZE` / `OPENAD_DB_MAX_OVERFLOW` / `OPENAD_DB_POOL_TIMEOUT` /
+  `OPENAD_DB_POOL_RECYCLE`, plus `pool_pre_ping=True` for any non-SQLite URL (a recycled or
+  dropped Cloud SQL connection fails fast and is replaced, instead of erroring the next request).
+  SQLite (unit tests, `db/bootstrap.py`) is unaffected — it always uses `StaticPool`. Each
+  Cloud Run service now sets its own budget-sized `OPENAD_DB_POOL_SIZE`/`OPENAD_DB_MAX_OVERFLOW`:
+  `api` 4/2 (× `maxScale: "4"`), `indexer` and `settler` 2/1 each (one pinned instance). The
+  `openad-migrate` job sets neither: `alembic/env.py` builds its own engine directly
+  (`async_engine_from_config`), not `openad.db.session.Database`, so those settings would be
+  inert there — it always opens exactly one connection, which is what the budget counts it as.
+- **Cross-site auth cookie.** The session cookie is `SameSite=Lax`. Cloud Run's default
+  `*.run.app` URLs are each their own registrable domain (`run.app` is on the Public Suffix
+  List — inferred; confirm against `publicsuffix.org` before relying on it), so an `api` and a
+  `web` left on their default URLs are never same-site and sign-in silently fails. This ADR's
+  topology already assumed a domain mapping (§9, the runbook's "9. Domain mapping" section);
+  that section is now **required**, not optional, states the failure mode explicitly, and
+  documents the alternative (a global external Application Load Balancer with serverless NEGs)
+  for regions without domain mappings. `scripts/deploy-gcp.sh --only stack|all` refuses to
+  deploy when `API_URL`/`WEB_URL` don't look same-site, unless `--allow-cross-site-auth` is
+  passed.
+
+None of this changes the Decision, the services, or the media-cache design above; it sizes and
+guards what was already specified. `docs/threat-model.md` T17 ("Media fetch SSRF via redirect")
+is a related fix from the same step, in `api/src/openad/services/media.py`'s `fetch_media`, not
+in this ADR's scope.

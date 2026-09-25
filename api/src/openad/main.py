@@ -116,7 +116,7 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        db = database or Database(settings.database_url)
+        db = database or Database(settings.database_url, settings)
         app.state.db = db
         log.info("api.start", env=settings.env, chain_id=settings.chain_id)
         try:

@@ -31,3 +31,8 @@ spec:
                     secretKeyRef:
                       name: openad-database-url-${ENV}
                       key: latest
+                # No OPENAD_DB_POOL_SIZE/OPENAD_DB_MAX_OVERFLOW here: `alembic/env.py` builds
+                # its own engine directly (`async_engine_from_config`), not
+                # `openad.db.session.Database`, so those settings would be inert. The
+                # connection budget (docs/deploy-gcp.md) counts this job as exactly 1
+                # connection because that's what a single `alembic upgrade head` run opens.

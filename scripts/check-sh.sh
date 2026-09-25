@@ -128,6 +128,62 @@ else
 fi
 
 echo ""
+echo "==> deploy-gcp.sh same-site guard (fake repo root; adds 84532.json to clear the guard above)"
+echo '{}' >"${FAKE_REPO}/contracts/deployments/84532.json"
+# The same-site guard's own wording. Not just "Refusing": the deployments-file and prod guards
+# print that too, so matching it would let a refusal from one of them pass for this guard.
+SAME_SITE_MSG="do not look like the same"
+if OUT="$(API_URL="https://openad-api-abc-uc.a.run.app" WEB_URL="https://openad-web-def-uc.a.run.app" \
+    run_fake deploy-gcp.sh --dry-run --env staging --only stack --project p --region r --tag faketag 2>&1)"; then
+    fail "deploy-gcp.sh should refuse two different *.run.app hosts as cross-site"
+elif ! grep -q "$SAME_SITE_MSG" <<<"$OUT"; then
+    fail "deploy-gcp.sh refused two different *.run.app hosts, but not via the same-site guard (no '${SAME_SITE_MSG}' message): $OUT"
+else
+    echo "  ok: refused two different *.run.app hosts (via the same-site guard)"
+fi
+if OUT="$(API_URL="https://api.foo.com" WEB_URL="https://app.bar.com" \
+    run_fake deploy-gcp.sh --dry-run --env staging --only stack --project p --region r --tag faketag 2>&1)"; then
+    fail "deploy-gcp.sh should refuse mismatched custom domains"
+elif ! grep -q "$SAME_SITE_MSG" <<<"$OUT"; then
+    fail "deploy-gcp.sh refused mismatched custom domains, but not via the same-site guard (no '${SAME_SITE_MSG}' message): $OUT"
+else
+    echo "  ok: refused mismatched custom domains (api.foo.com / app.bar.com, via the same-site guard)"
+fi
+if ! API_URL="https://api.foo.com" WEB_URL="https://app.bar.com" \
+    run_fake deploy-gcp.sh --dry-run --env staging --only stack --project p --region r --tag faketag \
+    --allow-cross-site-auth >/dev/null 2>&1; then
+    fail "deploy-gcp.sh --allow-cross-site-auth should bypass the same-site guard"
+else
+    echo "  ok: --allow-cross-site-auth bypasses the guard"
+fi
+if ! API_URL="https://api.foo.com" WEB_URL="https://app.foo.com" \
+    run_fake deploy-gcp.sh --dry-run --env staging --only stack --project p --region r --tag faketag >/dev/null 2>&1; then
+    fail "deploy-gcp.sh should accept api/web on the same registrable domain"
+else
+    echo "  ok: accepts api.foo.com / app.foo.com (same registrable domain)"
+fi
+# host_of must lowercase and strip userinfo + port before comparing; without either, these
+# same-site pairs would compare unequal ("Example.com" / "user") and be wrongly refused.
+if ! API_URL="https://API.Example.com" WEB_URL="https://app.example.com" \
+    run_fake deploy-gcp.sh --dry-run --env staging --only stack --project p --region r --tag faketag >/dev/null 2>&1; then
+    fail "deploy-gcp.sh should compare hosts case-insensitively (API.Example.com / app.example.com)"
+else
+    echo "  ok: accepts API.Example.com / app.example.com (host_of lowercases)"
+fi
+if ! API_URL="https://user:pw@api.example.com:8443" WEB_URL="https://app.example.com" \
+    run_fake deploy-gcp.sh --dry-run --env staging --only stack --project p --region r --tag faketag >/dev/null 2>&1; then
+    fail "deploy-gcp.sh should strip userinfo and port before comparing hosts (user:pw@api.example.com:8443 / app.example.com)"
+else
+    echo "  ok: accepts user:pw@api.example.com:8443 / app.example.com (host_of strips userinfo + port)"
+fi
+if ! API_URL="https://openad-api-abc-uc.a.run.app" WEB_URL="https://openad-web-def-uc.a.run.app" \
+    run_fake deploy-gcp.sh --dry-run --env staging --only demo --project p --region r --tag faketag >/dev/null 2>&1; then
+    fail "deploy-gcp.sh --only demo should never apply the same-site guard (even with two mismatched *.run.app hosts)"
+else
+    echo "  ok: --only demo ignores API_URL/WEB_URL, even two different *.run.app hosts"
+fi
+
+echo ""
 echo "==> deploy-gcp.sh --env prod refuses under CI=true (fake repo root)"
 if CI=true run_fake deploy-gcp.sh --dry-run --env prod --project p --region r --i-understand-this-is-mainnet --tag faketag >/dev/null 2>&1; then
     fail "deploy-gcp.sh --env prod should refuse when CI=true"
