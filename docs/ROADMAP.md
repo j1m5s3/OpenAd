@@ -224,6 +224,11 @@ protocol contract changes in this phase (anything that would need one is recorde
       other 6.x item is `[x]`. (2) The demo script's talk tracks are listed as "2/5/15-minute",
       not "5-min/15-min" — the 2-minute hallway track already existed going into this step and
       was missing from the original acceptance wording; it is not a new addition here.
+      **PR #19 (2026-09-25):** Discover's state, the slot card's timing copy and the slot page's
+      period window now follow the open-ended calendar (`docs/PROTOCOL.md` §4.1) instead of
+      anchoring to the first period. Before it, every slot read "Ended" one period after its
+      first period ended, and a calendar older than 15 periods showed nothing buyable on the slot
+      page.
 - [x] **6.8 Auth hardening (SIWE binding, nonce/session hygiene).** _Done 2026-09-25._
       Pointers: ADR-0009 (2026-09-25 amendment) · `docs/threat-model.md` T15, T16 ·
       `api/src/openad/{siwe,ratelimit}.py` · `api/src/openad/services/auth.py` ·
@@ -249,7 +254,7 @@ protocol contract changes in this phase (anything that would need one is recorde
       Pointers: `api/src/openad/db/session.py` · `api/src/openad/config.py` ·
       `api/src/openad/services/media.py` · `infra/gcp/services/*.yaml` ·
       `infra/gcp/jobs/migrate.yaml` · `docs/deploy-gcp.md` ("Connection budget", §9) ·
-      ADR-0017 amendment · `docs/threat-model.md` T17 · `scripts/deploy-gcp.sh`.
+      ADR-0017 amendment · `docs/threat-model.md` T17, T18, T19 · `scripts/deploy-gcp.sh`.
       Acceptance: `Database` sizes its pool from settings (`OPENAD_DB_POOL_SIZE`,
       `OPENAD_DB_MAX_OVERFLOW`, `OPENAD_DB_POOL_TIMEOUT`, `OPENAD_DB_POOL_RECYCLE`,
       `pool_pre_ping=True`) at all four call sites (`api`, indexer, settler,
@@ -267,11 +272,15 @@ protocol contract changes in this phase (anything that would need one is recorde
       hop (not just the first URL) re-validated for scheme and, outside dev/test, for a blocked
       hostname (after stripping trailing dots) or an IP literal that is not globally routable or
       is multicast, reserved or IPv6 site-local (including legacy numeric forms and IPv4-mapped
-      IPv6); T17 added; all checks green. Outbound-fetch bounds shipped separately in the
-      outbound-fetch-bounds PR: one overall deadline on media fetches, a per-pass budget for
-      indexer verification, and a domain meta check that releases its DB connection before
-      fetching and is bounded with a per-slot cooldown — recorded as **T18**
-      (`docs/threat-model.md`).
+      IPv6); T17 added; all checks green. Outbound-fetch bounds shipped separately in **PR #17**:
+      one overall deadline on media fetches, a per-pass budget for indexer verification, and both
+      `POST /v1/creatives/{id}/verify` and the domain meta check release their pooled DB
+      connection before fetching, with both fetchers reading raw bytes under their caps
+      (`Accept-Encoding: identity`) and the meta check additionally bounded by a per-slot
+      cooldown — recorded as **T18** (`docs/threat-model.md`). **PR #18** further caps
+      `GET /v1/slots/{id}/periods` at 60 periods per request (a wider window gets a house-style
+      422 `invalid_window`) and reads its leases in one batched query instead of one per period
+      index — recorded as **T19**.
 - [ ] **6.10 Live GCP deployment (user-run).**
       Pointers: `docs/deploy-gcp.md` · `docs/business/launch-checklist.md`.
       Acceptance: a GCP project exists and the runbook (§1–§10) has been followed; the Workload
@@ -308,9 +317,15 @@ blocks a testnet/staging launch. **7.10** (the independent security audit) does 
       clicks (today it reuses the LEASE "not tracked" hint); advertiser CTR over CPC impressions
       only, not diluted by LEASE impressions; a separate "Booked (upcoming)" tile for leases not
       yet started. Pointers: `api/src/openad/services/analytics.py`, `web/src/lib/analytics.ts`.
-- [ ] **7.7 Migration and lint scope.** `compare_metadata` parity doesn't cover server defaults;
-      widen the ruff scope to include `alembic/` (`0002_cpc.py` is unformatted). Pointers:
-      `api/tests/test_migrations.py`, `api/pyproject.toml`.
+- [ ] **7.7 Migration, lint and docs-formatting scope.** `compare_metadata` parity doesn't cover
+      server defaults; widen the ruff scope to include `alembic/` (`0002_cpc.py` is unformatted);
+      CI's `prettier --check` step covers only `web/src/demo`, `e2e/demo`,
+      `web/src/features/marketing` and `web/src/app/routes.tsx`, so the root `format:check`
+      script (all of `web/`, `embed/` and `docs/`) never runs in CI, and `docs/` table alignment
+      already fails at base on `ARCHITECTURE.md` and `docs/threat-model.md`; some code comments
+      cite JIT step numbers (e.g. "step 39", "PLAN step 40") that only the archived plan's
+      step → PR map (`.cursor/jit_history/`) resolves. Pointers: `api/tests/test_migrations.py`,
+      `api/pyproject.toml`, `.github/workflows/ci.yml`, `package.json` (`format:check`).
 - [ ] **7.8 `useSiwe` in-flight race** on an account switch (real app and demo). Pointers:
       `web/src/features/auth/useSiwe.ts`.
 - [ ] **7.9 `BuyDialog` unit test** for the `BaseError.shortMessage` error branch. Pointers:
@@ -328,9 +343,10 @@ blocks a testnet/staging launch. **7.10** (the independent security audit) does 
       guard instead of placeholders; a Public-Suffix-List-aware same-site guard (multi-part
       suffixes such as `co.uk`, `web.app`); `host_of` verified on a real macOS bash 3.2.
       Pointers: `api/tests/`, `.github/workflows/deploy.yml`, `scripts/deploy-gcp.sh`.
-- [ ] **7.14 Bounded-concurrency media verification.** The outbound-fetch-bounds PR bounds each
-      fetch and each verification pass, but not how many run concurrently. Pointers:
-      `api/src/openad/indexer/runner.py`.
+- [ ] **7.14 Bounded-concurrency media verification, and a per-verify limit.** PR #17 bounds each
+      fetch and each verification pass, but not how many run concurrently; it also leaves
+      `POST /v1/creatives/{id}/verify` with no per-address or per-session limit (T18 residuals).
+      Pointers: `api/src/openad/indexer/runner.py`, `api/src/openad/routers/creatives.py`.
 - [ ] **7.15 Auth follow-ups from 6.8.** A test that percent-encoded URIs/resources are accepted;
       OpenAPI still documents FastAPI's default 422 shape for `/v1/auth/verify`; rename
       `openad.errors.InvalidRequestError`, which clashes conceptually with SQLAlchemy's own; cap
@@ -340,6 +356,17 @@ blocks a testnet/staging launch. **7.10** (the independent security audit) does 
 - [ ] **7.16 DNS TXT domain verification.** Add `dnspython` (with a resolver lifetime) so
       `_check_dns` can actually succeed, or drop the method from the docs. Pointers:
       `api/src/openad/services/offchain.py`, `docs/ARCHITECTURE.md` §3.6.
+- [ ] **7.17 Sim planner period window.** `sim/src/planner/snapshot.ts:48` lists periods 0–4
+      only, so sim activity stops after five periods; it should list from the slot's current
+      index instead, the way the web app's slot page now does (PR #19). Pointers:
+      `sim/src/planner/`.
+- [ ] **7.18 Discover "no terms" filter chip, and a defensive zero-period guard.** A slot with no
+      sale terms yet reads the new `'no terms'` state (PR #19), which has no Discover filter chip
+      — the same pre-existing gap as `'no calendar'`. Separately, `periodsWindowSize` and
+      `currentPeriodIndex` (`web/src/lib/auction.ts`) divide by `periodSeconds` with no zero
+      guard; a zero period is unreachable today (`set_calendar` and the demo reducer both require
+      `periodSeconds >= 3600`), so this is a defensive guard, not a live bug. Pointers:
+      `web/src/features/marketplace/DiscoverPage.tsx`, `web/src/lib/auction.ts`.
 
 ---
 

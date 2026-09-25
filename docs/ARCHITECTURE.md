@@ -262,14 +262,14 @@ present, even for an origin outside its own allowlist).
 Triggered by the indexer on `CreativeRegistered` and re-run on a schedule
 (`OPENAD_VERIFY_INTERVAL_SECONDS`, default 6h) and on demand. Each indexer pass
 (`services.media.verify_pending`) processes pending creatives up to a wall-clock budget
-(`OPENAD_VERIFY_PASS_BUDGET_SECONDS`, default 20s, ROADMAP 6.9 step 39); creatives it doesn't
+(`OPENAD_VERIFY_PASS_BUDGET_SECONDS`, default 20s, ROADMAP 6.9, PR #17); creatives it doesn't
 reach stay `pending` for the next pass (creatives are attempted in `creative_id`, i.e. FIFO,
 order), so registering a creative is permissionless but a slow or malicious `uri` can never
 block block indexing for longer than one budget plus one fetch deadline (`docs/threat-model.md`
 T18). On demand (`POST /v1/creatives/{id}/verify`) and the indexer pass both call
 `services.media.verify_creative`, which reads what the fetch needs and commits — releasing the
 pooled DB connection — before the network call, then writes the result in a later transaction
-(fix round 1, T18). Registering is permissionless, and the on-demand route lets the creative's
+(PR #17, T18). Registering is permissionless, and the on-demand route lets the creative's
 advertiser (`require_advertiser`) re-run verification at any time, whatever the creative's
 status; with the connection released first, a slow `uri` or several concurrent verifies of the
 same creative no longer hold a connection out of the pool for the fetch's duration.
@@ -289,11 +289,11 @@ same creative no longer hold a connection out of the pool for the fetch's durati
    is unwrapped first. Dev/test skips these host checks entirely so local Anvil/sim creatives at
    `http://127.0.0.1:*` still verify (ADR-0012). Enforce `OPENAD_MAX_MEDIA_BYTES` (default 2 MiB),
    a 10 s per-read timeout, and an overall `OPENAD_MEDIA_FETCH_DEADLINE_SECONDS` deadline
-   (default 30s, step 39) around connect, every hop, and the whole body — a host that trickles a
+   (default 30s, PR #17) around connect, every hop, and the whole body — a host that trickles a
    few bytes at a time ("slow-drip") never trips the per-read timeout but is still cut off
    (`failed:timeout`) once the deadline passes (T18). The request sends `Accept-Encoding:
    identity` and the body is read raw (`aiter_raw()`, bypassing httpx's own content-decoding); a
-   response declaring any other `Content-Encoding` fails closed as `failed:fetch` (fix round 1,
+   response declaring any other `Content-Encoding` fails closed as `failed:fetch` (PR #17,
    T18) instead of being decoded, so `OPENAD_MAX_MEDIA_BYTES` bounds wire bytes actually
    received, not a much larger size a compressed ("gzip-bomb") body could expand into.
 2. `keccak256(bytes) == content_hash`, else `failed:hash_mismatch`.
@@ -349,8 +349,8 @@ cooldown), then the endpoint claims a per-slot 30 s cooldown window with one ato
 let concurrent calls all see "no cooldown" and all proceed) and commits — releasing the pooled DB
 connection — before the network call runs; a call that loses the claim gets `429 rate_limited`
 with `Retry-After` instead of triggering another fetch, and the claim persists across a restart
-and is shared across api instances, since it lives in the database, not in process memory (fix
-round 1, step 39, T18). The result is written back in a further transaction guarded by the token
+and is shared across api instances, since it lives in the database, not in process memory (PR
+#17, T18). The result is written back in a further transaction guarded by the token
 read before the fetch, so a check that outlives a token that `start_domain_verification`
 re-issues mid-flight cannot mark the slot verified under the new one.
 

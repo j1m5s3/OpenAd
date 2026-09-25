@@ -60,12 +60,12 @@ run with `npm run test:demo -w e2e`:
   API/chain origin is blocked with `DemoNetworkError` — a rejected promise for `fetch`, a
   synchronous throw for `XMLHttpRequest.open`, `new WebSocket()`, `new EventSource()` and
   `navigator.sendBeacon()`.
-- Separately, every demo Playwright test runs under an `auto: true` `guard` fixture
-  (`flows.spec.ts`) that fails the test if, by the time it finishes, the page made any
-  off-origin request, opened a WebSocket, logged a console error (including a `DemoNetworkError`
-  message) or an uncaught page error, or received an HTTP response ≥400 — the suite's own,
-  end-to-end proof that demo mode never reached a real RPC or API, on top of the guard's unit
-  coverage above.
+- Separately, each demo spec file (`flows.spec.ts` and `growth.spec.ts`) defines its own
+  `auto: true` `guard` fixture that fails the test if, by the time it finishes, the page made any
+  off-origin request, opened a WebSocket, or logged a console error (including a
+  `DemoNetworkError` message) or an uncaught page error. Only `flows.spec.ts`'s guard also fails
+  on an HTTP response ≥400. Together these are the suite's own, end-to-end proof that demo mode
+  never reached a real RPC or API, on top of the guard's unit coverage above.
 - An exact-balance assertion in the test body of "advertiser: discover → slot → buy a Dutch
   period with permit → lease on dashboard" (`flows.spec.ts`, after calling its `buyFirstPeriod`
   helper): the wallet balance is polled and must equal the pre-buy balance minus the exact quoted

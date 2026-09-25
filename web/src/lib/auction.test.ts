@@ -354,6 +354,12 @@ describe('periodsWindowSize', () => {
     expect(periodsWindowSize(86_400, 3600)).toBe(24);
   });
 
+  it('rounds the period count up, not down, when it does not divide evenly', () => {
+    // 88,200 / 3,600 = 24.5: ceil is 25, floor is 24. The exact-multiple case above (86,400 /
+    // 3,600 = 24.0) can't tell ceil from floor, since both round to the same integer.
+    expect(periodsWindowSize(88_200, 3600)).toBe(25);
+  });
+
   it('caps at 59, one under the list_periods API range limit (step 41)', () => {
     expect(periodsWindowSize(1_000_000, 3600)).toBe(59);
   });

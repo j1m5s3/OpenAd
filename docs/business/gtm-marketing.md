@@ -38,15 +38,15 @@ never touches user funds.
 
 ## Launch plan
 
-- **Days 0–30:** ship the demo mode and showcase (6.2), publish `docs/business/*`, recruit a
-  small number of pilot publishers from the beachhead ICP manually (direct outreach, not paid
-  acquisition), stand up the embed-code and share-page flow (6.3) so pilots can go live without
-  engineering help.
-- **Days 30–60:** ship analytics (6.4) so pilots can see CTR/eCPM/spend trend; use those numbers
-  in outreach to advertisers; run the first hackathon sponsorship pilot.
-- **Days 60–90:** cross-platform scripts and production deploy (6.5, 6.6) so external
-  contributors and pilots can self-host or use a hosted demo/production instance; publish the
-  pitch deck and demo script (6.7) for direct outreach and grant applications.
+The product work behind each phase below is already built (6.2–6.9); what remains is the launch
+itself, the pilots, and the audit before mainnet.
+
+- **Days 0–30 — Go live:** launch on Base Sepolia and Google Cloud (6.10), and hand-recruit pilot
+  publishers with the demo and the embed tag.
+- **Days 30–60 — Prove it:** pilots' CTR, eCPM and spend from the built-in dashboards go into
+  advertiser outreach, alongside the first hackathon sponsorship.
+- **Days 60–90 — Scale it:** the independent audit (7.10), then Base mainnet; grant applications
+  and direct outreach with the deck.
 
 ## Cold-start tactics
 

@@ -20,12 +20,13 @@ any provider's fees, speed, or availability. Compare providers yourself before u
 
 - **Check the network.** Select **Base** as the destination network in the sending app. Sending
   to the wrong network can lose funds — OpenAd cannot recover them.
-- **Check the token.** OpenAd uses native USDC on Base, and the buy flow is a single permit
-  signature (EIP-2612) — there is no separate token-approval step. No OpenAd screen shows you the
-  USDC contract address. Instead, compare the USDC token address your own wallet shows (in its
-  token or balance view) — and, if your wallet displays it, the `verifyingContract` field in the
-  permit signature request it asks you to sign when buying — against the address Circle publishes
-  for Base. Do not assume a token is genuine native USDC just because it is labelled "USDC".
+- **Check the token.** OpenAd uses native USDC on Base, and the buy flow is one permit signature
+  (EIP-2612) plus one transaction, with no separate approval transaction. No OpenAd screen shows
+  you the USDC contract address. Instead, compare the USDC token address your own wallet shows
+  (in its token or balance view) — and, if your wallet displays it, the `verifyingContract` field
+  in the permit signature request it asks you to sign when buying — against the address Circle
+  publishes for Base. Do not assume a token is genuine native USDC just because it is labelled
+  "USDC".
 - **Keep some ETH on Base too.** Buying a period pays gas in ETH on Base, separate from the USDC
   price. Keep a small amount of ETH in the same wallet (no specific amount is given here — it
   depends on current network conditions).

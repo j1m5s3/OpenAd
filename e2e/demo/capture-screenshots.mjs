@@ -129,17 +129,37 @@ async function main() {
         (await page.locator('tbody tr', { has: buyButton }).locator('td').first().textContent()) ??
         ''
       ).trim();
-      // Rows list periods 0..n in order, so the row stays addressable by index after its button
-      // changes from "Buy" to "Leased" (the same technique `flows.spec.ts`'s `buyFirstPeriod`
-      // uses — a `has: buyButton` filter would stop matching once the button disappears).
-      const row = page.locator('tbody tr').nth(Number(periodIndex));
+      // Found by its period-index cell, not row position (ROADMAP 6.7): the slot page's periods
+      // window can start at the slot's current period instead of always 0, so DOM order and
+      // period index can diverge — the same technique `flows.spec.ts`'s `buyFirstPeriod` uses (a
+      // `has: buyButton` filter alone would stop matching once the button becomes "Leased").
+      const row = page
+        .locator('tbody tr', { has: page.getByRole('cell', { name: periodIndex, exact: true }) })
+        .first();
       await buyButton.click();
       const dialog = page.getByRole('dialog');
       await dialog.locator('p.text-2xl').waitFor();
       await dialog.getByRole('button', { name: 'Next' }).click();
       await dialog.getByRole('button', { name: 'Next' }).click();
+      // WalletRail's balance is a separate `useReadContract` from the dialog's own frozen
+      // Snapshot, refetched only after the write settles — so it can still show the pre-buy
+      // amount for a tick after the dialog itself already reads "Lease confirmed". Recorded here,
+      // before the click, so the wait below can detect the change (a fresh read after the click
+      // would race the update it's trying to observe).
+      const walletBalance = page.locator('aside p.text-sm').first();
+      const balanceBeforeBuy = (await walletBalance.textContent())?.trim();
       await dialog.getByRole('button', { name: 'Buy with permit' }).click();
       await dialog.getByText('Lease confirmed').waitFor();
+      // Wait for the header wallet balance to actually settle too, not just the dialog: without
+      // this, buy-receipt.png was non-deterministic (about 1 run in 3 still showed the pre-buy
+      // balance behind the dialog).
+      await page.waitForFunction(
+        ({ selector, before }) => {
+          const el = document.querySelector(selector);
+          return el != null && el.textContent?.trim() !== before;
+        },
+        { selector: 'aside p.text-sm', before: balanceBeforeBuy },
+      );
       // 3a. The receipt itself (price paid, fee split, tx hash, "View slot"), before it closes —
       // step 35's frozen `Snapshot` keeps this stable even though closing re-quotes the period.
       // (The dialog is a fixed-position overlay, so the page's own scroll position underneath —
@@ -147,12 +167,14 @@ async function main() {
       await shoot(page, 'buy-receipt.png');
       await dialog.getByRole('button', { name: 'Close' }).click();
       await row.getByRole('button', { name: 'Leased' }).waitFor();
-      // Scroll back to the top: the wallet balance lives above the fold, and the scroll
-      // position from step 2's "scroll the Buy row into view" is still in effect here (closing
-      // the dialog doesn't reset it, and this is a client-side SPA — there's no page reload to
-      // reset it either).
+      // Scroll back to the top first: the scroll position from step 2's "scroll the Buy row into
+      // view" is still in effect here (closing the dialog doesn't reset it, and this is a
+      // client-side SPA — there's no page reload to reset it either). Shoot full-page, not just
+      // the viewport: the listing/share sections above the table push the Leased row below the
+      // 800px fold, so only a full-page capture actually shows the Leased row alongside the
+      // wallet balance, as the name promises.
       await page.evaluate(() => window.scrollTo(0, 0));
-      await shoot(page, 'buy-leased.png');
+      await shoot(page, 'buy-leased.png', { fullPage: true });
 
       // 4. Publisher performance panel (Supply, switched persona). Wait past the "Loading
       // performance…" placeholder for a real tile (eCPM) to render before capturing.
@@ -176,6 +198,17 @@ async function main() {
       await page.getByRole('heading', { name: 'See the embed live' }).waitFor();
       await page.getByLabel('Slot').selectOption('0');
       await page.locator('open-ad[slot-id="0"] img').first().waitFor();
+      // The above only waits for the <img> to attach and become visible, not for its pixels to
+      // be ready: `open-ad.ts` sets `loading = 'lazy'` and `decoding = 'async'`, so the element
+      // can be on-screen before the image is actually decoded and painted, which made
+      // embed-demo.png occasionally capture that not-yet-painted frame. Wait for the real image
+      // to finish loading (`shadowRoot` because the <img> lives in the element's open shadow
+      // root, which a plain `document.querySelector` does not pierce).
+      await page.waitForFunction(() => {
+        const host = document.querySelector('open-ad[slot-id="0"]');
+        const img = host?.shadowRoot?.querySelector('img');
+        return Boolean(img && img.complete && img.naturalWidth > 0);
+      });
       // `page.goto` to a new hash route doesn't reload the document (same SPA) and doesn't reset
       // scroll either, so the same leftover offset would otherwise cut off the heading and the
       // leaderboard creative here too.

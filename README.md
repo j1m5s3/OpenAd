@@ -147,7 +147,9 @@ Start at [`docs/README.md`](docs/README.md). AI agents and new contributors: rea
 - **Security and capacity hardening** (ROADMAP 6.8/6.9) — SIWE sign-in bound to the site's own
   allowed origins, one-time login nonces consumed atomically, a documented Cloud SQL connection
   budget with per-service scale caps, and every media-fetch redirect hop re-validated
-  (`docs/threat-model.md` T17); outbound-fetch time limits ship separately (ROADMAP 6.9, T18).
+  (`docs/threat-model.md` T17); outbound fetches carry an overall deadline and hold no database
+  connection while they run (PR #17, T18); the periods endpoint caps its window at 60 periods per
+  request (PR #18, T19).
 - **Deploy artifacts** — Cloud Run configs, a migration job, and an nginx web image for GCP
   (`docs/deploy-gcp.md`); the live deploy itself is a user-run step (ROADMAP 6.10).
 

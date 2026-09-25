@@ -245,11 +245,13 @@ printf '%s' "$(openssl rand -hex 32)" | gcloud secrets create openad-click-hmac-
 ```
 
 Grant `roles/secretmanager.secretAccessor` on `openad-database-url-<ENV>`,
-`openad-session-secret-<ENV>` and `openad-click-hmac-secret-<ENV>` to the `openad-api-<ENV>`,
-`openad-migrate-<ENV>` service accounts (and `openad-indexer-<ENV>` and `openad-settler-<ENV>`
-for the database URL only — `infra/gcp/services/settler.yaml` mounts it as
-`OPENAD_DATABASE_URL`; neither needs the session or click secrets, and the settler-key grant
-above is still the only IAM binding naming the settler service account for that secret).
+`openad-session-secret-<ENV>` and `openad-click-hmac-secret-<ENV>` to the `openad-api-<ENV>`
+service account, since `infra/gcp/services/api.yaml` is the only manifest that mounts all three.
+Grant `openad-database-url-<ENV>` only — not the session or click secrets — to
+`openad-migrate-<ENV>`, `openad-indexer-<ENV>` and `openad-settler-<ENV>` too:
+`infra/gcp/jobs/migrate.yaml` and `infra/gcp/services/{indexer,settler}.yaml` each mount only
+`OPENAD_DATABASE_URL`, and none of the three needs the session or click secrets (the settler-key
+grant above is still the only IAM binding naming the settler service account for that secret).
 
 ## 6-8. Build, migrate, deploy — the primary path: `scripts/deploy-gcp.sh`
 
@@ -395,8 +397,9 @@ fetches at the API. Viem's `createSiweMessage` (ADR-0009 amendment) rejects an I
 and any single-label host other than `localhost`, so that web-app host must be `localhost`, an
 IPv4 address, or a dotted hostname. A dotted hostname like `app.<domain>` above always satisfies
 this. The API must recognize the same host too: it has to appear in `OPENAD_CORS_ORIGINS` (and
-in `OPENAD_SIWE_ALLOWED_ORIGINS`, if that's set separately — see `.env.example`), which are
-checked against the same rule (`docs/ARCHITECTURE.md` §3.3).
+in `OPENAD_SIWE_ALLOWED_ORIGINS`, if that's set separately — see `.env.example`), which must
+follow the same rule (`docs/ARCHITECTURE.md` §3.3). The API itself does not validate its origin
+lists against this rule; setting them correctly is an operator responsibility.
 
 Domain mappings aren't available in every region (see `gcloud run domain-mappings create
 --help`, or the Cloud Run docs, for the current region list). Where they aren't, front both
@@ -575,11 +578,18 @@ cold starts) to cut cost; production should not, per this ADR's `min-instances=1
 
 ## 14. Teardown
 
+`gcloud run services delete` and `gcloud secrets delete` each take exactly one resource name, so
+loop over the names rather than listing them all on one command line:
+
 ```bash
-gcloud run services delete openad-api openad-indexer openad-settler openad-web --region=<REGION>
+for svc in openad-api openad-indexer openad-settler openad-web openad-web-demo; do
+  gcloud run services delete "$svc" --region=<REGION>
+done
 gcloud run jobs delete openad-migrate --region=<REGION>
 gcloud sql instances delete openad-<ENV>
 gcloud storage rm --recursive gs://openad-media-<ENV>
-gcloud secrets delete openad-database-url-<ENV> openad-settler-key-<ENV> \
-  openad-session-secret-<ENV> openad-click-hmac-secret-<ENV>
+for secret in openad-database-url-<ENV> openad-settler-key-<ENV> \
+  openad-session-secret-<ENV> openad-click-hmac-secret-<ENV>; do
+  gcloud secrets delete "$secret"
+done
 ```
