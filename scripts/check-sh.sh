@@ -279,25 +279,11 @@ else
     echo "  ok: refused with API_URL/WEB_URL set but empty (via the new guard, before any gcloud command)"
 fi
 
-echo ""
-echo "==> deploy-gcp.sh never lets a keyed RPC_URL reach RPC_ORIGINS/CSP output (fake repo root)"
-if OUT="$(RPC_URL="https://rpc.example/v2/SECRETKEY" API_URL="https://api.foo.com" WEB_URL="https://app.foo.com" \
-    run_fake deploy-gcp.sh --dry-run --env staging --only all --project p --region r --tag faketag 2>&1)"; then
-    if grep -q 'SECRETKEY' <<<"$OUT"; then
-        fail "deploy-gcp.sh leaked RPC_URL's SECRETKEY into its output"
-    else
-        echo "  ok: no output line contains SECRETKEY"
-    fi
-else
-    fail "deploy-gcp.sh --only all with a keyed RPC_URL (but no RPC_ORIGINS) should still succeed under --dry-run: $OUT"
-fi
-
-# The check above can pass vacuously: RPC_ORIGINS defaults independently of RPC_URL (by design —
-# see deploy-gcp.sh), so RPC_URL's own secret was never going to reach the output regardless of
-# whether origin_of/normalize_origins do anything at all. The tests below instead read
-# web.yaml's own resolved API_ORIGIN/RPC_ORIGINS — printed as "Resolved web CSP origins: ...",
-# no secret beyond what the CSP header would itself carry — and drive origin_of directly through
-# RPC_ORIGINS, to prove the reduction and the refusals actually happen.
+# "No key in the output" alone can pass vacuously: origin_of would strip RPC_URL's key even if
+# RPC_ORIGINS wrongly defaulted to RPC_URL. The tests below also read web.yaml's own resolved
+# API_ORIGIN/RPC_ORIGINS — printed as "Resolved web CSP origins: ...", no secret beyond what the
+# CSP header would itself carry — and drive origin_of directly through RPC_ORIGINS, to prove the
+# defaults, the reduction and the refusals actually happen.
 RESOLVED_MSG="Resolved web CSP origins:"
 # resolved_field <output> <FIELD> — the value of FIELD= on the last "Resolved web CSP origins:
 # ..." line (e.g. resolved_field "$OUT" RPC_ORIGINS), assuming FIELD is the last field on the
@@ -309,20 +295,43 @@ resolved_field() {
 }
 
 echo ""
-echo "==> deploy-gcp.sh --only all defaults RPC_ORIGINS to the public Sepolia origin, API_ORIGIN to API_URL's origin (fake repo root)"
-OUT="$(API_URL="https://api.foo.com" WEB_URL="https://app.foo.com" \
-    run_fake deploy-gcp.sh --dry-run --env staging --only all --project p --region r --tag faketag 2>&1)"
+echo "==> deploy-gcp.sh --only all with a keyed RPC_URL on another host and an API_URL with a path and query (fake repo root)"
+# RPC_URL is api/indexer/settler's own RPC and may carry a provider key. RPC_ORIGINS (web.yaml's
+# public CSP) defaults to the public Sepolia origin, never to RPC_URL, not even to RPC_URL's
+# key-free origin. API_ORIGIN is API_URL's bare origin: path and query dropped.
+if ! OUT="$(RPC_URL="https://rpc.example/v2/SECRETKEY" API_URL="https://api.foo.com/base?v=1" \
+    WEB_URL="https://app.foo.com" \
+    run_fake deploy-gcp.sh --dry-run --env staging --only all --project p --region r --tag faketag 2>&1)"; then
+    fail "deploy-gcp.sh --only all with a keyed RPC_URL (but no RPC_ORIGINS) should still succeed under --dry-run: $OUT"
+elif grep -q 'SECRETKEY' <<<"$OUT"; then
+    fail "deploy-gcp.sh leaked RPC_URL's SECRETKEY into its output"
+else
+    echo "  ok: no output line contains RPC_URL's SECRETKEY"
+fi
 GOT="$(resolved_field "$OUT" RPC_ORIGINS)"
 if [ "$GOT" != "https://sepolia.base.org" ]; then
-    fail "deploy-gcp.sh --env staging default RPC_ORIGINS should be https://sepolia.base.org, got: '${GOT}' (full output: $OUT)"
+    fail "deploy-gcp.sh --env staging RPC_ORIGINS should default to https://sepolia.base.org, never RPC_URL's origin; got '${GOT}': $OUT"
 else
-    echo "  ok: default RPC_ORIGINS is the public Sepolia origin (https://sepolia.base.org)"
+    echo "  ok: RPC_ORIGINS defaults to the public Sepolia origin (https://sepolia.base.org), not RPC_URL's"
 fi
 if ! grep -q "API_ORIGIN=https://api.foo.com RPC_ORIGINS=" <<<"$OUT"; then
-    fail "deploy-gcp.sh API_ORIGIN should reduce to API_URL's own bare origin (https://api.foo.com): $OUT"
+    fail "deploy-gcp.sh API_ORIGIN should reduce API_URL https://api.foo.com/base?v=1 to its bare origin (https://api.foo.com): $OUT"
 else
-    echo "  ok: API_ORIGIN reduces to API_URL's bare origin"
+    echo "  ok: API_ORIGIN reduces API_URL's path and query to its bare origin"
 fi
+# Same run: api and web are each replaced, then bound to allUsers, then smoke-checked. On a first
+# deploy, a smoke check before the binding (or with none) gets Cloud Run's own 403.
+for svc in api web; do
+    REPLACE_AT="$(first_line "$OUT" "run services replace .*/${svc}\.yaml ")"
+    BIND_AT="$(first_line "$OUT" "add-iam-policy-binding openad-${svc} --member=allUsers ")"
+    SMOKE_AT="$(first_line "$OUT" "curl .*<openad-${svc}-url>/")"
+    if [ -z "$REPLACE_AT" ] || [ -z "$BIND_AT" ] || [ -z "$SMOKE_AT" ] ||
+        [ "$REPLACE_AT" -ge "$BIND_AT" ] || [ "$BIND_AT" -ge "$SMOKE_AT" ]; then
+        fail "deploy-gcp.sh must replace openad-${svc}, then bind allUsers to it, then smoke-check it: $OUT"
+    else
+        echo "  ok: openad-${svc}: services replace, then the allUsers binding, then the smoke check"
+    fi
+done
 
 echo ""
 echo "==> deploy-gcp.sh reduces a keyed RPC_ORIGINS to its bare origin: key in a path, a query or a fragment (fake repo root)"
@@ -404,18 +413,28 @@ for CASE in \
 done
 
 echo ""
-echo "==> deploy-gcp.sh refuses a schemeless RPC_ORIGINS host instead of misreading it as its own scheme (fake repo root)"
-if OUT="$(RPC_ORIGINS="rpc.example" \
-    API_URL="https://api.foo.com" WEB_URL="https://app.foo.com" \
-    run_fake deploy-gcp.sh --dry-run --env staging --only all --project p --region r --tag faketag 2>&1)"; then
-    fail "deploy-gcp.sh should refuse a schemeless RPC_ORIGINS host instead of misreading it as its own scheme: $OUT"
-elif ! grep -q 'origin_of: refusing a URL with no http/https/ws/wss scheme' <<<"$OUT"; then
-    fail "deploy-gcp.sh refused a schemeless RPC_ORIGINS, but not with origin_of's scheme message: $OUT"
-elif ran_gcloud "$OUT"; then
-    fail "deploy-gcp.sh ran a gcloud command before refusing a schemeless RPC_ORIGINS: $OUT"
-else
-    echo "  ok: refuses a schemeless RPC_ORIGINS host (no bogus 'rpc.example://rpc.example', no gcloud command)"
-fi
+echo "==> deploy-gcp.sh refuses an RPC_ORIGINS without an http/https/ws/wss scheme, unprinted, before any gcloud command (fake repo root)"
+# A value with no scheme must not be misread as its own scheme: a bare host would become
+# "rpc.example://rpc.example". The refusal must not print any part of the value, host or key.
+for CASE in \
+    "no scheme|rpc.example/v2/SECRETKEY" \
+    "an ftp:// scheme|ftp://rpc.example/v2/SECRETKEY" \
+    "a bare host|rpc.example"; do
+    LABEL="${CASE%%|*}"
+    IN="${CASE#*|}"
+    if OUT="$(RPC_ORIGINS="$IN" API_URL="https://api.foo.com" WEB_URL="https://app.foo.com" \
+        run_fake deploy-gcp.sh --dry-run --env staging --only all --project p --region r --tag faketag 2>&1)"; then
+        fail "deploy-gcp.sh should refuse an RPC_ORIGINS with ${LABEL}: $OUT"
+    elif ! grep -q 'origin_of: refusing a URL with no http/https/ws/wss scheme' <<<"$OUT"; then
+        fail "deploy-gcp.sh refused an RPC_ORIGINS with ${LABEL}, but not with origin_of's scheme message: $OUT"
+    elif grep -q -e 'SECRETKEY' -e 'rpc\.example' <<<"$OUT"; then
+        fail "deploy-gcp.sh printed (part of) a refused RPC_ORIGINS with ${LABEL}: $OUT"
+    elif ran_gcloud "$OUT"; then
+        fail "deploy-gcp.sh ran a gcloud command before refusing an RPC_ORIGINS with ${LABEL}: $OUT"
+    else
+        echo "  ok: refuses ${LABEL} (origin_of's scheme message, value not printed, no gcloud command)"
+    fi
+done
 
 echo ""
 echo "==> deploy-gcp.sh smoke-checks openad-api at its *.run.app URL while API_INGRESS is all, else at API_URL (fake repo root)"

@@ -330,8 +330,14 @@ side effects for this org/project first)**.
 fetches `/v1/health` at the service's own `*.run.app` URL, which answers even before §9 maps a
 domain. With `internal-and-cloud-load-balancing` that URL refuses outside requests **(inferred;
 verify before deploy)**, so it fetches `API_URL` instead, which must then be the load balancer's
-host. `openad-web` and `openad-web-demo` keep ingress `all` and are checked at their `*.run.app`
-URLs (the demo at `WEB_DEMO_URL` once that is set).
+host. Keep `all` for a first deploy, and switch to `internal-and-cloud-load-balancing` only once
+the load balancer already serves `API_URL` (its serverless NEG, the DNS record for `API_URL`'s
+host and its managed certificate; §9). Switch any earlier and the api smoke check fails, and
+`--only all` stops before `openad-web-demo` and `openad-web`; the api is also off the public
+internet until the load balancer serves it, since its `*.run.app` URL and any domain mapping
+refuse outside requests **(inferred; verify before deploy)**. `openad-web` and `openad-web-demo`
+keep ingress `all` and are checked at their `*.run.app` URLs (the demo at `WEB_DEMO_URL` once
+that is set).
 
 ### 6. Build and push images (manual fallback)
 
@@ -612,20 +618,21 @@ names as the build's runner)**.
 ## 11. Smoke checks
 
 Paste the whole block: it runs in a subshell with `set -e`, so the first failing check stops it
-with a non-zero status (`echo $?`) and leaves your own shell open.
+with a non-zero status (`echo $?`) and leaves your own shell open. Its hosts are §9's:
+`api.<domain>` (`API_URL`), `app.<domain>` (`WEB_URL`) and `demo.<domain>` (`WEB_DEMO_URL`).
 
 ```bash
 (
   set -e
-  curl -sf https://api.<ENV>.example.com/v1/health
+  curl -sf https://api.<domain>/v1/health
 
   # /v1/serve/<id> legitimately 404s on a fresh deploy (no slot 1 minted yet): check the status
   # and that the body is JSON, not `-f` (which treats a 404 as a curl failure).
-  STATUS="$(curl -s -o /tmp/serve1.json -w '%{http_code}' https://api.<ENV>.example.com/v1/serve/1)"
+  STATUS="$(curl -s -o /tmp/serve1.json -w '%{http_code}' https://api.<domain>/v1/serve/1)"
   [ "$STATUS" = "200" ] || [ "$STATUS" = "404" ] || { echo "unexpected status: $STATUS" >&2; exit 1; }
   python3 -m json.tool </tmp/serve1.json >/dev/null
 
-  curl -sf https://<ENV>.example.com/embed-demo   # the real web app's own embed-demo page
+  curl -sf https://app.<domain>/embed-demo   # the real web app's own embed-demo page
 
   # openad-web-demo is a SEPARATE Cloud Run service with its own host (WEB_DEMO_URL, §9) —
   # check it there at /healthz, never at a "/demo/" path on the real web app's own host.
@@ -683,9 +690,10 @@ Each check below is a real serve, so it records one impression.
 - **Behind a load balancer, every api request must take the same proxies.** A load balancer
   (§ 9) adds its own `X-Forwarded-For` entry, so the hop count usually becomes `2`. Close
   every path around it:
-  - set the api service's ingress to `internal-and-cloud-load-balancing` (the
-    `run.googleapis.com/ingress` annotation in `api.yaml`, `all` today; inferred; verify
-    before deploy);
+  - set `API_INGRESS=internal-and-cloud-load-balancing` for `scripts/deploy-gcp.sh` (it takes
+    `all`, the default, or `internal-and-cloud-load-balancing`, and renders it into `api.yaml`'s
+    `run.googleapis.com/ingress` annotation), but only once the load balancer already serves
+    `API_URL` (§6-8; inferred; verify before deploy);
   - make `API_URL` the load balancer's host. It becomes `OPENAD_PUBLIC_URL`, the host of every
     click and media URL the api hands out, and the web build's `VITE_API_URL`.
 
