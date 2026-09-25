@@ -260,9 +260,10 @@ block block indexing for longer than one budget plus one fetch deadline (`docs/t
 T18). On demand (`POST /v1/creatives/{id}/verify`) and the indexer pass both call
 `services.media.verify_creative`, which reads what the fetch needs and commits — releasing the
 pooled DB connection — before the network call, then writes the result in a later transaction
-(fix round 1, T18): verifying, like registering, is permissionless, so a slow `uri` or several
-concurrent verifies of the same creative no longer hold a connection out of the pool for the
-fetch's duration.
+(fix round 1, T18). Registering is permissionless, and the on-demand route lets the creative's
+advertiser (`require_advertiser`) re-run verification at any time, whatever the creative's
+status; with the connection released first, a slow `uri` or several concurrent verifies of the
+same creative no longer hold a connection out of the pool for the fetch's duration.
 
 `MEDIA`:
 

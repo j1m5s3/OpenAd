@@ -331,25 +331,35 @@ async def test_check_meta_refuses_non_identity_content_encoding(
 
 
 async def test_check_meta_stops_at_body_cap(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The body is read only up to `DOMAIN_CHECK_BODY_CAP_BYTES` (or `</head>`); a page with no
-    closing `</head>` at all must not be read to completion. The verification tag is placed
-    just past the cap, so finding it would prove the cap was NOT enforced."""
+    """A page with no closing `</head>` at all must not be read to completion: reading stops
+    with the chunk that crosses `DOMAIN_CHECK_BODY_CAP_BYTES`. The stream counts the bytes it
+    hands out, and 64 KiB follow that chunk, so reading even one more chunk pushes the count past
+    `cap + chunk`. Only the count catches a missing in-loop cap check: the final `body[:cap]`
+    slice would still hide the tag and leave `ok` False. The tag starts exactly at the cap,
+    inside the crossing chunk, so it is read but must not count; finding it would prove the
+    search was not limited to the first `cap` bytes (fix round 2, ROADMAP 6.9 step 39)."""
     token = "tok123"
     meta = f'<meta name="openad-site-verification" content="{token}">'.encode()
     cap = offchain_service.DOMAIN_CHECK_BODY_CAP_BYTES
-    padded = b"<html><head>" + (b"x" * (cap + 4096)) + meta  # no </head> at all
+    chunk = 4096
+    lead = b"<html><head>" + b"x" * (cap - len(b"<html><head>") - 1024)  # 1 KiB short of the cap
+    crossing = b"x" * 1024 + meta  # crosses the cap: the tag lies wholly past it
+    parts = [lead, crossing] + [b"x" * chunk] * 16  # no </head> at all
+    yielded = {"bytes": 0}
 
-    class _Stream(httpx.AsyncByteStream):
+    class _CountingStream(httpx.AsyncByteStream):
         async def __aiter__(self) -> AsyncIterator[bytes]:
-            for i in range(0, len(padded), 4096):
-                yield padded[i : i + 4096]
+            for part in parts:
+                yielded["bytes"] += len(part)
+                yield part
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, stream=_Stream())
+        return httpx.Response(200, stream=_CountingStream())
 
     monkeypatch.setattr(offchain_service.httpx, "AsyncClient", _mock_client(handler))
     ok = await offchain_service._check_meta("pub.example", token, is_dev=False)
     assert ok is False
+    assert yielded["bytes"] <= cap + chunk, f"read {yielded['bytes']} bytes; the cap is {cap}"
 
 
 async def test_check_meta_body_scan_is_incremental_not_quadratic(
@@ -384,23 +394,34 @@ async def test_check_meta_body_scan_is_incremental_not_quadratic(
 
 async def test_check_meta_slow_drip_times_out(monkeypatch: pytest.MonkeyPatch) -> None:
     """The domain check's own deadline (`DOMAIN_CHECK_DEADLINE_SECONDS`) must actually bound the
-    fetch — this was untested before this round, so `asyncio.timeout(None)` could silently
-    regress in. A small monkeypatched deadline plus a finite, fast slow-drip stream keeps this
-    fast and deterministic (fix round 1, ROADMAP 6.9 step 39)."""
+    fetch. Built like `tests.test_media`'s slow-drip test: the drip is finite (2s of real sleep)
+    and ends with the CORRECT tag and `</head>`, so without the deadline (e.g.
+    `asyncio.timeout(None)`) the check doesn't hang, it reads to the end and returns True. With
+    the small deadline below it must give up long before the drip ends and return False; the
+    elapsed-time bound catches the same regression independently of the tag (fix round 2,
+    ROADMAP 6.9 step 39)."""
+    token = "tok123"
+    meta = f'<meta name="openad-site-verification" content="{token}">'.encode()
+    drips, drip_s = 20, 0.1  # 2s in total, several times the 0.3s deadline below
 
     class _SlowDripStream(httpx.AsyncByteStream):
         async def __aiter__(self) -> AsyncIterator[bytes]:
-            for _ in range(10):
-                await asyncio.sleep(0.08)  # 0.8s total, several times the deadline below
-                yield b"a"
+            yield b"<html><head>"
+            for _ in range(drips):
+                await asyncio.sleep(drip_s)
+                yield b" "
+            yield meta + b"</head>"  # reached only if nothing cut the drip off
 
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, stream=_SlowDripStream())
 
     monkeypatch.setattr(offchain_service.httpx, "AsyncClient", _mock_client(handler))
     monkeypatch.setattr(offchain_service, "DOMAIN_CHECK_DEADLINE_SECONDS", 0.3)
-    ok = await offchain_service._check_meta("pub.example", "tok123", is_dev=False)
+    start = time.monotonic()
+    ok = await offchain_service._check_meta("pub.example", token, is_dev=False)
+    elapsed = time.monotonic() - start
     assert ok is False
+    assert elapsed < drips * drip_s / 2, f"took {elapsed:.2f}s — the deadline didn't cut it off"
 
 
 async def test_check_meta_stops_reading_at_head_close(monkeypatch: pytest.MonkeyPatch) -> None:

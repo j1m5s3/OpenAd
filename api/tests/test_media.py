@@ -399,11 +399,15 @@ async def test_fetch_media_refuses_non_identity_content_encoding(
     the cap in memory before the size check ever sees it (fix round 1, ROADMAP 6.9 step 39;
     docs/threat-model.md T18 — the same OOM/crash-loop risk on a pending malicious creative).
     `Content-Encoding` is trusted from the response, never the request's own `Accept-Encoding`,
-    since a malicious server can ignore what it was asked for."""
+    since a malicious server can ignore what it was asked for. The request must still ask for
+    `identity`: the handler only records the header and the test asserts it after the call,
+    because an assertion raised inside the transport would be swallowed by `fetch_media`'s broad
+    `except Exception`, which returns the same `failed:fetch` this test expects (fix round 2)."""
     compressed = gzip.compress(tiny_png() * 100)
+    accept_encodings: list[str | None] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers["accept-encoding"] == "identity"
+        accept_encodings.append(request.headers.get("accept-encoding"))
         return _content_response(200, compressed, headers={"content-encoding": "gzip"})
 
     import openad.services.media as media
@@ -412,6 +416,7 @@ async def test_fetch_media_refuses_non_identity_content_encoding(
     data, status = await fetch_media("https://ads.example/bomb.png", settings=settings)
     assert data is None
     assert status == VERIFY_FAILED_FETCH
+    assert accept_encodings == ["identity"]
 
 
 async def test_verify_pending_pass_budget_leaves_rest_pending(

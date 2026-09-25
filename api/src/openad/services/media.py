@@ -257,13 +257,15 @@ async def fetch_media(uri: str, *, settings: Settings) -> tuple[bytes | None, st
 
 
 async def verify_creative(session: AsyncSession, creative_id: int, settings: Settings) -> str:
-    """Verify one creative. `CreativeRegistered` is permissionless, so `POST
-    /v1/creatives/{id}/verify` can be called by anyone at any time; the network fetch below must
-    not hold a pooled DB connection while it runs (fix round 1, ROADMAP 6.9 step 39;
-    docs/threat-model.md T18) — two concurrent verifies of one creative previously pinned a
-    connection each for the whole fetch, and could exhaust the api's pool. Same pattern as
-    `offchain.check_domain_verification`: read what the fetch needs, commit (releasing the
-    connection), fetch, then write the result in a newly auto-begun transaction.
+    """Verify one creative. `CreativeRegistered` is permissionless, so any wallet can become a
+    creative's advertiser, and `POST /v1/creatives/{id}/verify` lets that advertiser
+    (`creatives.require_advertiser`) re-run this at any time, whatever the creative's current
+    status. So the network fetch below must not hold a pooled DB connection while it runs (fix
+    round 1, ROADMAP 6.9 step 39; docs/threat-model.md T18) — two concurrent verifies of one
+    creative previously pinned a connection each for the whole fetch, and could exhaust the
+    api's pool. Same pattern as `offchain.check_domain_verification`: read what the fetch needs,
+    commit (releasing the connection), fetch, then write the result in a newly auto-begun
+    transaction.
     """
     creative = await session.get(Creative, creative_id)
     if creative is None:
