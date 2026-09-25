@@ -197,18 +197,24 @@ async function main() {
       await page.goto(demoUrl('/embed-demo'));
       await page.getByRole('heading', { name: 'See the embed live' }).waitFor();
       await page.getByLabel('Slot').selectOption('0');
-      await page.locator('open-ad[slot-id="0"] img').first().waitFor();
-      // The above only waits for the <img> to attach and become visible, not for its pixels to
-      // be ready: `open-ad.ts` sets `loading = 'lazy'` and `decoding = 'async'`, so the element
-      // can be on-screen before the image is actually decoded and painted, which made
-      // embed-demo.png occasionally capture that not-yet-painted frame. Wait for the real image
-      // to finish loading (`shadowRoot` because the <img> lives in the element's open shadow
-      // root, which a plain `document.querySelector` does not pierce).
-      await page.waitForFunction(() => {
-        const host = document.querySelector('open-ad[slot-id="0"]');
-        const img = host?.shadowRoot?.querySelector('img');
-        return Boolean(img && img.complete && img.naturalWidth > 0);
-      });
+      const embedImages = page.locator('open-ad[slot-id="0"] img');
+      await embedImages.first().waitFor();
+      // The above only waits for one <img> to attach and become visible, not for every embed's
+      // pixels to be ready: the page renders one <open-ad slot-id="0"> per standard size
+      // (leaderboard, medium rectangle, mobile banner — EmbedDemoPage.tsx's STANDARD_SIZES), and
+      // `open-ad.ts` sets `loading = 'lazy'` and `decoding = 'async'`, so any of them can still be
+      // on-screen before its own image is decoded and painted. embed-demo.png only shows the
+      // first two in the viewport, but decode and check every matching embed's image, not just
+      // the first, so a future crop or viewport change can't silently reintroduce this race
+      // (`locator.evaluateAll` pierces the shadow root the same way the locator above does).
+      await embedImages.evaluateAll((imgs) =>
+        Promise.all(
+          imgs.map(async (img) => {
+            await img.decode();
+            if (!img.complete || img.naturalWidth === 0) throw new Error('embed image did not decode');
+          }),
+        ),
+      );
       // `page.goto` to a new hash route doesn't reload the document (same SPA) and doesn't reset
       // scroll either, so the same leftover offset would otherwise cut off the heading and the
       // leaderboard creative here too.

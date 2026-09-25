@@ -92,8 +92,9 @@ Skip the guided tour; walk the manual path so you can pause and answer questions
   token and invalid-traffic checks — are ever charged; a settler batches those, never a raw click
   count.
 - **"Do you support fiat?"** Not today — USDC only, on Base. That is an accepted, documented gap
-  (see `docs/business/competitive.md`); planned mitigation is guide links to a third-party
-  on/off-ramp, not custodial code — those links don't exist yet.
+  (see `docs/business/competitive.md`); mitigated by
+  `docs/guide/advertiser/getting-usdc-on-base.md` (PR #16), which walks advertisers through
+  getting USDC on Base without endorsing or linking any specific provider — not custodial code.
 - **"Has this been audited?"** No. That is a launch-checklist item before any mainnet deploy —
   see `docs/business/launch-checklist.md`.
 - **"Why Base and USDC?"** Low fees and fast finality make small-ticket, instant ad settlement

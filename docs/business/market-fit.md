@@ -134,7 +134,8 @@ recorded above as future work needing a spec and an ADR first.
   without needing real counterparties first, and by targeting a beachhead ICP small enough to
   seed manually.
 - **USDC-only friction.** Advertisers without USDC on Base must bridge/onramp first. Accepted as
-  out of scope for this plan; mitigate with guide links to onramps, not new custody code.
+  out of scope for this plan; mitigated by `docs/guide/advertiser/getting-usdc-on-base.md`
+  (PR #16), not new custody code.
 - **Invalid traffic (IVT) on CPC.** Payable-click charges depend on IVT detection quality; weak
   detection either overcharges advertisers or lets click fraud through.
 - **Regulatory and brand-safety.** On-chain, cookieless ad payments and NFT_REF creatives sit in

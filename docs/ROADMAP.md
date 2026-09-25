@@ -226,8 +226,8 @@ protocol contract changes in this phase (anything that would need one is recorde
       was missing from the original acceptance wording; it is not a new addition here.
       **PR #19 (2026-09-25):** Discover's state, the slot card's timing copy and the slot page's
       period window now follow the open-ended calendar (`docs/PROTOCOL.md` §4.1) instead of
-      anchoring to the first period. Before it, every slot read "Ended" one period after its
-      first period ended, and a calendar older than 15 periods showed nothing buyable on the slot
+      anchoring to the first period. Before it, every LEASE slot read "Ended" once its first
+      period ended, and a calendar older than 15 periods showed nothing buyable on the slot
       page.
 - [x] **6.8 Auth hardening (SIWE binding, nonce/session hygiene).** _Done 2026-09-25._
       Pointers: ADR-0009 (2026-09-25 amendment) · `docs/threat-model.md` T15, T16 ·

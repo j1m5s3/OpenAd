@@ -119,9 +119,10 @@ customer names, quotes, or traction are claimed — the deck is honest about cur
 - Channels: Base ecosystem, Farcaster and X, newsletter-operator communities, open-source
   maintainers, and an "Advertise here" README badge.
 
-> Speaker notes: Keep this to channels and mechanics — the detailed plan lives in the linked doc,
-> don't read the whole GTM doc from the slide. The product work behind each phase is already
-> built; what remains is the launch itself, pilots, and the audit before mainnet.
+> Speaker notes: Keep this to channels and mechanics — the detailed plan lives in
+> `docs/business/gtm-marketing.md`, don't read the whole GTM doc from the slide. The product work
+> behind each phase is already built; what remains is the launch itself, pilots, and the audit
+> before mainnet.
 
 ## Slide 11 — Traction and roadmap
 

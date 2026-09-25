@@ -41,8 +41,9 @@ every number as a typical, publicly cited range for that kind of intermediary, n
 
 ## How we answer these objections
 
-- _"No fiat onramp"_ → link to a third-party on/off-ramp in the publisher/advertiser guide
-  (ROADMAP, accepted as out of scope for custody reasons; a guide link is not a protocol change).
+- _"No fiat onramp"_ → `docs/guide/advertiser/getting-usdc-on-base.md` (PR #16) walks advertisers
+  through getting USDC on Base without recommending or linking any specific exchange, onramp, or
+  bridge — accepted as out of scope for custody reasons; a guide page is not a protocol change.
 - _"No demand yet"_ → the beachhead go-to-market plan (`gtm-marketing.md`) targets a small,
   reachable ICP (crypto-native publishers and advertisers who already hold USDC on Base) and
   seeds both sides manually before any paid acquisition.
