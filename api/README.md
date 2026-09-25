@@ -22,11 +22,16 @@ src/openad/
   siwe.py          strict EIP-4361 parser + origin binding for sign-in (ADR-0009 amendment)
   ratelimit.py     opt-in per-process rate limit for POST /v1/auth/nonce and /verify
   errors.py        DomainError, NotFoundError, ForbiddenError, ConflictError
+  health.py        liveness HTTP listener for the indexer/settler workers (ADR-0017)
+  listing_taxonomy.py  fixed category taxonomy for slot listings (ROADMAP 6.3)
+  export_openapi.py    prints the OpenAPI document as JSON (web's generated client)
   db/              Base + naming conventions, Database/session dependency, chain-safe column types
   models/          slots/terms/leases · creatives/approvals/allowlists · indexer cursor/protocol config · off-chain tables
   schemas/         Pydantic (camelCase JSON); serve.py MUST match embed/src/types.ts
-  routers/         health, serve, slots, creatives, publishers, advertisers, auth
-  services/        serve, slots, periods, creatives, media, auth, offchain
+  routers/         health, serve, slots, creatives, publishers, advertisers, auth, analytics,
+                     clicks
+  services/        serve, slots, periods, creatives, media, media_store, auth, offchain,
+                     analytics, clicks, health, indexed
   serve/           origin.py + cache generation; verified bytes on disk via Settings.media_cache_path
   chain/           deployments.py (artifact loader), client.py (AsyncWeb3) — indexer + settler
   indexer/         events.py (EXPECTED_EVENTS), handlers.py (one per event), runner.py, __main__.py

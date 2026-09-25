@@ -97,11 +97,21 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
   pool of 4 + 2 overflow; the indexer and settler get 2 + 1 each; the migrate job uses Alembic's
   single connection. That is 31 steady, 34 with Postgres's 3 reserved, and ≈64 during a rollout
   overlap. Raising `maxScale` or any pool means redoing the budget in `docs/deploy-gcp.md` §3.
-- **D13 — Merge order to launch (2026-09-25).** 39 (outbound-fetch bounds) → 40 (Discover and
-  slot-page period state, web only) → 36. 41 (periods range cap), if accepted, also merges before
-  36. Then 36 merges main in and re-captures the screenshots, so Discover shows 40's fix. 36
-  records 39, 40 and 41 in the ROADMAP, because it is the only step that edits the ROADMAP.
-  The planner archives the plan in 36's PR.
+- **D13 — Merge order to launch (2026-09-25; amended the same day by the orchestrator).**
+  - 39, 40 and 41 are independent: 39 changes the api fetch paths, 40 the web and e2e, and 41
+    the api periods route. They merge in whatever order they go green, and each later one
+    merges main in first.
+  - 36 merges last, after all three. It then merges main in, re-captures the screenshots (so
+    Discover shows 40's fix) and replaces `#TBD-36`. It also records 39, 40 and 41 in the
+    ROADMAP, because it is the only step that edits the ROADMAP.
+  - The planner archives the plan in 36's PR.
+  - Expected textual overlaps (predicted from the specs, not yet checked against code):
+    - `docs/threat-model.md`: 39 adds T18 and 41 adds T19, both after T17. The orchestrator
+      restores the T17 → T18 → T19 order when merging.
+    - `api/src/openad/routers/slots.py`: 39 changes the domain-verification route and 41 the
+      periods route, in separate hunks.
+    - `docs/ARCHITECTURE.md` §3.3: 41's cap note and 36's web-origin host rule.
+    - `.env.example`: 39's two settings and 36's comments.
 
 ## 3. Slices → branches
 
@@ -118,10 +128,10 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 | H Fix: fresh-DB Alembic chain (found in review) | `fix/alembic-fresh-db` | 6.6 prerequisite | — (merge before D ships and before F) |
 | J Auth hardening (SIWE binding, nonce/session hygiene, rate limit) | `fix/auth-hardening` (#15, merged `2c4101b`) | 6.8 | #13 merged |
 | K Capacity and deploy hardening (pool budget, scale caps, same-site, media hops) | `feat/ops-hardening` (#14, merged `5f27fb8`) | 6.9 | #13 merged; merge after J |
-| L Outbound-fetch bounds (accepted: indexer media deadline, domain-check fetch) | `fix/outbound-fetch-bounds` | noted under 6.9 by 36 | #14 merged; merge before Final |
-| M Discover and slot-page period state (first-period anchoring) | `fix/discover-auction-state` | noted under 6.7 by 36 | #14 merged; merge after L, before Final |
-| N Periods range cap (**proposed**) | `fix/periods-range-cap` | noted under 6.9 by 36 | L merged (T19 after T18); merge before Final |
-| Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` | 6.3/6.6/6.7 ticks, 6.10, Phase 7 | started after J and K merged; merges after L, M and (if accepted) N |
+| L Outbound-fetch bounds (accepted: indexer media deadline, domain-check fetch) | `fix/outbound-fetch-bounds` | noted under 6.9 by 36 | #14 merged; independent of M and N; merge before Final |
+| M Discover and slot-page period state (first-period anchoring) | `fix/discover-auction-state` | noted under 6.7 by 36 | #14 merged; independent of L and N; merge before Final |
+| N Periods range cap (accepted) | `fix/periods-range-cap` | noted under 6.9 by 36 | #14 merged; independent of L and M (T19 goes after T17; T18 restored on merge); merge before Final |
+| Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` | 6.3/6.6/6.7 ticks, 6.10, Phase 7 | started after J and K merged; merges last, after L, M and N |
 
 ## 4. Micro-steps (one line each; ✱ active, [>] active in parallel, ○ pending, ✓ done)
 
@@ -174,13 +184,13 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 ### Slice L — `fix/outbound-fetch-bounds` (accepted 2026-09-25; after #14; worktree `/home/claude/OpenAd-o`; merges before Final)
 - [>] 39. L: one overall deadline on media fetches and a per-pass budget for indexer verification, so a slow-drip media host can't stall block indexing; the domain meta check releases its DB connection before fetching, is bounded (deadline, body cap, 38's hop rules) and gets a per-slot cooldown; T18. **Accepted**; Sonnet coder, Opus review. Coded on `fix/outbound-fetch-bounds` (base `2f313d9`) in `/home/claude/OpenAd-o`. R1 FIX (2 L1, 3 L2) → **fix round 1 in progress**. The scope grew to `POST /v1/creatives/{id}/verify` and raw-byte reads (the spec's fix-round block). **Risk: medium.** **(compact spec below)**
 
-### Slice M — `fix/discover-auction-state` (added 2026-09-25; worktree `/home/claude/OpenAd-p`; merges after L, before Final)
-- ○ 40. M: Discover's state, SlotCard's timing copy and the slot page's period window follow the open-ended calendar (the next purchasable period, `sale_end`, overlapping windows when `lead > period`) instead of the first period. A unit table plus a brute-force cross-check; demo e2e rows found by their index cell. Web and e2e only; no ROADMAP edit (36 records it). Sonnet coder, Opus review. **Risk: medium.** **(compact spec below)**
+### Slice M — `fix/discover-auction-state` (added 2026-09-25; worktree `/home/claude/OpenAd-p`; independent of L and N; merges before Final)
+- [>] 40. M: Discover's state, SlotCard's timing copy and the slot page's period window follow the open-ended calendar (the next purchasable period, `sale_end`, overlapping windows when `lead > period`) instead of the first period. A unit table plus a brute-force cross-check; demo e2e rows found by their index cell. Web and e2e only; no ROADMAP edit (36 records it). **Coder launched** 2026-09-25 (Sonnet; Opus review) in `/home/claude/OpenAd-p` off `5f27fb8`. **Risk: medium.** **(compact spec below)**
 
-### Slice N — `fix/periods-range-cap` (**proposed** 2026-09-25; after L, in `/home/claude/OpenAd-o`; merges before Final)
-- ○ 41. N: cap `GET /v1/slots/{id}/periods` at 60 periods (422 `invalid_window`) and read its leases in one query; T19. Found while speccing 40: one unauthenticated request can hold a pooled DB connection indefinitely. Sonnet. **Risk: low.** **(compact spec below)** If declined, it goes to Phase 7 with the §8 severity note.
+### Slice N — `fix/periods-range-cap` (accepted 2026-09-25; worktree `/home/claude/OpenAd-q`; independent of L and M; merges before Final)
+- [>] 41. N: cap `GET /v1/slots/{id}/periods` at 60 periods (422 `invalid_window`) and read its leases in one query; T19. Found while speccing 40: one unauthenticated request can hold a pooled DB connection indefinitely. **Accepted.** **Coder launched** 2026-09-25 (Sonnet) in `/home/claude/OpenAd-q` off `5f27fb8`; its Postgres tests use `openad_test_q`, and T19 goes directly after T17. **Risk: low.** **(compact spec below)**
 
-### Final — `chore/launch-final` (started off `2f313d9` in parallel with 39; merges last, after 39, 40 and, if accepted, 41)
+### Final — `chore/launch-final` (started off `2f313d9` in parallel with 39; merges last, after 39, 40 and 41)
 - ✱ 36. Final (primary tree, `chore/launch-final` off `2f313d9`; R1 FIX → **fix round 1 in progress**, see §5). It covers:
   - ROADMAP: 6.3 `[x]` with a dated amended-acceptance note; 6.6 split into artifacts `[x]` and a new **6.10** live deploy `[ ]` (6.8 and 6.9 come from 37 and 38); 6.7 `[x]`; a Phase 7 backlog.
   - Sourcemaps off; the `PLAYWRIGHT_CHROMIUM_PATH` hook in the main e2e config.
@@ -371,7 +381,8 @@ items below where they differ:
   JIT files are not edited there.
 - It reuses 38's `_hop_allowed` and 37's `RateLimitedError(message, retry_after=…)`.
 - 36 starts at the same time in the primary tree, off the same main. 39 edits no ROADMAP line
-  (36 records it under 6.9). Merge 39 first; 36 then merges main in.
+  (36 records it under 6.9). 39, 40 and 41 merge in whatever order they go green, each later
+  one merging main in first (D13); 36 merges last.
 
 **Coder model:** Sonnet, with an Opus review. **Risk: medium.** It changes the indexer loop and a
 user-facing route. The failure mode is availability, not funds.
@@ -456,7 +467,8 @@ period window, which is anchored to the first period in the same way._
   (`5f27fb8`).
 - It touches only `web/` and `e2e/demo/` (code, tests, fixtures). It edits no ROADMAP line; 36
   records it.
-- Merge order: 39 → 40 → 36.
+- Merge order (D13, amended): 39, 40 and 41 merge in whatever order they go green, each later
+  one merging main in first; 36 merges last.
 
 **Coder model:** Sonnet, with an Opus review. **Risk: medium.** The state drives the Discover
 filter, the featured row, the SlotCard copy and the slot page's buy list. A wrong rule hides
@@ -566,12 +578,13 @@ git status --short   # web/ and e2e/ only
 - Slots with `E == 0` never read "Ended".
 - The slot page lists the current window, whatever the calendar's age.
 - The table, cross-check, slot-page and demo e2e tests are green.
-- Ship: PR, CI, merge after 39 and before 36.
+- Ship: PR, CI, merge before 36 (merging main in first if 39 or 41 merged before it).
 
 
-### Step 41 — Cap the periods range (slice N, **proposed**, compact spec)
+### Step 41 — Cap the periods range (slice N, accepted, compact spec)
 
-_Planner finding while speccing 40, verified against `5f27fb8`. The orchestrator decides._
+_Planner finding while speccing 40, verified against `5f27fb8`. **Accepted** by the orchestrator
+on 2026-09-25._
 
 **Evidence:**
 - `GET /v1/slots/{id}/periods` (`routers/slots.py:38-50`) takes `from` and `to` with only `ge=0`.
@@ -581,11 +594,16 @@ _Planner finding while speccing 40, verified against `5f27fb8`. The orchestrator
   unbounded list, until the process dies.
 - About 24 such requests take every api connection (38's budget), and serve fails.
 
-**Where:**
-- After 39 merges: a fresh branch `fix/periods-range-cap` off `origin/main`, in
-  `/home/claude/OpenAd-o`. That way T19 lands after 39's T18.
-- api and docs only, so it can run in parallel with 40 (web only).
-- No ROADMAP edit; 36 records it under 6.9. Merge it before 36.
+**Where** (the orchestrator's override, 2026-09-25):
+- It runs now, in parallel with 39 and 40, in a new worktree `/home/claude/OpenAd-q` on branch
+  `fix/periods-range-cap` off `origin/main` (`5f27fb8`), with the api venv synced.
+- Its Postgres tests use a separate database, `openad_test_q`, on the same pgserver socket, so
+  they don't collide with 39's `openad_test`.
+- 39's T18 isn't on that base, so 41 adds T19 directly after T17. The orchestrator restores the
+  T17 → T18 → T19 order when merging.
+- api and docs only. No ROADMAP edit; 36 records it under 6.9.
+- It merges in whatever order it goes green relative to 39 and 40 (D13), merging main in first
+  if another merged before it, and always before 36.
 
 **Coder model:** Sonnet. **Risk: low.** The callers ask for 15 periods (web, after 40), 8 (sim)
 and 5 (sim planner), all under the cap.
@@ -603,7 +621,8 @@ and 5 (sim planner), all under the cap.
    - ARCHITECTURE §3.3 notes the cap;
    - `docs/threat-model.md` gets **T19** "Unbounded work per request".
 
-**Verify:** api ruff, format and mypy, plus pytest (also with `OPENAD_TEST_PG_URL`).
+**Verify:** api ruff, format and mypy, plus pytest (also with `OPENAD_TEST_PG_URL` pointing at
+`openad_test_q`).
 
 **Done when:**
 - The cap and the single query are in, and T19 is added.
@@ -615,7 +634,7 @@ and 5 (sim planner), all under the cap.
 
 _Refreshed 2026-09-25 03:35 UTC against `feat/slot-listings` @ `496422e`, which is what main will
 contain once #13 merges. Re-sequenced in the same pass: **36 starts after the hardening steps
-37 and 38 merge, and merges after 39, 40 and (if accepted) 41**, so its docs describe the
+37 and 38 merge, and merges after 39, 40 and 41**, so its docs describe the
 hardened state. Facts refreshed again after STEP_DONE 37 (39 accepted) and the 40/41 REVISE._
 
 **Progress (fix round 1, 2026-09-25).** Coded on `chore/launch-final` off `2f313d9`.
@@ -645,8 +664,8 @@ polish pass.
 
 **Where:** the primary tree `/home/claude/OpenAd`, branch `chore/launch-final`. The orchestrator
 creates it after **#15 (37) and #14 (38)** have merged, while 39 runs in `/home/claude/OpenAd-o`:
-`git fetch && git switch -c chore/launch-final origin/main`. After 39, 40 (and 41, if accepted)
-merge, merge main into `chore/launch-final`, re-run `capture:screenshots` (40 changes Discover's
+`git fetch && git switch -c chore/launch-final origin/main`. After 39, 40 and 41 merge
+(in any order, D13), merge main into `chore/launch-final`, re-run `capture:screenshots` (40 changes Discover's
 labels) and re-verify. The planner's later JIT edits are uncommitted in the primary
 tree and carry over, because main's JIT files will equal `2ce0f5b`'s once #15 merges (#14 and 39
 don't touch `.cursor/`). If git refuses the switch, stash, switch, then pop. The coder does **not**
@@ -689,7 +708,7 @@ stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
 - 40 (merges before 36): Discover's state, SlotCard's timing copy and the slot page's period
   window follow the open-ended calendar. Before 40, every slot read "Ended" one period after its
   first. Demo slots 0, 2 and 4 now read "live".
-- 41 (only if accepted; merges before 36): `GET /v1/slots/{id}/periods` accepts at most 60
+- 41 (merges before 36): `GET /v1/slots/{id}/periods` accepts at most 60
   periods per request (T19).
 - Web-origin host rule: viem's `createSiweMessage` rejects IPv6 literals and single-label hosts
   other than `localhost` (e.g. `devbox:5173`, `LOCALHOST:5173`). So the web origin must be
@@ -731,7 +750,7 @@ stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
 - `AGENTS.md` ("Where things are" table and Commands).
 - JIT §8 Backlog (read-only).
 - What 37, 38 (and 39) changed, as merged: the ADR-0009 and ADR-0017 amendments,
-  `docs/threat-model.md` T15–T17 (T18 with 39), and `docs/deploy-gcp.md` (connection budget,
+  `docs/threat-model.md` T15–T19 (T18 from 39, T19 from 41), and `docs/deploy-gcp.md` (connection budget,
   `max_connections` flag, same-site domain requirement, rate-limit note).
 
 **Items**
@@ -757,7 +776,7 @@ stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
      left it off; follow the runbook's verify-then-enable steps).
 3. **ROADMAP 6.7 → `[x]`** once items 4–11 land. Leave 6.8 and 6.9 (from 37 and 38) as they are,
    except for these delivered-text lines:
-   - 6.9 names 39's outbound-fetch bounds (T18) and, if accepted, 41's periods range cap (T19);
+   - 6.9 names 39's outbound-fetch bounds (T18) and 41's periods range cap (T19);
    - 6.7 gets a dated line for 40 (Discover and the slot page follow the open-ended calendar).
    All of them merge before 36.
 4. **ROADMAP Phase 7 — Post-launch backlog**, all `[ ]`, one line each with pointers:
@@ -921,7 +940,7 @@ git status --short   # no .cursor/ staged by the coder; no api/, contracts/ chan
 - The runbook's DB-password flow works end to end without echoing the password, and no doc
   claims DNS TXT verification works.
 - The web-origin host rule is documented, and `api/README.md` matches the tree.
-- After merging main (39, 40, and 41 if accepted): the screenshots are re-captured (Discover
+- After merging main (39, 40 and 41): the screenshots are re-captured (Discover
   shows 40's labels) and deterministic, and the ROADMAP names 39, 40 and 41.
 - All checks pass.
 - After the planner archives the plan: PR, CI 5/5, merge. Then the orchestrator:
@@ -969,6 +988,7 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - 2026-09-25 05:26 UTC — STEP_DONE 38: R1 FIX (2 L1) → R2 FIX → R3 (Opus) PASS, L3 only; `4370d09`, **PR #14** open, CI pending, merges after 37. The orchestrator's final numbers are recorded as the as-shipped record in §5 (pools 4 + 2 / 2 + 1 / none for the migrate job; `maxScale` api 4, web and web-demo 10; `max_connections=100` by flag; budget 31 / 34 / ≈64; host blocking outside dev only) and as D12. 37's fix-round-1 decisions are recorded as A1–A7 and in D10. Overlap check of 38's commit against 37's working tree: textual conflicts only in `docs/ROADMAP.md` and `docs/threat-model.md`. Routed to 36: the runbook DB-password gap, and a DNS TXT truth fix (found while checking the backlog: `dnspython` isn't a dependency, so DNS verification can't succeed). Planner finding: outbound fetches have per-read timeouts only; the indexer verifies media inline, so one permissionless creative with a slow-drip URL can stall block indexing, and the domain meta check holds a pooled DB connection while it fetches. Proposed as step 39 (slice L) for the orchestrator to accept or defer. Backlog gains 38's L3 and follow-ups.
 - 2026-09-25 05:36 UTC — STEP_DONE 37: R1 FIX (2 L2) → R2 PASS; `eb8193f` + `2ce0f5b` (JIT files up to the STEP_DONE 38 pass), **PR #15** open, CI pending. api 219/5 (223/1 with PG), web 212, embed 5, sim 13 + 1, demo 14/14, YAML e2e 13/13; live uvicorn relay, clock-skew, size and limiter checks pass. §5's full spec is replaced by an as-shipped record (the full text is in `2ce0f5b`). **39 accepted**: after #15 → main merged into #14 → #14, it starts in `/home/claude/OpenAd-o` (Sonnet, Opus review) while 36 starts in the primary tree off the same main; 39 merges first. 36 refreshed: new PR order (#15 before #14), 37's shipped facts, the web-origin host rule (viem rejects IPv6 literals and single-label hosts other than `localhost`), the stale `api/README.md` (migration list at 0002, and a claim that the Dockerfile migrates on start), and a definite 6.9 line for 39. 37's L3s and `OPENAD_SESSION_SECRET` go to the Phase 7 list. JIT_INDEX: `OPENAD_SIM_WEB_ORIGIN`, migration head `0005`, CI Postgres.
 - 2026-09-25 06:55 UTC — REVISE and progress. #15 merged `2c4101b`; main merged into #14 as `2f313d9` (conflicts only in ROADMAP and threat-model ordering, as predicted); #14 merged `5f27fb8`. 39 was coded off `2f313d9` and is in fix round 1 after R1 FIX. Its scope grew to `POST /v1/creatives/{id}/verify`, raw-byte reads with `Accept-Encoding: identity`, and an atomic cooldown; recorded as F1–F4. 36 was coded off `2f313d9` and is in fix round 1 after R1 FIX (set-password syntax, onramp claim, screenshot scroll offset, GLOSSARY DNS TXT, `VITE_API_URL` in the host note, `VITE_SOURCEMAP` is shell-only, the 6.7 amended note, and a new deploy bug: the settler lacks `secretAccessor` on the database-URL secret). Shipped extras are recorded. **New step 40** (slice M, `fix/discover-auction-state` in `/home/claude/OpenAd-p`): Discover state anchored to the first period. The planner verified it and widened it to the slot page, which lists periods 0–14 only, so older calendars show nothing buyable. It also found that `buyFirstPeriod` in the demo e2e addresses rows by position. **Proposed 41** (slice N): `GET /v1/slots/{id}/periods` has no range cap and does one DB read per index, so one unauthenticated request can hold a pooled connection indefinitely. Added D13 (merge order 39 → 40 (→ 41) → 36). Backlog: the sim planner lists periods 0–4 only.
+- 2026-09-25 07:00 UTC — REVISE: **41 accepted** and launched now (orchestrator override of its Where): Sonnet coder in the new worktree `/home/claude/OpenAd-q` on `fix/periods-range-cap` off `5f27fb8`. Its PG tests use `openad_test_q` on the same pgserver socket, and T19 goes directly after T17 (the orchestrator restores T17 → T18 → T19 on merge). **D13 amended**: 39, 40 and 41 are independent and merge in whatever order they go green, each later one merging main in first; 36 merges last, then merges main in, re-captures the screenshots and replaces `#TBD-36`. **40 launched** (Sonnet) in `/home/claude/OpenAd-p`. 39 and 36 are still in fix round 1. D13 now lists the expected textual overlaps: threat-model (39/41), `routers/slots.py` (39/41), ARCHITECTURE §3.3 (36/41) and `.env.example` (36/39).
 
 ## 8. Backlog (found during the run; not scheduled)
 
@@ -1003,6 +1023,6 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - viem's `createSiweMessage` rejects IPv6 literals and single-label hosts other than `localhost` → web-origin host rule documented in 36.
 - `api/README.md` is stale: the migration list stops at 0002, and it says the Dockerfile migrates on start → **scheduled in 36**.
 - The slot page lists periods 0–14 only (`lib/api.ts:95` defaults), so a calendar older than 15 periods shows nothing buyable → **in step 40**.
-- `GET /v1/slots/{id}/periods` has no range cap and reads leases one index at a time (`routers/slots.py:38-50`, `services/periods.py:47-49`) → **proposed step 41**. Severity if deferred: one unauthenticated request can hold a pooled DB connection indefinitely; about 24 take the api's whole pool.
+- `GET /v1/slots/{id}/periods` has no range cap and reads leases one index at a time (`routers/slots.py:38-50`, `services/periods.py:47-49`) → **step 41 (accepted; coding in `/home/claude/OpenAd-q`)**. Severity on main until it merges: one unauthenticated request can hold a pooled DB connection indefinitely; about 24 take the api's whole pool.
 - The sim planner lists periods 0–4 only (`sim/src/planner/snapshot.ts:48`), so sim activity dies out after five periods → Phase 7, or fold it into 40 if the orchestrator widens 40 to `sim/`.
 - The remaining unscheduled items above → ROADMAP Phase 7 in 36.

@@ -286,8 +286,9 @@ protocol contract changes in this phase (anything that would need one is recorde
 
 ## Phase 7 — Post-launch backlog
 
-Found during Phase 6; recorded for later and not blocking launch. No Phase 6 task depends on any
-of these.
+Found during Phase 6; recorded for later. No Phase 6 task depends on any of these, and none
+blocks a testnet/staging launch. **7.10** (the independent security audit) does block a
+**mainnet** deploy (`docs/business/launch-checklist.md`); none of the others do.
 
 - [ ] **7.1 Per-slot Open Graph previews.** Needs server-side or edge rendering — the SPA cannot
       set crawler-visible meta at request time. Pointers: `web/index.html`,
