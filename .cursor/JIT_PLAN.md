@@ -125,6 +125,116 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
         `289bb72`.
       - #19 (40) merged main in as `173a7c5`, with no web overlap → `f50076d`.
       - 36b's merge of `f50076d` was clean → `44aa234`.
+- **D14 — Slice-review fix split (2026-09-25 10:05 UTC, REPLAN; the orchestrator's split, not to
+  be reopened).**
+  - The orchestrator's slice review of the launch state (main `f50076d` plus #16 `cc040ef`)
+    returned **FIX**. The fixes are five steps, so the work doesn't all land on one branch:
+    - 42 `fix/deploy-images`, 43 `fix/cloud-run-wiring`, 44 `fix/settler-key` and
+      45 `fix/cpc-click-integrity` are coded in parallel off `f50076d`, one PR each, in worktrees
+      `/home/claude/OpenAd-42` … `-45`. The orchestrator created the worktrees and branches, and
+      each coder edits only inside its own.
+    - 46 (docs truth) runs at the same time on `chore/launch-final` (#16) in the primary tree.
+  - Every L1 and L2 finding belongs to exactly one step. L3s ride with the step that owns the file.
+  - **Hunk ownership** (main `f50076d` line numbers). Each spec lists its hunks and what it must
+    not touch. A coder who needs a line outside its hunks stops and says so in the handback.
+    - `docs/deploy-gcp.md`:
+      - 42: §6 (L257-268), §8's image paragraph (L291-296) and the `openad-web` command
+        (L331-333);
+      - 43: §0-§2, §3's PSA paragraph (an insertion after L53) and the instance command
+        (L58-61), §4 (L180-208), the §6-8 intro (L234-255), §8's api/indexer/settler commands
+        (L298-329), §9's mappings (L359-365), §10's roles loop (L401-426) and secrets paragraph
+        (L433-438), and §11's smoke block (L440-446). #16 edits §3 L65-122 and §10 L429, so 43
+        leaves L62-178 and L427-432 alone;
+      - 44: §5 L218 only, and §8's settler paragraph (L341-344);
+      - 45: §9's CDN paragraph (L396-399) and a new §11 subsection inserted at L456.
+    - `scripts/deploy-gcp.sh`: 42 adds one block between L252 and L254 and extends L257's
+      `--substitutions`. 43 owns everything else, including `usage()`.
+    - `scripts/check-sh.sh`: 42 adds one block between L115 and L116. 43 owns the rest.
+    - `.env.example`: 42 L98; 43 L41; 44 L90-93 and L118-123; 45 L34-36 and L81-84.
+    - ADR-0017: 42 L138-139; 43 L103-111, L118 and the only appended amendment; 44 L51-54;
+      45 L152-154 and L186-187.
+    - `docs/ARCHITECTURE.md`: 43 §7 L590-602; 44 §3.9 (L384-387) and §8 L608; 45 §3.4
+      (L232-240), §3.8 (L378-380) and a §8 bullet after L613. 42 edits none.
+    - `infra/gcp/services/api.yaml`: 43 L1-7, the template annotations and L46; 45 appends after
+      L74. `web.yaml`: 42 L29-33; 43 L5-7. `infra/gcp/README.md`: 42 L9-11; 43 L1-5 and L20-52.
+    - `docs/threat-model.md`: 44 adds T20 after T19 and edits L64; 45 amends T13's row (L53).
+    - 46, on #16 (its spec gives #16's line numbers): `.env.example` L55 (main L52), ARCHITECTURE
+      §3.3 and §3.5 step 4, the threat model's L3-5, L12 and one bullet after L87, and
+      `web/index.html` L8-14. None of these touches or borders a 42–45 hunk.
+    - Sole owners:
+      - 42: `ci.yml`, `cloudbuild.yaml`, both Dockerfiles, the nginx template, `web-demo.yaml`,
+        `wagmi.ts`, `web/index.html` L18-22, `web/vite.config.ts` L44-56, and the new boot-check
+        script;
+      - 43: `deploy.yml`, `indexer.yaml`, `settler.yaml`, `jobs/migrate.yaml`;
+      - 44: `contracts/script/` and `contracts/tests/` (no `.vy` change, D8), `docs/PROTOCOL.md`,
+        `deploy-sepolia.md`, `deploy-mainnet.md`, `openad/settler/`;
+      - 45: `routers/serve.py`, `routers/clicks.py`, `services/clicks.py`, and the guide's
+        `embed-code.md`.
+  - **Numbers, pre-assigned.**
+    - Threat model: **T20** is 44's (settler key custody). 45 amends **T13** in place. T21 is
+      reserved for 45, only if it finds a genuinely new threat; its row then follows T20, and the
+      merge conflict with 44 is mechanical.
+    - ROADMAP: **6.11**–**6.14** are 42–45. **7.19** is 46's (phishing blocklist). 7.20 and up
+      are for 47's follow-ups.
+    - 42–45 edit neither `docs/ROADMAP.md` nor README: Phase 6.10 and Phase 7 exist only on #16.
+      **47** writes 6.11–6.14 and cites the PR numbers.
+  - **Merge order (extends D13).**
+    1. 42–45 each merge as it goes green, each later one merging main in first. No textual
+       overlaps are predicted between them.
+    2. **47** merges main into #16 and does the post-merge docs.
+    3. The orchestrator runs a targeted Opus re-review of the slice-review findings.
+    4. The planner's **CLOSE**; then #16 merges last.
+  - **Shared resources.**
+    - Postgres at `/tmp/pgdata_jit16`. 45 uses `openad_test`; 42, 43 and 44 use `openad_test_42`,
+      `_43` and `_44`, with
+      `OPENAD_TEST_PG_URL='postgresql+asyncpg://postgres@/<db>?host=/tmp/pgdata_jit16'`.
+    - Only 46 runs the default-port Playwright suites (`test:demo` on 4173, capture on 4174). 42's
+      browser boot check uses ports 5181–5189.
+    - Docker is available.
+    - `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` and
+      `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`. Never run
+      `playwright install` locally.
+    - Revert `package-lock.json` libc churn.
+  - **GCP facts.**
+    - Nobody uses WebFetch or WebSearch: a blocked fetch parks a worker on a prompt only James can
+      answer, and he is away.
+    - Use known defaults, and mark every GCP fact the repo can't prove
+      "(inferred; verify before deploy)".
+- **D15 — Fix rules: what 42–45 make true.**
+  - **Images (42).**
+    - The api image carries `contracts/deployments` at `/app/contracts/deployments`, with
+      `OPENAD_DEPLOYMENTS_DIR` set. The path is absolute because `REPO_ROOT` is `/` in the image.
+    - An empty `VITE_*` build input means unset:
+      - no WalletConnect project id → injected (browser) wallets only;
+      - no guide URL or demo URL → those links are hidden.
+    - The inputs flow from `deploy-gcp.sh`'s environment (`WALLETCONNECT_PROJECT_ID`,
+      `GUIDE_URL`, `DEMO_URL`), through Cloud Build substitutions (`_WALLETCONNECT_PROJECT_ID`,
+      `_GUIDE_URL`, `_DEMO_URL`), to build args.
+    - CSP `img-src` comes from `CSP_IMG_SRC`. The image default is `'self' data:`, and `web.yaml`
+      adds the API origin and `https:`.
+    - No build loads Google Fonts.
+    - CI boot-checks the api image and both web images.
+  - **Cloud Run (43).**
+    - Direct VPC egress (`private-ranges-only`) on api, indexer, settler and the migrate job.
+    - Cloud SQL `--edition=ENTERPRISE`.
+    - The script grants `allUsers` `roles/run.invoker` on api, web and web-demo only.
+    - `--only stack|all` refuses an unset or empty `API_URL`/`WEB_URL`.
+    - The media bucket defaults to `openad-media-<project>-<env>`.
+    - CSP RPC entries are origins: by default the public chain RPC the web app actually uses,
+      never `RPC_URL`.
+  - **Settler (44).**
+    - The settler is a dedicated, gas-only EOA.
+    - `deploy.py` requires `OPENAD_SETTLER_ADDRESS` off Anvil and pyevm, and refuses the deployer.
+    - `set_settler.py` rotates it.
+    - The settler process refuses to start (off 31337) when its key owns the vault.
+  - **Clicks (45).**
+    - Campaign serve responses are `private, no-store`: each carries a one-time token, and each
+      is an impression.
+    - Lease, house and empty responses stay `public, max-age=<ttl>`.
+    - A CDN may cache `/v1/serve/*/media` only.
+    - The burst rule keys on `client_key(request, OPENAD_TRUSTED_PROXY_HOPS)`, in a bounded map.
+      It is skipped, and logged, when hops are 0 outside dev and test.
+    - `api.yaml` sets `OPENAD_SERVE_ENFORCE_ORIGIN=true`.
 
 ## 3. Slices → branches
 
@@ -144,7 +254,11 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 | L Outbound-fetch bounds (accepted: indexer media deadline, domain-check fetch) | `fix/outbound-fetch-bounds` (#17, merged `3605473`) | noted under 6.9 by 36b | #14 merged; independent of M and N; merge before Final |
 | M Discover and slot-page period state (first-period anchoring) | `fix/discover-auction-state` (#19, merged `f50076d`) | noted under 6.7 by 36b | #14 merged; independent of L and N; merge before Final |
 | N Periods range cap (accepted) | `fix/periods-range-cap` (#18, merged `289bb72`) | noted under 6.9 by 36b | #14 merged; independent of L and M (T19 goes after T17; T18 restored on merge); merge before Final |
-| Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` (draft #16) | 6.3/6.6/6.7 ticks, 6.10, Phase 7 | started after J and K merged; merges last, after L, M and N (post-merge pass 36b; main merged in as `44aa234`) |
+| O Fix: the deploy images boot (api deployments, web WalletConnect/CSP/fonts, CI image boot checks) | `fix/deploy-images` (worktree `/home/claude/OpenAd-42`) | 6.11 (47 records it) | main `f50076d`; independent of P, Q and R (D14); merges before Final |
+| P Fix: Cloud Run wiring (VPC egress, SQL edition, invoker, WIF roles, deploy nits) | `fix/cloud-run-wiring` (worktree `/home/claude/OpenAd-43`) | 6.12 (47) | main `f50076d`; independent of O, Q and R; merges before Final |
+| Q Fix: a dedicated settler key | `fix/settler-key` (worktree `/home/claude/OpenAd-44`) | 6.13 (47) | main `f50076d`; independent of O, P and R; merges before Final |
+| R Fix: CPC click integrity (no-store campaign serves, trusted burst key, origin enforcement) | `fix/cpc-click-integrity` (worktree `/home/claude/OpenAd-45`) | 6.14 (47) | main `f50076d`; independent of O, P and Q; merges before Final |
+| Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` (draft #16) | 6.3/6.6/6.7 ticks, 6.10, Phase 7; 6.11–6.14 and 7.19 (46, 47) | started after J and K merged; merges last, after L, M, N and O–R (36b done; 46 docs truth runs in parallel with O–R; 47 post-merge pass and targeted re-review, then CLOSE) |
 
 ## 4. Micro-steps (one line each; ✱ active, [>] active in parallel, ○ pending, ✓ done)
 
@@ -203,7 +317,47 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 ### Slice N — `fix/periods-range-cap` (accepted 2026-09-25; worktree `/home/claude/OpenAd-q`; independent of L and M; merged second, as #18)
 - ✓ 41. N: `GET /v1/slots/{id}/periods` rejects `to − from + 1 > 60` with 422 `invalid_window`, bounds `from` and `to` each at `UINT256_MAX`, and reads leases in one query (an index scan on `pk_leases`); T19. Reviews: R1 FIX (L2 the query's filters were untested; L3 a docstring; L3 a uint256 overflow gave a 500, pulled into scope) → R2 PASS (two L3s fixed anyway). Commits `5f31a5c` + `6b10332` + `7000e4a` (main merged in, T18 before T19) + `a6ba05f`, **PR #18 merged `289bb72`**. pytest 274/6, 279/1 with PG. Callers: web 15–60, sim 8, sim planner 5. **(as-shipped record below)**
 
-### Final — `chore/launch-final` (started off `2f313d9` in parallel with 39; merges last, after 39, 40 and 41)
+### Slice O — `fix/deploy-images` (slice-review fix, 2026-09-25; worktree `/home/claude/OpenAd-42` off `f50076d`; parallel with P, Q, R and 46)
+- [>] 42. O:
+  - the api image carries `contracts/deployments` and sets `OPENAD_DEPLOYMENTS_DIR`;
+  - an empty WalletConnect id no longer blanks the real web app (injected wallets only);
+  - the WalletConnect id and the guide and demo URLs reach the web build (Cloud Build
+    substitutions, fed by `deploy-gcp.sh`);
+  - `CSP_IMG_SRC`, no Google Fonts, and a CSP on §8's `openad-web` command;
+  - CI builds and boot-checks the api image and both web images.
+  **Coder:** Sonnet, with an Opus review. **Risk: medium.** **(spec below)**
+
+### Slice P — `fix/cloud-run-wiring` (slice-review fix; worktree `/home/claude/OpenAd-43` off `f50076d`; parallel)
+- [>] 43. P:
+  - Direct VPC egress on api, indexer, settler and the migrate job, plus `--edition=ENTERPRISE`;
+  - an `allUsers` invoker binding on api, web and web-demo;
+  - the demo URL and its domain mapping;
+  - `--only stack|all` refuses an unset `API_URL`/`WEB_URL`;
+  - a per-project media bucket, and CSP RPC entries that are origins only;
+  - WIF roles for Cloud Build;
+  - smoke checks that pass on a fresh deploy;
+  - the infra README, ARCHITECTURE §7 and `usage()`.
+  **Coder:** Sonnet, with an Opus review. **Risk: medium.** **(spec below)**
+
+### Slice Q — `fix/settler-key` (slice-review fix; worktree `/home/claude/OpenAd-44` off `f50076d`; parallel)
+- [>] 44. Q: a dedicated, gas-only settler EOA.
+  - `deploy.py` requires `OPENAD_SETTLER_ADDRESS` off Anvil and refuses the deployer.
+  - `set_settler.py` rotates it.
+  - The settler process refuses to start with the vault owner's key.
+  - Runbooks, PROTOCOL §10, and threat-model **T20**.
+  **Coder:** Opus, with an Opus review. **Risk: high.** **(spec below)**
+
+### Slice R — `fix/cpc-click-integrity` (slice-review fix; worktree `/home/claude/OpenAd-45` off `f50076d`; parallel)
+- [>] 45. R:
+  - campaign serve responses are `private, no-store`, and a CDN may cache `/media` only;
+  - the burst rule keys on the trusted-hop client key, in a bounded map, and stays off until the
+    hop count is verified;
+  - `api.yaml` turns origin enforcement on;
+  - **T13** is amended;
+  - regression tests.
+  **Coder:** Opus, with an Opus review. **Risk: high** (publisher CPC earnings). **(spec below)**
+
+### Final — `chore/launch-final` (started off `2f313d9` in parallel with 39; merges last, after 39–41 and 42–45)
 - ✓ 36. Final, coder rounds 1–2 (primary tree, `chore/launch-final` off `2f313d9`, **draft PR #16**, so `#TBD-36` = #16). R1 FIX → fix round 1 → **R2 FIX**. All R1 findings are resolved, and the runbook's IAM grants now match every secret. The orchestrator folded the R2 leftovers into 36b instead of running another round now. It covers:
   - ROADMAP: 6.3 `[x]` with a dated amended-acceptance note; 6.6 split into artifacts `[x]` and a new **6.10** live deploy `[ ]` (6.8 and 6.9 come from 37 and 38); 6.7 `[x]`; a Phase 7 backlog.
   - Sourcemaps off; the `PLAYWRIGHT_CHROMIUM_PATH` hook in the main e2e config.
@@ -211,17 +365,36 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
   - README "What's in the box" (including the hardening and the same-site domain requirement) and two new deterministic screenshots.
   - Business docs (the launch checklist gains the custom-domain, XFF and budget user actions), ARCHITECTURE §7 truth fixes, a scorecard automated-checks section, AGENTS.md pointers.
   - The runbook's DB-password flow (§3/§5) and a DNS TXT truth fix (routed from 38); the web-origin host rule and a stale `api/README.md` (routed from 37).
-  **Risk: low.** **(full spec below; its post-merge parts moved to 36b)**
-- ✱ 36b. Final, post-merge pass (same branch, draft PR #16). **Coder launched** 2026-09-25 (Sonnet; Opus review to follow) once #17, #18 and #19 had merged. The orchestrator did item 1 itself: `f50076d` merged cleanly as `44aa234` and was pushed, and the threat model reads T15 … T19. Addenda given to the coder: #19 left the capture script alone, so item 4's row fix stands; the `periodsWindowSize(88_200, 3600) === 25` test line; and Slide 10's text from the hosted deck's GTM slide. It covers:
-  - `#TBD-36` → #16;
-  - cite #17, #18 and #19 in the ROADMAP (6.7, 6.9, Phase 7), README and the launch checklist;
-  - Phase 7 gains 7.17 and 7.18, plus notes on 7.7 and 7.14;
-  - 36's R2 leftovers;
-  - rebase the GTM launch plan on launch actions, with deck Slide 10 to match;
-  - the capture script finds the bought row by its index cell (the positional `nth()` breaks after 40), and `buy-leased.png` shows what its comment claims;
-  - one web test line that pins `ceil` in `periodsWindowSize` (40's R2 L3);
-  - re-capture the screenshots.
-  Then the planner's CLOSE archive lands in the same PR, and the orchestrator ships. **Risk: low.** **(spec below)**
+  **Risk: low.** **(as-shipped record below)**
+- ✓ 36b. Final, post-merge pass (same branch, draft PR #16). DONE 2026-09-25, after `44aa234`:
+  - `1f76556`: `#TBD-36` → #16; #17, #18 and #19 cited in ROADMAP (6.7, 6.9, Phase 7 up to 7.18),
+    README and the launch checklist; 36's R2 leftovers; the GTM plan and Slide 10 rebased on
+    launch actions; the capture script finds rows by their index cell; the `ceil` test line;
+    re-captured screenshots.
+  - `e94250d`: the fiat answers point at the USDC guide.
+  - `cc040ef`: prettier.
+  #16's head is `cc040ef`, CI is 5/5 and it is still a draft. The orchestrator's slice review of
+  the launch state then returned **FIX** (D14). The CLOSE archive (36b's item 8) is deferred to
+  the last item below. **(as-shipped record below)**
+- [>] 46. Final: docs truth on #16, in the primary tree, in parallel with 42–45:
+  - the demo script's CPC track uses Nimbus Wallet (creative 3 on slot 1);
+  - pitch-deck Slide 4 claims only what the demo shows;
+  - ARCHITECTURE §3.3 drift;
+  - phishing-blocklist honesty, plus ROADMAP **7.19**;
+  - README, threat-model scope and `.env.example` staleness;
+  - the OG text, the `/why` wording and the earnings presets;
+  - re-capture `why-calculator.png`.
+  **Coder:** Sonnet, with an Opus review. **Risk: low.** **(spec below)**
+- ○ 47. Final: post-merge pass, once 42–45 have merged.
+  - Merge main into #16 and resolve any conflicts.
+  - ROADMAP 6.11–6.14 with the PR numbers.
+  - The docs on #16's side that describe 42–45: the §7 table and CI sentence, the §14 bucket line,
+    the launch-checklist user actions, and README.
+  - Re-run the gates; CI green on every check.
+  - Then the orchestrator's **targeted Opus re-review** of every slice-review finding.
+  **Coder:** Sonnet, with an Opus review. **Risk: low.** **(spec below)**
+- ○ CLOSE. The planner's archive (moved here from 36b's item 8, updated for 42–47), committed on
+  #16. Then the orchestrator ships #16. **(spec below)**
 
 ## 5. Active step — full spec
 
@@ -556,573 +729,1125 @@ is removed. The full pre-implementation spec is in git history (`f7db32c`).
 **Callers under the cap:** web 15–60 (after #19), sim 8, sim planner 5.
 
 
-### Step 36 — Launch finalization (replaces 17+18 and 32+33; one branch, one PR, the last step)
+### Steps 36 and 36b — Launch finalization (slice Final): DONE, as-shipped record (CLOSE deferred)
 
-_Refreshed 2026-09-25 03:35 UTC against `feat/slot-listings` @ `496422e`, which is what main will
-contain once #13 merges. Re-sequenced in the same pass: **36 starts after the hardening steps
-37 and 38 merge, and merges after 39, 40 and 41**, so its docs describe the
-hardened state. Facts refreshed again after STEP_DONE 37 (39 accepted) and the 40/41 REVISE._
+_The full specs are in git history (`486ab0b`). This record replaced them at the REPLAN
+(2026-09-25 10:05 UTC)._
 
-_The post-merge work is now **36b** (below): item 3's 39/40/41 lines, item 13 and the
-post-merge "Done when" bullets. 36b supersedes them where they differ._
+- Branch `chore/launch-final`, draft **PR #16**, head `cc040ef`, CI 5/5 (2026-09-25 09:39 UTC).
+- **36** (coder rounds 1–2; `e4c5b97`, `288d736`):
+  - ROADMAP: 6.3, 6.6 and 6.7 ticked; a new 6.10 for the live deploy, still open; a Phase 7
+    backlog.
+  - Sourcemaps off (`VITE_SOURCEMAP`); the `PLAYWRIGHT_CHROMIUM_PATH` hook in the main e2e config.
+  - An onramp guide page; README "What's in the box", with two new screenshots.
+  - Business docs, including the launch checklist's user actions; ARCHITECTURE §7 truth fixes;
+    the scorecard's automated checks; AGENTS.md pointers.
+  - The runbook's DB-password flow (§3 and §5); DNS TXT truth; the web-origin host rule; a fresh
+    `api/README.md`.
+- Main merged in cleanly as `44aa234`.
+- **36b** (`1f76556`, `e94250d`, `cc040ef`):
+  - `#TBD-36` → #16;
+  - #17, #18 and #19 cited in ROADMAP (6.7, 6.9, and Phase 7 up to 7.18), README and the launch
+    checklist;
+  - 36's R2 leftovers;
+  - the GTM plan and Slide 10 rebased on launch actions;
+  - the capture script finds rows by their index cell;
+  - the `periodsWindowSize(88_200, 3600) === 25` test line;
+  - re-captured screenshots.
+- **Deferred:** 36b's item 8 (CLOSE). The orchestrator's slice review of the launch state returned
+  **FIX** at about 10:05 UTC, which led to steps 42–47 (D14, D15). CLOSE is now the last item of
+  this section.
 
-**Progress (rounds 1–2, 2026-09-25).** Coded on `chore/launch-final` off `2f313d9`; draft **PR #16**.
-- R1 FIX, L1s:
-  - the `gcloud sql users set-password` syntax is wrong;
-  - the onramp guide falsely says the app shows the USDC address;
-  - regenerated screenshots inherit a scroll offset;
-  - `docs/GLOSSARY.md` still claims DNS TXT verification.
-- R1 FIX, L2s:
-  - the host-rule note names `VITE_API_URL`;
-  - `VITE_SOURCEMAP` in `.env` does nothing, because it is a shell variable at build time;
-    document it that way;
-  - 6.7's acceptance needs a dated amended note.
-- New deploy bug, in scope (runbook only): §5 grants the settler no `secretAccessor` on
-  `openad-database-url-<ENV>`, so the settler can't start.
-- Shipped beyond the spec so far:
-  - a latent capture-script bug: after a LEASE buy it waited for the CPC-only "Confirmed on
-    chain"; it now waits for "Lease confirmed";
-  - stale ARCHITECTURE §5 claims ("6.2 in progress", "SPA fallback").
-- `#TBD-36` placeholders stand for this PR's number, **#16**; 36b replaces them.
-- R2 FIX: all R1 findings are resolved, and the runbook's IAM grants now match every secret.
-  - The leftovers are the L2 on 6.9's PR citation and the L3s in 36b items 3 and 4, two of them
-    pre-existing runbook issues. They fold into **36b**, together with the orchestrator's GTM
-    rebase: one coder round after 39, 40 and 41 merge, rather than a round now.
+### Step 42 — The deploy images boot (slice O, `fix/deploy-images`)
 
-**Why merged:** 17+18 (guide, ROADMAP 6.3, ship C) and 32+33 (ROADMAP ticks, README, guide
-SUMMARY, qa note, archive) edit the same files: `docs/ROADMAP.md`, `docs/guide/SUMMARY.md` and
-`README.md`. Step 16 shipped its own guide page (`docs/guide/publisher/listing.md`, already in
-SUMMARY), the glossary term and a 6.3 progress block. What's left is one truthful docs and
-polish pass.
-
-**Where:** the primary tree `/home/claude/OpenAd`, branch `chore/launch-final`. The orchestrator
-creates it after **#15 (37) and #14 (38)** have merged, while 39 runs in `/home/claude/OpenAd-o`:
-`git fetch && git switch -c chore/launch-final origin/main`. After 39, 40 and 41 merge
-(in any order, D13), merge main into `chore/launch-final`, re-run `capture:screenshots` (40 changes Discover's
-labels) and re-verify. The planner's later JIT edits are uncommitted in the primary
-tree and carry over, because main's JIT files will equal `2ce0f5b`'s once #15 merges (#14 and 39
-don't touch `.cursor/`). If git refuses the switch, stash, switch, then pop. The coder does **not**
-stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
-**Coder model:** Sonnet. **Risk:** low.
-- It's docs, plus a one-line build flag and a one-line e2e config hook.
-- The main risk is ticking or claiming something that isn't on main. Check every tick and every
-  README claim against the tree.
-
-**Facts to use as-is:**
-- Slot listing: summary ≤140 characters, no URLs; audience ≤600; up to 3 of 12 fixed categories
-  (`openad/listing_taxonomy.py`); owner-only `PUT`/`DELETE /v1/slots/{id}/listing`;
-  `GET /v1/slots?category=`; labelled "Publisher-provided"; off-chain, not rebuildable from
-  chain.
-- Buy receipt (step 35): the dialog keeps the signed quote and shows "Lease confirmed", price
-  paid, publisher and fee split, tx hash and "View slot".
-- Demo: https://claude.ai/artifact/AzkEcWfmUT23GCo2qkWxE7 (v2 from `d5d46a0`). Deck:
-  https://claude.ai/artifact/Day12XXUFNi7CJdNpa2MUH. Both are private until the owner shares
-  them.
-- PRs: #4 A, #5 E, #6 H, #7 F, #8 B, #9 D, #10 C1, #11 G, #12 I, #13 C2, #15 J (37, auth
-  hardening), #14 K (38, capacity and deploy hardening), #17 L (39, outbound-fetch bounds, merged
-  `3605473`), #18 N (41, periods range cap, merged `289bb72`), #19 M (40, Discover and slot-page
-  calendar, merged `f50076d`), and #16 is this PR. Take the numbers from
-  `git log --merges origin/main`.
-- After 37 and 38:
-  - SIWE is bound to allowed origins (strict EIP-4361 built with viem's `createSiweMessage` on
-    web and sim, EIP-55 addresses, ±300 s skew); nonce use is atomic; auth rows are pruned.
-  - Invalid bodies on `/v1/auth/*` get a house-style 422 `invalid_request`.
-  - The opt-in per-instance auth rate limit exists but is **off** in `infra/`, because the XFF
-    chain is unverified. `docs/deploy-gcp.md` has the verify-then-enable steps (max-instances=1
-    during the test).
-  - CI's api job runs the full suite against Postgres.
-  - **Web and api must share a registrable domain** (SameSite=Lax). `deploy-gcp.sh` refuses
-    otherwise unless `--allow-cross-site-auth` is passed.
-  - Every media redirect hop is validated. Host blocking applies outside dev only, because the
-    sim uses loopback (ADR-0012).
-  - ROADMAP 6.8 and 6.9 are `[x]` from those steps.
-- 39 (PR #17, merged `3605473`): media fetches have one overall deadline, and indexer verification has a
-  per-pass budget. The domain meta check, and `POST /v1/creatives/{id}/verify`, hold no DB
-  connection while they fetch. Both fetchers read raw bytes with `Accept-Encoding: identity`. The
-  meta check is bounded and has a per-slot cooldown (T18).
-- 40 (PR #19, merged `f50076d`): Discover's state, SlotCard's timing copy and the slot page's period
-  window follow the open-ended calendar. Before 40, every slot read "Ended" one period after its
-  first. Demo slots 0, 2 and 4 now read "live".
-- 41 (PR #18, merged `289bb72`): `GET /v1/slots/{id}/periods` accepts at most 60
-  periods per request (T19).
-- Web-origin host rule: viem's `createSiweMessage` rejects IPv6 literals and single-label hosts
-  other than `localhost` (e.g. `devbox:5173`, `LOCALHOST:5173`). So the web origin must be
-  `localhost`, an IPv4 address or a dotted hostname.
-- `api/README.md` is stale:
-  - its migration list stops at `0002_cpc`;
-  - it says `api/Dockerfile` migrates on start, but slice F moved migrations to the compose
-    `migrate` service and the Cloud Run Job.
-- Capacity (38, as shipped): pools api 4 + 2, indexer and settler 2 + 1, the migrate job one
-  Alembic connection; `maxScale` api 4, web and web-demo 10; Cloud SQL `max_connections=100`
-  pinned by flag; budget 31 steady, 34 with 3 reserved, ≈64 during a rollout overlap. Quote
-  `docs/deploy-gcp.md` §3 rather than restating numbers from memory.
-- DNS TXT domain verification is documented (`docs/ARCHITECTURE.md`, in the domain-verification
-  paragraph; `docs/guide/marketplace/faq.md` L12) but can't succeed: `dnspython` isn't a dependency, so
-  `_check_dns` returns False on ImportError. The web UI only uses the meta tag.
-- `docs/deploy-gcp.md` §3 creates the `openad` DB user with
-  `--password="$(openssl rand -base64 32)"`, which is never shown or stored, yet §5 needs
-  `<PASSWORD>` for `openad-database-url-<ENV>`. Base64 output can also contain `+`, `/` and `=`,
-  which break the URL unless percent-encoded.
-- `84532.json` and `8453.json` are **not committed**; there has been no testnet deploy.
-- `web/dist` currently emits 170 `.map` files and `web/dist-demo` 82. The published demo Artifact
-  therefore carries maps too.
-- `e2e/playwright.config.ts` has no `PLAYWRIGHT_CHROMIUM_PATH` hook, unlike
-  `e2e/demo/demo.config.ts` (L14, L35).
-
-**Read first:**
-- `docs/ROADMAP.md` Phase 6: 6.3 has progress blocks from steps 14+15 and 16 and ends "17+18
-  finishes this item"; 6.6 has a progress block; 6.7's acceptance.
-- `README.md`: the "Coming next" section at L124–128 is now false.
-- `docs/business/{README,launch-checklist,demo-script,competitive,market-fit,pitch-deck}.md`.
-- `docs/guide/{README,SUMMARY}.md`, `docs/guide/advertiser/{README,buy-a-period}.md`.
-- `docs/qa/scorecard.md` (persona-round tables, not a changelog).
-- `docs/ARCHITECTURE.md` §7: the environment table says `84532.json`/`8453.json` "(committed)",
-  and the "Production (GCP)" row has the wrong cell count.
-- `web/vite.config.ts` L94 (`build: { sourcemap: true, … }`) and the embed copy plugin around
-  L15–39.
-- `embed/vite.config.ts` L9.
-- `e2e/demo/capture-screenshots.mjs`, `e2e/playwright.config.ts`, `e2e/demo/demo.config.ts`.
-- `AGENTS.md` ("Where things are" table and Commands).
-- JIT §8 Backlog (read-only).
-- What 37, 38 (and 39) changed, as merged: the ADR-0009 and ADR-0017 amendments,
-  `docs/threat-model.md` T15–T19 (T18 from 39, T19 from 41), and `docs/deploy-gcp.md` (connection budget,
-  `max_connections` flag, same-site domain requirement, rate-limit note).
-
-**Items**
-1. **ROADMAP 6.3 → `[x]` `_Done 2026-09-25._`:**
-   - Replace the two progress blocks with one "Delivered" paragraph: serve CORS, versioned
-     embed script and `EmbedCodePanel` with CMS tabs and badge, `/slots/:id` Share row, static
-     OG defaults, slot listings and category filter.
-   - Add a short, dated "Acceptance amended" line saying what differs from the original text and
-     why:
-     - the route is `/slots/:id`;
-     - OG is static defaults, with per-slot OG in Phase 7 (needs server or edge rendering);
-     - the "publisher profile" shipped per slot as a **listing**, where the site is the slot's
-       on-chain domain and there is no separate site-URL field.
-   - Drop "17+18 finishes this item".
-2. **ROADMAP 6.6, split honestly:**
-   - 6.6 becomes **"Deploy artifacts (ADR-0017)"** `[x]`, condensing its progress block.
-   - A new **6.10 "Live GCP deployment (user-run)"** stays `[ ]` (6.8 and 6.9 are the
-     hardening items from 37 and 38; keep them as they are), with pointers
-     `docs/deploy-gcp.md` and `docs/business/launch-checklist.md`. Its acceptance: GCP project
-     plus runbook; WIF secrets set; Base Sepolia deploy with `84532.json` committed; staging
-     smoke checks pass (`/v1/health`, serve, the embed on a real publisher origin); web and api
-     on one registrable domain; the auth rate limit enabled once the XFF chain is verified (37
-     left it off; follow the runbook's verify-then-enable steps).
-3. **ROADMAP 6.7 → `[x]`** once items 4–11 land. Leave 6.8 and 6.9 (from 37 and 38) as they are,
-   except for these delivered-text lines:
-   - 6.9 names 39's outbound-fetch bounds (T18) and 41's periods range cap (T19);
-   - 6.7 gets a dated line for 40 (Discover and the slot page follow the open-ended calendar).
-   All of them merge before 36.
-4. **ROADMAP Phase 7 — Post-launch backlog**, all `[ ]`, one line each with pointers:
-   - per-slot OG (edge or server render);
-   - publish `@openad/embed` to npm or a CDN;
-   - listing moderation, and clearing or flagging a listing on on-chain slot transfer;
-   - listing URL-heuristic gaps (spaced dots, `[.]`, bare IPs, `@handles`, U+00B7), documented
-     as accepted for now;
-   - SupplyPage `['1']` slot fallback;
-   - analytics: neutral CTR hint on CPC slots, advertiser CTR over CPC impressions only, a
-     "Booked (upcoming)" tile;
-   - migration parity covering server defaults; ruff scope to include `alembic/` (0002 is
-     unformatted);
-   - the `useSiwe` in-flight race on account switch;
-   - a BuyDialog unit test for the BaseError `shortMessage` branch;
-   - an independent security audit before mainnet;
-   - a global auth rate limit (Cloud Armor on a load balancer) instead of per-instance;
-   - DNS-rebinding-safe media fetching (resolve, then pin the IP), the T17 residual;
-   - media-fetch and deploy-guard follow-ups from 38: a prod-mode test that public IP literals
-     (`8.8.8.8`, `[2001:4860:4860::8888]`, `[::ffff:8.8.8.8]`, `ads.example.`) are accepted;
-     `deploy.yml` `--only stack` passing real `API_URL`/`WEB_URL` to the same-site guard; a
-     PSL-aware guard (multi-part suffixes such as `co.uk`, `web.app`); `host_of` checked on a
-     real macOS bash 3.2;
-   - bounded-concurrency media verification (39 bounds each fetch and each pass);
-   - auth follow-ups from 37:
-     - a test that percent-encoded URIs and resources are accepted;
-     - OpenAPI still documents FastAPI's 422 shape for `/v1/auth/verify`;
-     - rename `openad.errors.InvalidRequestError`, which clashes conceptually with SQLAlchemy's;
-     - cap `SiweIn.signature` (about 256);
-     - `OPENAD_SESSION_SECRET` is read by no code: drop it or use it;
-   - DNS TXT domain verification (add `dnspython` with a resolver lifetime, or drop the method).
-5. **Sourcemaps off by default:** `web/vite.config.ts` gets
-   `sourcemap: process.env.VITE_SOURCEMAP === '1'`, with a commented `# VITE_SOURCEMAP=1` line in
-   `.env.example`. Leave `embed/vite.config.ts` alone: its maps aren't copied, the plugin writes
-   only `open-ad.v1.js`. Confirm the copied file has no dangling `sourceMappingURL`, and strip it
-   in the plugin if it does.
-6. **Local e2e convenience:** `e2e/playwright.config.ts` honours `PLAYWRIGHT_CHROMIUM_PATH`
-   exactly as `demo.config.ts` does. With the variable unset, CI behaviour is unchanged.
-7. **Onramp guide page** (6.7 acceptance, blocker 5): `docs/guide/advertiser/getting-usdc-on-base.md`.
-   - Plain steps: get USDC on the **Base** network from an exchange or onramp, or bridge.
-   - Link **only** to official top-level docs (Base docs, Circle's USDC docs). No affiliate
-     links, and no fee, availability or speed claims.
-   - A warning to check the network (Base) and the token (native USDC, the one the app uses).
-   - Link it from `advertiser/README.md`, `advertiser/buy-a-period.md`, SUMMARY and
-     `launch-checklist.md`.
-8. **Guide:** SUMMARY gets the onramp page. Every page lives once (embed-code, listing and
-   performance are already there). `docs/guide/README.md` gets a "Try the demo" paragraph with
-   the demo link and the private note.
-9. **README:**
-   - Replace "Coming next" (L124–128) with a "What's in the box" list of shipped features:
-     LEASE and CPC, analytics, embed code panel and badge, Share row, slot listings with the
-     category filter (use the facts above), buy receipt, demo mode, GCP deploy artifacts.
-   - Status line: "testnet-ready, not audited; live deploy pending (ROADMAP 6.10)".
-   - The deploy section says plainly that web and api must share a registrable domain, linking
-     `docs/deploy-gcp.md`.
-   - Keep the demo and deck links with the private note.
-   - Screenshots: extend `capture-screenshots.mjs` with two shots, keeping the pinned epoch and
-     ≤400 KB each. Add them to README if they read better than the current set.
-     - `buy-receipt.png`: the step-35 receipt, shot before the dialog closes.
-     - `discover-categories.png`: Discover with a category selected and listing badges visible.
-10. **Business docs:**
-    - `launch-checklist.md`:
-      - Move "Publisher growth", "Slot listings" and "sourcemaps" from Next PRs to Done, linking
-        PRs #10, #13 and this PR.
-      - Add a "Republish demo after this PR (maps removed)" row.
-      - Point Next PRs at ROADMAP Phase 7.
-      - User actions: add a **custom domain (required: web and api on one registrable domain)**
-        row; add "verify the X-Forwarded-For chain in staging, then enable the auth rate limit"
-        (37 left it off; link the runbook steps); add "confirm `max_connections` ≥ 100 before the first deploy
-        (`gcloud sql instances describe openad-<ENV> --format='value(settings.databaseFlags)'`),
-        and redo the budget in `docs/deploy-gcp.md` §3 before raising `maxScale` or a pool".
-        Keep the existing rows.
-    - `demo-script.md`: a 20–30 second receipt beat in the 5- and 15-minute tracks, and a
-      Discover category-filter beat in the 15-minute track. Use the real labels.
-    - `competitive.md` "Where OpenAd loses today": targeting becomes "self-described slot
-      listings and categories; no audience measurement or verification".
-    - `market-fit.md`: a dated "Status 2026-09-25" line per adoption blocker naming the PR that
-      addressed it. The USDC-only blocker points to the onramp guide; the protocol is unchanged.
-    - `pitch-deck.md` Slide 11 "Traction and roadmap": built vs pending (live deploy 6.10, audit),
-      honest, with no users or metrics. Note in the commit that the hosted deck must be
-      regenerated.
-11. **Other docs:**
-    - `docs/ARCHITECTURE.md` §7:
-      - fix the `84532.json`/`8453.json` cells to "committed once deployed (none yet; ROADMAP 6.10)";
-      - make the Production (GCP) line a well-formed row, or move it into the prose below;
-      - the Demo column mentions the hosted demo (private note).
-    - `docs/qa/scorecard.md`: **do not** add a persona "Round 4" row, since no persona critique
-      was run. Add a separate "Automated demo checks (2026-09-25)" section citing
-      `e2e/demo/*.spec.ts`: 14 tests, the off-origin guard, the exact-balance and receipt
-      assertions, and the listing flow at 60/60 under `--repeat-each=20` from step 16's review.
-    - `AGENTS.md`:
-      - "Where things are" gets rows for Business docs (`docs/business/`), Demo mode
-        (`web/src/demo/`, ADR-0016, `e2e/demo/`) and GCP deploy (`infra/gcp/`,
-        `docs/deploy-gcp.md`, `scripts/deploy-gcp.sh`, ADR-0017);
-      - Commands gets `npm run build:demo`, `npm run test:demo -w e2e` and
-        `npm run capture:screenshots -w e2e`.
-      - Nothing else in AGENTS.md changes.
-    - `docs/deploy-gcp.md` §3 and §5, the DB password (a pre-existing gap routed from 38's
-      review): generate it once into a shell variable, `DB_PASS="$(openssl rand -hex 32)"`
-      (URL-safe, never echoed); pass it to `gcloud sql users create`; in the same shell, pipe the
-      full URL into `gcloud secrets create openad-database-url-<ENV> --data-file=-`; then
-      `unset DB_PASS`. Add a recovery note: `gcloud sql users set-password`, then a new secret
-      version.
-    - DNS TXT truth fix: `docs/ARCHITECTURE.md` and `docs/guide/marketplace/faq.md` say the meta
-      tag is the supported method today and DNS TXT is Phase 7.
-    - Web-origin host rule (routed from 37), in three places:
-      - ARCHITECTURE §3.3;
-      - `.env.example`, next to `OPENAD_CORS_ORIGINS` and `OPENAD_SIWE_ALLOWED_ORIGINS`;
-      - `docs/deploy-gcp.md` §9.
-      The web origin must be `localhost`, an IPv4 address or a dotted hostname.
-    - `api/README.md`:
-      - bring the migration list up to date (0001–0005);
-      - replace the "Dockerfile runs `alembic upgrade head`" line with the compose `migrate`
-        service and the Cloud Run Job.
-12. **No product code** beyond items 5 and 6. If a doc claim is false against main, fix the doc
-    and list it in the commit.
-13. **Planner, after the coder passes review, in the same PR:**
-    - Move `.cursor/JIT_PLAN.md` to `.cursor/jit_history/2026-09-25-market-fit-launch.md` with an
-      Outcome section: PR list, demo and deck links, the open user actions (6.10 live deploy,
-      custom domain, WIF secrets, Sepolia deploy with `84532.json`, audit, legal), and a Phase 7
-      pointer.
-    - Refresh `JIT_INDEX.md`.
-
-**Verify**
-```bash
-cd /home/claude/OpenAd
-npm run typecheck && npm run lint && npm run test && npm run build && npm run build:demo
-find web/dist web/dist-demo -name '*.map' | grep . && echo "FAIL sourcemaps" || echo no-maps
-tail -c 120 web/dist/embed/open-ad.v1.js | grep -q sourceMappingURL && echo "FAIL dangling map ref" || echo embed-ok
-node web/scripts/check-demo-bundle.mjs
-export PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome
-npm run test:demo -w e2e
-npm run capture:screenshots -w e2e && sha256sum docs/business/assets/*.png > /tmp/s1 && npm run capture:screenshots -w e2e && sha256sum docs/business/assets/*.png | diff - /tmp/s1 && echo deterministic
-find docs/business/assets -name '*.png' -size +400k | grep . && echo "FAIL size" || echo png-ok
-npx prettier --check README.md AGENTS.md docs/business/*.md
-python3 - <<'PY'   # relative links in README, AGENTS, docs/business, docs/guide resolve
-import re,os,sys
-bad=[]
-files=['README.md','AGENTS.md']+[os.path.join(r,f) for d in ('docs/business','docs/guide') for r,_,fs in os.walk(d) for f in fs if f.endswith('.md')]
-for f in files:
-    for l in re.findall(r'\]\(([^)#\s]+)', open(f).read()):
-        if l.startswith(('http','mailto:')): continue
-        if not os.path.exists(os.path.normpath(os.path.join(os.path.dirname(f), l))): bad.append((f,l))
-print(bad or 'links ok'); sys.exit(1 if bad else 0)
-PY
-sed -n '/## Phase 6/,/## Out of scope/p' docs/ROADMAP.md | grep -n "^- \[ \]"   # expect 6.10 + Phase 7 items only
-grep -n "Coming next\|in progress on a separate branch\|(committed)" README.md docs/ARCHITECTURE.md && echo "REVIEW stale claims" || echo claims-ok
-grep -n 'openssl rand -base64' docs/deploy-gcp.md && echo "REVIEW db password" || echo pw-ok
-grep -rniE "sell(s|ing)? (a |the )?slot|trusted by|customers include" README.md docs/business docs/guide && echo REVIEW || echo wording-ok
-git status --short   # no .cursor/ staged by the coder; no api/, contracts/ changes
-```
-
-**Done when:**
-- ROADMAP is truthful: 6.1–6.9 `[x]` (6.3 with a dated amended-acceptance note; 6.8 and 6.9 from
-  37 and 38, and 6.9 also names 39), 6.10 open as user-run, Phase 7 backlog listed.
-- `dist` and `dist-demo` contain zero `.map` files.
-- The onramp page exists and is linked from 4 places.
-- README and business docs describe only shipped features, with deterministic fresh screenshots.
-- ARCHITECTURE §7 has no false "committed" claims; the scorecard's automated section is added
-  without invented persona verdicts; AGENTS.md pointers are added.
-- The runbook's DB-password flow works end to end without echoing the password, and no doc
-  claims DNS TXT verification works.
-- The web-origin host rule is documented, and `api/README.md` matches the tree.
-- After merging main (39, 40 and 41): the screenshots are re-captured (Discover
-  shows 40's labels) and deterministic, and the ROADMAP names 39, 40 and 41.
-- All checks pass.
-- After the planner archives the plan: PR, CI 5/5, merge. Then the orchestrator:
-  1. republishes the demo Artifact from main (maps gone; the same URL, so it's still private);
-  2. regenerates the hosted deck from `pitch-deck.md` (Slide 11 changed; the same URL);
-  3. sends the user the final report: what shipped, demo and deck links with the share
-     reminder, and the user actions (6.10 runbook, custom domain, WIF secrets, Sepolia deploy,
-     audit, legal).
-
-
-### Step 36b — Launch finalization, post-merge pass (slice Final; starts once 39, 40 and 41 have merged)
-
-_Specced 2026-09-25 07:40 UTC at STEP_DONE 39, from 36's R2 findings and the orchestrator's
-additions. It supersedes 36's item 3 (its 39/40/41 lines), item 13 and the post-merge "Done
-when" bullets. Facts were checked against `origin/main` @ `3605473` (#17 merged), 40 @ `50b0285`
-and 41 @ `6b10332`. Updated at STEP_DONE 40/41 (08:27 UTC) with the PR numbers, item 1's merge
-and the orchestrator's addenda._
-
-**Status (2026-09-25 08:27 UTC):**
-- **Launched:** Sonnet coder in the primary tree, with an Opus review to follow.
-- The orchestrator did item 1 itself. `origin/main` (`f50076d`) merged cleanly as `44aa234` and
-  was pushed, and the threat model reads T15 … T19.
-- PR numbers: 39 = **#17**, 41 = **#18**, 40 = **#19**.
-- Addenda given to the coder:
-  - #19 didn't touch the capture script, so item 4's row fix stands;
-  - item 4's test line;
-  - Slide 10's text is taken from the hosted deck's refreshed GTM slide (item 5).
-- Not yet in the coder's brief, so relay it: item 2's Phase 7 additions from STEP_DONE 40/41 (the
-  7.7 CI-prettier note and 7.18).
+_Specced 2026-09-25 10:05 UTC (REPLAN, slice review FIX). Facts were checked at `f50076d` (main)
+and `cc040ef` (#16). Line numbers are main's unless marked._
 
 **When and where:**
-- All three have merged: #17 → `3605473` (39), #18 → `289bb72` (41), #19 → `f50076d` (40).
-- Primary tree `/home/claude/OpenAd`, branch `chore/launch-final`, draft **PR #16**. Push to the
-  same branch; don't open a new PR.
-- One coder round: Sonnet, with an Opus review. **Risk: low.** The work is docs, the capture
-  script, one web unit-test line and regenerated PNGs. There's no product code.
-- The coder does not stage `.cursor/`. The planner's CLOSE (item 8) lands in the same PR after the
-  review passes, and the orchestrator commits it.
+- Worktree `/home/claude/OpenAd-42`, branch `fix/deploy-images` off `f50076d`. The orchestrator
+  created both. Edit only inside this worktree. It runs in parallel with 43, 44, 45 and 46.
+- Sonnet coder, Opus review. **Risk: medium.** It is build and CI plumbing, but it fixes two L1s:
+  the indexer and settler can't start, and the real web app is a blank page.
+- Local resources (D14):
+  - Postgres DB `openad_test_42`, if you run the api suite;
+  - browser checks on ports 5181–5189 only;
+  - Docker (start it with `nohup dockerd &` if it isn't running);
+  - Chromium from `/opt/pw-browsers` (never `playwright install` locally);
+  - revert any `package-lock.json` libc churn.
+- Commit on the branch (Conventional Commits, e.g. `fix(web): …`, `ci: …`). The orchestrator
+  pushes and opens the PR.
+- Don't touch `docs/ROADMAP.md` or README: 47 records this step as ROADMAP 6.11.
+
+**Evidence (the slice review's findings, re-checked):**
+- **L1: the api image has no deployments artifact.**
+  - `api/Dockerfile` L7-10 copy only `api/`.
+  - `REPO_ROOT` (`config.py:16`, `parents[3]`) is `/` in the image, so the default
+    `contracts/deployments` resolves to `/contracts/deployments`, which doesn't exist.
+  - `indexer/__main__.py:21` and `settler/__main__.py:27` call `load_deployment` before the
+    liveness listener starts. Both exit, so Cloud Run never sees a healthy revision.
+  - Local runs work only because `docker-compose.stack.yml` mounts `/deployments` and sets
+    `OPENAD_DEPLOYMENTS_DIR`.
+- **L1: the non-demo web image boots to a blank page.**
+  - `web/Dockerfile` L48-59 bake every unset build arg in as `""`.
+  - `wagmi.ts` L39-40 fall back to the all-zero id only on `undefined` (`??`), so the project id
+    is `""`.
+  - RainbowKit 2.2.11 throws "No projectId found" as soon as a WalletConnect-based wallet is
+    created (`getWalletConnectConnector`, `node_modules/@rainbow-me/rainbowkit/dist/index.js`
+    ≈L7119-7129). A list with only `injectedWallet` never calls it.
+  - Cloud Build passes only `VITE_API_URL` and `VITE_CHAIN_ID` (`cloudbuild.yaml` L44-47). CI
+    builds only the demo image (`ci.yml` L91-121).
+  - `VITE_CHAIN_ID=""` would also fall back to Anvil, because `Number("")` is 0.
+- **L2: the CSP blocks what the page loads.**
+  - Every `add_header Content-Security-Policy` in the nginx template (L24, L45, L57, L70) has
+    `img-src 'self' data:`. That blocks paid media from the API origin (`/v1/serve/{id}/media`) on
+    `/embed-demo`, and house-ad media hosted by publishers.
+  - `style-src` and `font-src` block the Google Fonts links in `web/index.html` L18-22.
+  - The runbook's manual `openad-web` deploy (§8 L331-333) sets no CSP at all.
+- **L3:** `web/Dockerfile` L3-8 still says demo mode hasn't landed on main.
 
 **Items**
-1. **Merge main: done by the orchestrator.** `origin/main` (`f50076d`) merged cleanly as
-   `44aa234` and was pushed, as D13's check predicted. The threat model reads T15 … T19. The
-   coder still re-reads the text that now sits side by side:
-   - ARCHITECTURE §3.5–§3.6: 39's deadline, budget and cooldown text next to 36's DNS TXT truth
-     fix;
-   - ARCHITECTURE §3.3 (public reads): 41's cap note next to 36's web-origin host rule;
-   - `.env.example`: 39's two settings next to 36's comments.
-2. **PR numbers and claims.** The numbers are 39 = **#17**, 41 = **#18**, 40 = **#19** (from
-   `git log --merges --oneline origin/main`). Then make these edits:
-   - Replace `#TBD-36` with `#16` in `docs/business/launch-checklist.md` (the Sourcemaps row and
-     the republish row) and in `docs/business/market-fit.md` (blockers 1 and 5).
-   - **ROADMAP 6.9** (R2 L2):
-     - Its closing sentence cites **PR #17** instead of "the outbound-fetch-bounds PR". It also
-       says that `POST /v1/creatives/{id}/verify` releases its connection before fetching, and
-       that both fetchers read raw bytes under their caps.
-     - Add one sentence for #18: `GET /v1/slots/{id}/periods` rejects windows wider than 60
-       periods (422 `invalid_window`) and reads leases in one query (**T19**).
-     - Pointers gain T18 and T19.
-   - **ROADMAP 6.7:** add a dated line for #19. Discover's state, the slot card's timing copy
-     and the slot page's period list follow the open-ended calendar (PROTOCOL §4.1). Before it,
-     every slot read "Ended" one period after its first, and a calendar older than 15 periods
-     showed nothing buyable.
-   - **ROADMAP Phase 7:**
-     - 7.14 says PR #17 bounds each fetch and each pass but not how many run concurrently. Add
-       that `POST /v1/creatives/{id}/verify` has no per-address or per-session limit (T18
-       residuals; `api/src/openad/routers/creatives.py`).
-     - 7.7 adds two things:
-       - prettier on `docs/`: table alignment already fails on `ARCHITECTURE.md` and
-         `threat-model.md`, and CI doesn't check docs;
-       - code comments cite JIT step numbers ("step 39", "PLAN step 40"). The archived plan's
-         step → PR map resolves them.
-     - A new **7.17 "Sim planner period window".** `sim/src/planner/snapshot.ts:48` lists
-       periods 0–4 only, so sim activity stops after five periods. It should list from the
-       current index, as 40 does. Pointers: `sim/src/planner/`.
-     - Added at STEP_DONE 40/41 (relay if it isn't in the coder's brief):
-       - 7.7 also notes that CI's prettier step covers only `web/src/demo`, `e2e/demo`,
-         `web/src/features/marketing` and `web/src/app/routes.tsx`, so the root `format:check`
-         (all of `web/`) never runs in CI. `web/src/lib/auction.ts` had a pre-existing
-         violation.
-       - A new **7.18 "Calendar UI follow-ups (from #19)":**
-         - the `'no terms'` state has no Discover filter chip, the same gap as `'no calendar'`;
-         - an optional guard for a zero period in `periodsWindowSize` and `currentPeriodIndex`
-           (NaN or Infinity). It is unreachable today, since `set_calendar` and the demo reducer
-           require periods ≥ 3600 s.
-         - Pointers: `web/src/lib/auction.ts`, `web/src/features/marketplace/DiscoverPage.tsx`.
-   - **README "What's in the box",** the security bullet: replace "outbound-fetch time limits ship
-     separately (ROADMAP 6.9, T18)" with what shipped:
-     - outbound fetches have an overall deadline and hold no DB connection while they run
-       (PR #17, T18);
-     - the periods endpoint caps its window (#18, T19).
-   - **`launch-checklist.md` Done table:** add a row for each of these:
-     - #15, auth hardening;
-     - #14, capacity and deploy hardening;
-     - #17, outbound-fetch bounds;
-     - #19: Discover and the slot page follow the open-ended calendar;
-     - #18: periods range cap.
-   - **`pitch-deck.md` Slide 11:** "Built" may say "auth, capacity and request-bound hardening".
-     Change nothing else there.
-   - **JIT process words that 39 added to docs:** in `docs/ARCHITECTURE.md` and `.env.example`,
-     "fix round 1" and "step 39" become "ROADMAP 6.9, PR #17", or just the T18 reference. Code
-     comments stay as they are (7.7).
-3. **36's R2 leftovers** (docs only):
-   - L3, `docs/deploy-gcp.md`, the web-origin host rule (≈L397–399): "which are checked against
-     the same rule" becomes "which must follow the same rule". The API doesn't validate its
-     origin lists against it.
-   - L3, `docs/qa/scorecard.md` (≈L63–68): each demo spec file has its own `auto: true` guard
-     (`flows.spec.ts` and `growth.spec.ts`), and only `flows.spec.ts`'s also fails on an HTTP
-     response ≥ 400. Say exactly that.
-   - L3, `docs/guide/advertiser/getting-usdc-on-base.md` (L23–24): "a single permit signature
-     (EIP-2612)" becomes "one permit signature (EIP-2612) plus one transaction, with no separate
-     approval transaction".
-   - L3 (pre-existing), `docs/deploy-gcp.md` §5: grant `openad-migrate-<ENV>` only the
-     database-URL secret, because `infra/gcp/jobs/migrate.yaml` mounts nothing else. The session
-     and click secrets go to `openad-api-<ENV>` only, which `api.yaml` mounts. The settler-key
-     and database-URL grants stay as they are.
-   - L3 (pre-existing), §14 Teardown: `gcloud run services delete` and `gcloud secrets delete`
-     take one name each, so loop over the names. Add `openad-web-demo`
-     (`infra/gcp/services/web-demo.yaml`).
-4. **Capture script** (`e2e/demo/capture-screenshots.mjs`), **plus one web test line** (last bullet):
-   - **Row addressing (planner finding; it breaks after 40).**
-     - The script finds the bought row by position (`page.locator('tbody tr').nth(periodIndex)`,
-       with the comment "Rows list periods 0..n in order").
-     - After 40, the slot page lists from the current period, which is index 3 in the demo
-       (`fps = now − 3.5 days`). So `nth(4)` is period 7, and the "Leased" wait times out.
-     - Find the row by its index cell instead, as 40's `flows.spec.ts` does:
-       `page.locator('tbody tr', { has: page.getByRole('cell', { name: periodIndex, exact: true }) })`.
-       Fix the comment too.
-     - #19 didn't touch the capture script, so this fix stands.
-   - **`buy-leased.png`** (R2 L3): the comment promises the Leased row next to the wallet balance,
-     but after scrolling to the top, that row is below the fold.
-     - Take the shot full-page, like `discover-categories.png`, as long as it stays ≤ 400 KB.
-     - Otherwise, keep the viewport shot and reword the comment to describe what it shows.
-     - Either way, keep the wait on the row's "Leased" button.
-   - **Web test line** (40's R2 L3 (a); the orchestrator added it to this step). In
-     `web/src/lib/auction.test.ts`'s `periodsWindowSize` block, add
-     `expect(periodsWindowSize(88_200, 3600)).toBe(25)`. That is 24.5 periods: `ceil` gives 25
-     where `floor` would give 24, so a non-multiple lead pins `ceil`. The existing
-     `86_400 / 3600` case is an exact multiple.
-5. **GTM launch plan** (orchestrator): rebase `docs/business/gtm-marketing.md` "Launch plan"
-   (L39–49) on launch actions, matching the hosted deck's refreshed GTM slide:
-   - **Days 0–30, go live:** launch on Base Sepolia and Google Cloud (ROADMAP 6.10), and
-     hand-recruit pilot publishers with the demo and the embed tag.
-   - **Days 30–60, prove it:** pilots' CTR, eCPM and spend from the built-in dashboards go into
-     advertiser outreach, alongside the first hackathon sponsorship.
-   - **Days 60–90, scale it:** the independent audit (7.10), then Base mainnet; grant applications
-     and direct outreach with the deck.
-   - Add one sentence: the product work behind each phase is already built (6.2–6.9); what
-     remains is the launch, the pilots and the audit.
-   - `pitch-deck.md` Slide 10 gets the same three phases, one line each. It is the hosted deck's
-     source, and the orchestrator regenerates the deck from it.
-6. **Re-capture** after items 1 and 4:
-   - Run `npm run build:demo`, then `capture:screenshots` twice. The two runs must be
-     byte-identical, with every PNG ≤ 400 KB.
-   - `discover.png` shows slots 0, 2 and 4 as live (40).
-   - Check that README's alt text and the doc captions still describe each image.
-7. **Formatting:** run `npx prettier --write` on the business docs you edited. `docs/` tables
-   outside `docs/business/` stay as they are (7.7).
-8. **Planner CLOSE, after the review passes, in the same PR.** The planner only; the orchestrator
-   commits it.
-   - Write `.cursor/jit_history/2026-09-25-market-fit-launch.md`, in the compact archive style of
-     `2026-09-12-sme-ux-critique-loop.md`:
-     - title "# JIT_PLAN — Market fit, hardening and launch (archived)";
-     - a header: created 2026-09-24, closed when #16 merges; ROADMAP 6.1–6.9 `[x]`, 6.10 open
-       (user-run), Phase 7 listed.
-   - Its **Decisions** section condenses D1–D13.
-   - Its **Outcome** section contains:
-     - The PR list, each with its slice and merge commit: #4–#19.
-     - A **step → PR map**, so the "step NN" references in code and docs resolve:
+1. **The api image carries the deployments.**
+   - `api/Dockerfile`: add `COPY contracts/deployments /app/contracts/deployments` and
+     `ENV OPENAD_DEPLOYMENTS_DIR=/app/contracts/deployments`. The path must be absolute, because
+     `REPO_ROOT` is `/`.
+   - A comment says what the directory holds: whatever `<chainId>.json` is committed (`84532.json`
+     once Sepolia is deployed). `deploy-gcp.sh --only stack` already refuses without that file.
+   - Compose's `/deployments` mount still overrides the path. `.dockerignore` already lets the
+     directory through (it excludes only `contracts/out`).
+2. **An empty build input means "unset"** (`web/src/lib/wagmi.ts`).
+   - Export two pure helpers:
+     - `walletConnectProjectId(raw)`: the trimmed value, or `undefined` for undefined, `""` or
+       blank.
+     - `walletGroups(projectId, dev)`: only the Browser group (`injectedWallet`) when there is no
+       id or in DEV; with an id, Browser plus `getDefaultWallets().wallets`.
+   - `createRealConfig()` uses both. Without an id it lists no WalletConnect-based wallet, and
+     passes a constant placeholder `projectId` that a comment says is never used. Never list
+     WalletConnect-based wallets under a fake id again.
+   - `resolveTargetChainId` treats a blank `VITE_CHAIN_ID` as unset.
+   - New `web/src/lib/wagmi.test.ts`:
+     - `""`, `"  "` and `undefined` resolve to `undefined`; `"abc"` resolves to `"abc"`;
+     - the groups without an id hold `injected` only;
+     - with an id and not DEV, they include `walletConnect`;
+     - `createRealConfig()` doesn't throw with an empty id (the regression). Stub
+       `import.meta.env` the way the other web tests do.
+3. **The build inputs reach the build.**
+   - `infra/gcp/cloudbuild.yaml`:
+     - declare `_WALLETCONNECT_PROJECT_ID`, `_GUIDE_URL` and `_DEMO_URL`, each defaulting to `""`;
+     - pass `VITE_WALLETCONNECT_PROJECT_ID`, `VITE_GUIDE_URL` and `VITE_DEMO_URL` to `build-web`,
+       and `VITE_GUIDE_URL` to `build-web-demo` too;
+     - use every substitution you declare: Cloud Build rejects an unused user substitution unless
+       `substitution_option: ALLOW_LOOSE` is set (inferred; verify before deploy).
+   - `scripts/deploy-gcp.sh`, only between L252 and L254 plus L257:
+     - a commented block sets:
+       - `WALLETCONNECT_PROJECT_ID="${WALLETCONNECT_PROJECT_ID:-}"`;
+       - `GUIDE_URL`, defaulting to ADR-0015's hosted guide (the `VITE_GUIDE_URL` value in
+         `.env.example`);
+       - `DEMO_URL="${DEMO_URL:-}"`, which stays hidden until the demo has its mapped URL
+         (43's §9 step).
+     - The block refuses any of the three that contains a comma, because gcloud splits
+       `--substitutions` on commas.
+     - Append `_WALLETCONNECT_PROJECT_ID=…,_GUIDE_URL=…,_DEMO_URL=…` to L257's `--substitutions`.
+     - Don't edit `usage()`: 43 documents these three names there (D14).
+   - `web/Dockerfile`: rewrite the L3-8 header comment. Say what each `ARG` does, and that an
+     empty value means unset.
+4. **The CSP matches what the page loads.**
+   - The nginx template, in all four CSP lines: `img-src ${CSP_IMG_SRC}`. Its header comment names
+     the variable.
+   - `web/Dockerfile`: `ENV CSP_IMG_SRC="'self' data:"`, a demo-safe default. It is required: the
+     nginx entrypoint substitutes only variables that are defined, and leaves `${CSP_IMG_SRC}` in
+     the header literally otherwise.
+   - `infra/gcp/services/web.yaml`, L29-33 only:
+     - `CSP_IMG_SRC: "'self' data: ${API_ORIGIN} https:"`. Paid media come from the API origin;
+       house ads come from publisher-hosted https URLs (`<open-ad>` on `/embed-demo`, and the
+       Supply house-ad preview).
+     - `connect-src` gains `https://*.walletconnect.com https://*.walletconnect.org` beside the
+       existing `wss://` entries (inferred; verify before deploy).
+     - Fix the comment.
+   - `web-demo.yaml`: `CSP_IMG_SRC: "'self' data:"` next to `CSP_CONNECT_SRC`, with the same
+     "never widen" note.
+   - Fonts:
+     - Remove the Google Fonts `preconnect` and stylesheet from `web/index.html`, L18-22 only (46
+       edits L8-14 on #16).
+     - The CSS stack (`--font-sans: Inter, ui-sans-serif, system-ui, sans-serif`) already falls
+       back. Normal builds then look like the demo, which the screenshots come from, and no
+       visitor IP goes to Google.
+     - `web/vite.config.ts` `demoIndexHtml`, L44-56 only: drop the font regex and fix the comment.
+       Keep the favicon line.
+   - Runbook `docs/deploy-gcp.md`:
+     - §6 (L257-268): the new substitutions and build args.
+     - §8, L291-296: the api image carries `contracts/deployments` with `OPENAD_DEPLOYMENTS_DIR`
+       set, so rebuild it after a `84532.json` or `8453.json` commit.
+     - §8, L331-333: `openad-web` gets `--set-env-vars` for `CSP_CONNECT_SRC` (as in `web.yaml`)
+       and `CSP_IMG_SRC`. Add one sentence: other wallet-SDK endpoints are inferred; check the
+       browser console for CSP reports in staging before setting a WalletConnect id in prod.
+5. **CI proves every image boots** (`.github/workflows/ci.yml`, the `docker` job; 42 is its sole
+   owner).
+   - Setup:
+     - a `postgres:16` service, as in the `api` job;
+     - `actions/setup-node` and `npm ci`;
+     - `npx playwright install chromium --with-deps` (CI only).
+   - **api image:**
+     - Before `docker build`, write a CI-only minimal `contracts/deployments/84532.json`:
+       `artifactVersion` 1, `chainId` 84532, and one `CampaignVault` entry with `abi: []`.
+       Delete it right after the build. Never commit it. Build the web images outside that
+       window, so `sync:deployments` never sees it.
+     - In the image, check that:
+       - `load_deployment(Settings().deployments_path, 84532)` loads, and the path is
+         `/app/contracts/deployments`;
+       - `uv run alembic upgrade head` succeeds against the service DB (`--network host`);
+       - the image's own CMD, started with the DB URL, answers `curl --retry … /v1/health` with
+         200.
+   - **Non-demo web image:**
+     - Build with `--build-arg VITE_API_URL=http://127.0.0.1:8000
+       --build-arg VITE_CHAIN_ID=84532` and **no** WalletConnect id: that is the regression.
+     - Run it; check `/healthz` and a CSP header with `img-src 'self' data:`; then run the boot
+       check.
+   - **Web-demo image:** keep the existing checks, add the same `img-src` assert, and run the
+     boot check on it too.
+   - **Boot check:** a new `e2e/scripts/web-boot-check.mjs <url> [--out <dir>]`.
+     - It uses `chromium` from `@playwright/test`, and honours `PLAYWRIGHT_CHROMIUM_PATH` when it
+       is set (as `e2e/demo/demo.config.ts` does).
+     - It fails:
+       - on any `pageerror`;
+       - when `#root` has no element children or no visible text 10 s after load;
+       - on a console message matching `/projectId/i`.
+     - Failed network requests are allowed: there's no API in CI.
+     - On failure it saves a screenshot into `--out`, and the job uploads it with `if: failure()`.
+6. **Docs, 42's hunks only:**
+   - `infra/gcp/README.md` L9-11: the cloudbuild bullet lists the new substitutions.
+   - `.env.example` L98 only: an unset or empty `VITE_WALLETCONNECT_PROJECT_ID` means browser
+     (injected) wallets only.
+   - ADR-0017 L138-139: the api image carries `contracts/deployments` and sets
+     `OPENAD_DEPLOYMENTS_DIR`.
+   - `scripts/check-sh.sh`: one block inserted between L115 and L116. It asserts that the dry-run
+     `builds submit` line carries `_WALLETCONNECT_PROJECT_ID=`, `_GUIDE_URL=` and `_DEMO_URL=`.
 
-       | Steps | PR |
-       | ----- | -- |
-       | 1, 3 | #4 |
-       | 4–13 | #8 |
-       | 14+15 | #10 |
-       | 16 | #13 |
-       | 19–22 | #9 |
-       | 23+24 | #5 |
-       | 25–29 | #7 |
-       | 30+31 | #11 |
-       | 34 | #6 |
-       | 35 | #12 |
-       | 36 and 36b | #16 |
-       | 37 | #15 |
-       | 38 | #14 |
-       | 39 | #17 |
-       | 40 | #19 |
-       | 41 | #18 |
+**Owns** the hunks above.
 
-       Steps 2, 17+18 and 32+33 were folded into other steps.
-     - The demo and deck links, which stay private until the owner shares them.
-     - The open user actions:
-       - the 6.10 live deploy;
-       - a custom domain;
-       - the WIF secrets;
-       - the Sepolia deploy plus `84532.json`;
-       - verify XFF, then enable the limiter;
-       - confirm `max_connections`;
-       - the audit;
-       - legal;
-       - sharing the Artifacts.
-     - Residual risks:
-       - not audited;
-       - the per-instance limiter is off until XFF is verified;
-       - DNS rebinding (T17);
-       - T18's per-address verify limit and concurrency;
-       - DNS TXT doesn't work;
-       - the same-site guard isn't PSL-aware.
-     - A pointer to Phase 7 (ROADMAP 7.1–7.18).
-   - Its **Identity fence** section is as in §6.
-   - Delete `.cursor/JIT_PLAN.md`, as `45645e1` did. The full plan stays in git history.
-   - Refresh `.cursor/JIT_INDEX.md`:
-     - ADRs 0001–0017;
-     - the Phase 6 section points at the archive;
-     - drop the "accepted" and "in progress" wording;
-     - the hosted demo is "rebuilt from main after #16".
+**Must not touch:**
+- `deploy-gcp.sh` outside its block and L257, including `usage()`;
+- `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, README, `docs/threat-model.md`;
+- `infra/gcp/services/{api,indexer,settler}.yaml`, `jobs/migrate.yaml` and `deploy.yml`;
+- the runbook outside L257-268, L291-296 and L331-333;
+- `web/index.html` outside L18-22.
 
-**Verify:** run 36's Verify block in full (after the merge), plus the following.
+**Verify:**
 ```bash
-cd /home/claude/OpenAd
-git log --merges --oneline origin/main | head -5          # #19, #18, #17 at the top
-grep -n 'periodsWindowSize(88_200, 3600)' web/src/lib/auction.test.ts || echo "FAIL ceil test line"
-(cd api && uv run ruff check src tests && uv run mypy src && uv run pytest -q)   # main's api code after the merge
-grep -rn 'TBD-36' --exclude-dir=node_modules --exclude-dir=.cursor . && echo "FAIL placeholders" || echo tbd-ok
-grep -n "nth(" e2e/demo/capture-screenshots.mjs && echo "REVIEW positional rows" || echo rows-ok
-grep -n "ship separately\|outbound-fetch-bounds PR" README.md docs/ROADMAP.md && echo "REVIEW PR claims" || echo claims-ok
-grep -n "fix round\|step 39" docs/ARCHITECTURE.md .env.example && echo "REVIEW process words" || echo words-ok
-grep -n "services delete openad-api openad\|secrets delete openad-database-url-<ENV> openad" docs/deploy-gcp.md && echo "FAIL teardown" || echo teardown-ok
-grep -n "checked against the same rule" docs/deploy-gcp.md && echo "FAIL host rule" || echo hostrule-ok
-git diff --stat origin/main...HEAD                         # 36's files only (plus .cursor/ after CLOSE)
+cd /home/claude/OpenAd-42
+npm run typecheck && npm run lint && npm run test && npm run build && npm run build:demo \
+  && node web/scripts/check-demo-bundle.mjs
+npx prettier --check web/src/lib/wagmi.ts web/src/lib/wagmi.test.ts web/vite.config.ts \
+  web/index.html e2e/scripts/web-boot-check.mjs
+npm run check:sh
+python3 -c "import yaml,sys; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" \
+  .github/workflows/ci.yml infra/gcp/cloudbuild.yaml infra/gcp/services/web.yaml infra/gcp/services/web-demo.yaml
+# The CI docker job's checks, run locally (dockerd up; ports 5181-5189; the 84532.json fixture
+# exists only while the api image builds, then is deleted):
+docker build -f api/Dockerfile --build-arg UV_EXTRAS=gcs -t openad-api:42 .
+docker run --rm openad-api:42 uv run python -c "from openad.config import Settings; from openad.chain.deployments import load_deployment; s=Settings(); print(s.deployments_path, load_deployment(s.deployments_path, 84532).chain_id)"
+docker build -f web/Dockerfile --build-arg VITE_API_URL=http://127.0.0.1:8000 --build-arg VITE_CHAIN_ID=84532 -t openad-web:42 .
+docker run -d --name web42 -p 5181:8080 openad-web:42 && node e2e/scripts/web-boot-check.mjs http://127.0.0.1:5181/
+curl -sI http://127.0.0.1:5181/ | grep -i "content-security-policy" | grep -F "img-src 'self' data:"
+# Negative control: the same boot check against an image built from f50076d's web/ must fail
+# (blank root, or a projectId error). Say which in the handback.
+git status --short     # no 84532.json, no package-lock.json churn
+git diff --stat origin/main...HEAD
 ```
 
 **Done when:**
-- Main is merged in (`44aa234`, done), and 36's Verify block and the checks above pass.
-- The screenshots are re-captured: deterministic, ≤ 400 KB each, and Discover shows 40's labels.
-- No `#TBD-36` remains. README, ROADMAP (6.7, 6.9, Phase 7 through 7.18) and the launch
-  checklist cite #16, #17, #18 and #19.
-- The `periodsWindowSize(88_200, 3600) === 25` test line is in, and web tests pass.
-- The R2 leftovers are fixed. The GTM plan and Slide 10 match the hosted deck.
+- Both image checks pass locally and in the PR's CI `docker` job, and the negative control fails
+  on the old code.
+- The web unit tests pass, including the new `wagmi.test.ts`.
+- The build inputs reach Cloud Build; the CSP allows exactly the image sources listed; no Google
+  Fonts are loaded.
+- No file outside the owned hunks changed, and the Opus review passes.
+
+### Step 43 — Cloud Run wiring (slice P, `fix/cloud-run-wiring`)
+
+_Specced 2026-09-25 10:05 UTC (REPLAN). Facts checked at `f50076d`; line numbers are main's._
+
+**When and where:**
+- Worktree `/home/claude/OpenAd-43`, branch `fix/cloud-run-wiring` off `f50076d`. It runs in
+  parallel with 42, 44, 45 and 46.
+- Sonnet coder, Opus review. **Risk: medium.** It is deploy-time only, with no product code, but
+  most GCP facts can't be checked here.
+- No WebFetch or WebSearch (D14). Mark every GCP fact the repo can't prove "(inferred; verify
+  before deploy)".
+- Postgres DB `openad_test_43`, only if you run the api suite (43 changes no api code).
+- Commit on the branch (`fix(infra): …`). The orchestrator opens the PR. Don't touch
+  `docs/ROADMAP.md` or README: 47 records this step as 6.12.
+
+**Evidence:**
+- **L1: no service can reach the database.**
+  - §3 creates the instance with `--no-assign-ip` (L60), a private IP only.
+  - No manifest configures VPC egress, so Cloud Run has no route to that IP.
+  - The `db-custom-1-3840` tier (L59) is given without `--edition=ENTERPRISE`. New PG16
+    instances default to Enterprise Plus, which doesn't offer `db-custom-*` tiers (inferred;
+    verify before deploy).
+- **L1: the scripted deploy leaves the public services private.**
+  - `gcloud run services replace` applies no IAM. The manual path's `--allow-unauthenticated`
+    (§8) has no counterpart in `deploy-gcp.sh`.
+  - `WEB_DEMO_URL` is an undocumented placeholder (`deploy-gcp.sh:221`), used by the web-demo
+    smoke check (L298-299).
+- **L1: the WIF deployer can't run `gcloud builds submit`.** §10 grants only `run.admin`,
+  `iam.serviceAccountUser` and `artifactregistry.writer` (L420-426).
+- **L3s:**
+  - §11's `curl -sf …/v1/serve/1` fails on a fresh deploy, since there's no slot 1 yet; its
+    `/demo/` path doesn't exist, because the demo is its own service.
+  - `openad-media-<ENV>` is a global bucket name that someone else may already own.
+  - `RPC_ORIGINS="${RPC_ORIGINS:-$RPC_URL}"` (`deploy-gcp.sh:223`) puts a keyed RPC URL into
+    the public CSP header, although the web app never uses `RPC_URL` at all (`wagmi.ts`'s
+    `http()` is viem's public chain RPC).
+  - ROADMAP 7.13's placeholders do more than pass the same-site guard: `API_URL` and `WEB_URL`
+    default to `example.com` (L219-221), and those defaults reach `OPENAD_PUBLIC_URL` and
+    `OPENAD_CORS_ORIGINS` (`api.yaml` L51-54) and the web build's `VITE_API_URL`
+    (`_API_URL`).
+  - `infra/gcp/README.md` L3-5 still says "once `scripts/deploy-gcp.sh` exists".
+  - ARCHITECTURE §7's manual list (L590-602) has no settler, and says "(migrations on API
+    start)".
+
+**Items**
+1. **The private IP is reachable, through Direct VPC egress.**
+   - Manifests: add two annotations to the template annotations of `api.yaml`, `indexer.yaml` and
+     `settler.yaml` (next to `cloudsql-instances`), and to the execution-template annotations of
+     `jobs/migrate.yaml`:
+     - `run.googleapis.com/network-interfaces: '[{"network":"${VPC_NETWORK}","subnetwork":"${VPC_SUBNET}"}]'`;
+     - `run.googleapis.com/vpc-access-egress: private-ranges-only`.
+     Both are inferred; verify before deploy. Private ranges only, so RPC and GCS traffic keep
+     Cloud Run's normal internet egress, and no Cloud NAT is needed. Each manifest header's
+     "Required env vars" names `VPC_NETWORK` and `VPC_SUBNET`.
+   - `deploy-gcp.sh`:
+     - `VPC_NETWORK="${VPC_NETWORK:-default}"` and `VPC_SUBNET="${VPC_SUBNET:-default}"` in the
+       defaults block;
+     - `render()` passes them, and `MEDIA_BUCKET`.
+   - Runbook:
+     - §1: enable `compute.googleapis.com` and `servicenetworking.googleapis.com`, which PSA and
+       VPC egress need (inferred).
+     - §3, a paragraph after the PSA block (after L53): Cloud Run reaches the private IP only
+       through Direct VPC egress (the annotations above). The subnet (`default` in `<REGION>`)
+       needs free addresses (inferred).
+     - §3, `gcloud sql instances create` (L58-61): add `--edition=ENTERPRISE`, with the reason.
+     - §3, a verify-first note, in that same inserted paragraph (don't edit L62-73: #16
+       rewrote the password and connection-string text there, and 47 points it at this note).
+       The migrate job (§7) opens the first connection. If the
+       `/cloudsql/…` socket can't reach a private-IP-only instance, store the TCP form
+       `…@<PRIVATE_IP>:5432/openad` in the secret instead
+       (`gcloud sql instances describe openad-<ENV> --format='value(ipAddresses[0].ipAddress)'`;
+       inferred; verify before deploy).
+     - §8, the api, indexer and settler commands (L298-329): `--network=<VPC_NETWORK>
+       --subnet=<VPC_SUBNET> --vpc-egress=private-ranges-only` (inferred), and `<MEDIA_BUCKET>`.
+   - ADR-0017:
+     - "Database" (L103-111): Direct VPC egress and the Enterprise edition.
+     - Append "Amendment (2026-09-25, slice-review fixes)": VPC egress, the edition, the invoker
+       binding, the WIF roles, and the placeholder guard. 43 is the only step that appends to this
+       ADR.
+2. **The public services are public.**
+   - `deploy-gcp.sh`: after each `services replace` of `openad-api`, `openad-web-demo` and
+     `openad-web`, run `gcloud run services add-iam-policy-binding <svc> --member=allUsers
+     --role=roles/run.invoker --project … --region …`. It is idempotent. Never for the indexer or
+     the settler.
+   - Runbook:
+     - §6-8 intro (L234-255): say that the script does this, and why (`services replace` applies
+       no IAM).
+     - If an org policy (domain-restricted sharing) refuses `allUsers`, give the alternative:
+       `run.googleapis.com/invoker-iam-disabled` / `--no-invoker-iam-check` (inferred; verify
+       before deploy).
+3. **The demo's URL.**
+   - An unset `WEB_DEMO_URL` means "ask Cloud Run". After deploying `openad-web-demo`, read
+     `gcloud run services describe openad-web-demo --format='value(status.url)'` and smoke that.
+     Under `--dry-run`, print a placeholder.
+   - Runbook §9 (L359-365): a third mapping, `gcloud run domain-mappings create
+     --service=openad-web-demo --domain=demo.<domain>`. Then set both `WEB_DEMO_URL` and `DEMO_URL`
+     (42's input for the web build's "Try the demo" link) to that URL.
+4. **No placeholders in a real deploy.**
+   - `deploy-gcp.sh`: `--only stack|all` refuses when `API_URL` or `WEB_URL` is unset or empty.
+     - Check before the defaults are applied; don't pattern-match `example.com`, because
+       `check-sh.sh`'s accept cases use `example.com` hosts.
+     - The guard runs under `--dry-run` too, like the others. `--only demo` needs neither URL.
+   - `.github/workflows/deploy.yml` (43 owns it): pass these from the `staging` environment's
+     `vars`: `API_URL`, `WEB_URL`, `WEB_DEMO_URL`, `MEDIA_BUCKET`, `VPC_NETWORK`, `VPC_SUBNET`,
+     `WALLETCONNECT_PROJECT_ID`, `GUIDE_URL` and `DEMO_URL`. An unset var arrives as an empty
+     string; the guard and the defaults treat that as unset.
+   - This closes 7.13's placeholder part; 47 notes it in the ROADMAP.
+5. **The bucket name is per project.**
+   - `MEDIA_BUCKET="${MEDIA_BUCKET:-openad-media-${PROJECT}-${ENV}}"`, because bucket names are
+     global.
+   - `api.yaml` L46 and `indexer.yaml` L35 use `${MEDIA_BUCKET}`.
+   - The runbook's §4 (L183, L191, L198) and §8 use `<MEDIA_BUCKET>`, with that suggested value.
+   - The `.env.example` L41 comment, and ADR-0017 L118 (`openad-media-<env>`).
+   - #16 rewrote §14 (Teardown), so its bucket line is 47's.
+6. **CSP entries are origins.**
+   - `RPC_ORIGINS` defaults to the public RPC the web app actually uses: `https://sepolia.base.org`
+     for staging, `https://mainnet.base.org` for prod. Never `RPC_URL`.
+   - A new `origin_of` helper, next to `host_of`, reduces each caller-set `RPC_ORIGINS` entry to
+     `scheme://host[:port]` and refuses an entry with userinfo. `API_ORIGIN` is
+     `origin_of "$API_URL"`.
+   - `web.yaml`'s header comment (L5-7) says so.
+7. **WIF roles for `gcloud builds submit`.**
+   - Runbook §10, the roles loop (L420-426) adds:
+     - `roles/cloudbuild.builds.editor`;
+     - `roles/serviceusage.serviceUsageConsumer`;
+     - `roles/logging.viewer`: gcloud streams `CLOUD_LOGGING_ONLY` build logs, and exits
+       non-zero without it;
+     - `roles/storage.admin` on the bucket `gs://<PROJECT_ID>_cloudbuild`, for the source upload.
+   - §2 pre-creates that bucket, since the deployer SA can't create buckets.
+   - The service account that runs the build needs `roles/artifactregistry.writer`: new projects
+     may run builds as the Compute Engine default SA.
+   - Mark all of this "(inferred; verify before deploy)". Keep the "never owner or editor" rule.
+   - §10's secrets paragraph (L433-438) lists item 4's environment `vars`. Don't touch L427-432
+     (#16 edits L429).
+8. **Smoke checks pass on a fresh deploy.** Runbook §11 (L440-446):
+   - `/v1/health` must return 200;
+   - `/v1/serve/1` may be a 404 with a JSON body on a fresh deploy, so check for 200-or-404 and
+     JSON, not `-f`;
+   - the demo is checked at its own host's `/healthz`, not `/demo/`.
+   The script already smokes only `/v1/health` and `/healthz`.
+9. **Stale docs.**
+   - `infra/gcp/README.md` (L1-5 and L20-52; L9-11 is 42's):
+     - fix L3-5;
+     - the placeholder table gains `MEDIA_BUCKET`, `VPC_NETWORK`, `VPC_SUBNET` and
+       `WEB_DEMO_URL`;
+     - note the invoker binding and the placeholder guard.
+   - ARCHITECTURE §7's manual-equivalent block (L590-602 only):
+     - add `cd api && uv run python -m openad.settler` (needs `OPENAD_SETTLER_KEY`);
+     - "(migrations on API start)" becomes "api/indexer/settler as containers; a one-shot
+       `migrate` service runs first".
+10. **`usage()`** (43 owns it). Document every environment input the script reads:
+    - `API_URL` and `WEB_URL` (required for stack and all);
+    - `WEB_DEMO_URL`, `MEDIA_BUCKET`, `VPC_NETWORK`, `VPC_SUBNET`, `RPC_URL` and `RPC_ORIGINS`;
+    - 42's `WALLETCONNECT_PROJECT_ID`, `GUIDE_URL` and `DEMO_URL` (empty means the feature is
+      hidden).
+    Add the new guard to the Guards list.
+11. **`check-sh.sh`** (43 owns it, except 42's block between L115 and L116). Insert the new
+    dry-run tests after L120 and after L184:
+    - `--only demo` prints an `add-iam-policy-binding` line naming `openad-web-demo` and
+      `allUsers`, and a `services describe openad-web-demo` line;
+    - `--only stack` with `API_URL`/`WEB_URL` unset, and with them empty, is refused by the new
+      guard's own message;
+    - with `RPC_URL=https://rpc.example/v2/SECRETKEY`, no output line contains `SECRETKEY`.
+    The existing tests keep passing unchanged.
+
+**Owns** the hunks above; see D14.
+
+**Must not touch:**
+- `deploy-gcp.sh` L252-257 (42's block and the Cloud Build call);
+- `cloudbuild.yaml`, `ci.yml`, both Dockerfiles, the nginx template, `web-demo.yaml`, and
+  `web.yaml` L29-33;
+- `api.yaml` after L69 (45 appends there);
+- the runbook's §3 L62-178, §5, §8 L291-296, L331-333 and L341-344, §9 L396-399, §10 L427-432,
+  and any new §11 subsection;
+- ADR-0017 L51-54, L138-139, L152-154 and L186-187;
+- ARCHITECTURE outside L590-602; ROADMAP; README; `docs/threat-model.md`.
+
+**Verify:**
+```bash
+cd /home/claude/OpenAd-43
+npm run check:sh
+bash -n scripts/deploy-gcp.sh; command -v shellcheck && shellcheck -x scripts/*.sh
+for f in infra/gcp/services/*.yaml infra/gcp/jobs/migrate.yaml infra/gcp/cloudbuild.yaml .github/workflows/deploy.yml; do
+  python3 -c "import sys,yaml; yaml.safe_load(open(sys.argv[1]))" "$f" || echo "FAIL $f"; done
+# Render every manifest the way render() does; each must parse, and no ${...} may be left over:
+export PROJECT_ID=p REGION=r ENV=staging IMAGE_TAG=t CHAIN_ID=84532 RPC_URL=https://sepolia.base.org \
+  API_URL=https://api.x.com WEB_URL=https://app.x.com API_ORIGIN=https://api.x.com \
+  RPC_ORIGINS=https://sepolia.base.org MEDIA_BUCKET=b VPC_NETWORK=default VPC_SUBNET=default
+for f in infra/gcp/services/*.yaml infra/gcp/jobs/migrate.yaml; do
+  envsubst <"$f" | python3 -c "import sys,yaml; yaml.safe_load(sys.stdin)" && envsubst <"$f" | grep -n '\${' && echo "LEFTOVER in $f"; done
+grep -c "inferred; verify before deploy" docs/deploy-gcp.md    # every new GCP fact is marked
+git diff --stat origin/main...HEAD                               # owned files only
+```
+
+**Done when:**
+- `check:sh` passes, with the new tests.
+- Every manifest renders to valid YAML with no placeholder left over.
+- Each L1 above has a concrete script or runbook change, and every GCP fact the repo can't prove
+  is marked.
+- No file outside the owned hunks changed, and the Opus review passes.
+
+### Step 44 — A dedicated settler key (slice Q, `fix/settler-key`)
+
+_Specced 2026-09-25 10:05 UTC (REPLAN). Facts checked at `f50076d`._
+
+**When and where:**
+- Worktree `/home/claude/OpenAd-44`, branch `fix/settler-key` off `f50076d`. It runs in parallel
+  with 42, 43, 45 and 46.
+- Opus coder, Opus review. **Risk: high**: it is about custody of the contract owner key, and it
+  changes the deploy script.
+- Postgres DB `openad_test_44`.
+- Commit on the branch (`fix(contracts): …`, `fix(api): …`). The orchestrator opens the PR.
+  Don't touch `docs/ROADMAP.md` or README: 47 records this step as 6.13.
+
+**Evidence: L1, the contract owner key goes into the settler container.**
+- `contracts/script/deploy.py` L274-279 set the treasury, the vault's settler and the moderator
+  to `boa.env.eoa`: the deployer, which is the Ownable owner of all four contracts.
+- The runbook's §5 (L217-219, "Generate/import the deployer/settler EOA's private key") then puts
+  that key into `openad-settler-key-<ENV>`.
+- Whoever takes the settler container's key could therefore call `set_settler`,
+  `set_treasury`, `set_fee_bps` and `AdSlot.set_market` (a lease rewrite), not just
+  `settle_batch`.
+- That breaks AGENTS.md ("the settler … may only `settle_batch`") and ARCHITECTURE §8 L608 ("The
+  deploy key exists only in the contracts environment").
+
+**Items**
+1. **`deploy.py` takes the settler address.**
+   - A pure helper (in `deploy.py`, or a small `script/settler.py` that both scripts import):
+     `resolve_settler(network_name, deployer, configured)`.
+     - On `pyevm` and `anvil`: `configured`, or else the deployer. Local dev and the compose
+       stack keep Anvil #0.
+     - On any other network, `configured` is required. It must be a 20-byte hex address, not the
+       zero address, and different from the deployer (compared case-insensitively). Otherwise
+       raise, naming `OPENAD_SETTLER_ADDRESS` and `docs/deploy-sepolia.md`.
+   - `deploy()` reads `OPENAD_SETTLER_ADDRESS` and resolves it before the first transaction, so a
+     bad setting fails before any gas is spent. `vault.set_settler(...)` uses it, and the deploy
+     prints it.
+   - The artifact schema doesn't change. The treasury and the moderator stay as they are: they
+     belong to the owner (or the Safe) and are not hot keys.
+   - Keep the module docstring (L8-14) and PROTOCOL §10's deploy order (≈L430-445) in sync:
+     `set_settler(<dedicated settler EOA>)`, with the deployer only on Anvil or pyevm.
+2. **Rotation.** A new `contracts/script/set_settler.py` (`uv run mox run set_settler --network …`):
+   - It loads `CampaignVault` from `deployments/<chainId>.json` and applies `resolve_settler` to
+     `OPENAD_SETTLER_ADDRESS`.
+   - It sends `set_settler` from the owner and prints the new `settler()`.
+   - On `base` the owner is a Safe (`docs/deploy-mainnet.md`), so there it prints the calldata for
+     a Safe transaction instead of sending.
+3. **The settler refuses the owner's key** (`api/src/openad/settler/__main__.py`).
+   - Add a pure `check_identity(address, owner, settler, treasury, chain_id)` in a new
+     `openad/settler/identity.py`, returning fatal and warning findings.
+   - After `load_deployment`, read the vault's `owner()`, `settler()` and `treasury()`.
+     - Off chain 31337, exit 1 with `settler.key_is_owner` if the key's address is the owner.
+     - Warn with `settler.not_current_settler` if it isn't `settler()`. That is a rotation in
+       progress: `SettlerRunner.tick` leaves reverted batches unsettled and retries them.
+     - Warn if it equals `treasury()`, because fees would then sit on a hot key.
+     - On 31337, only warn.
+   - An RPC error during the check is fatal; Cloud Run restarts the container.
+   - Start the liveness listener only after the check, so a misconfigured revision never looks
+     healthy.
+4. **Runbooks.**
+   - `docs/deploy-sepolia.md` (44 owns it): a "Settler EOA" section before Broadcast.
+     - Create a new EOA for the settler only, for example `cast wallet new`, or eth_account
+       writing the key to a 0600 file, never printed to a shared terminal.
+     - Fund it with a little Base Sepolia ETH, for gas only; it never needs USDC.
+     - Export `OPENAD_SETTLER_ADDRESS=<its address>` for the deploy.
+     - Store the key as `openad-settler-key-<ENV>` (`docs/deploy-gcp.md` §5).
+     - Rotation: a new EOA → a new secret version → `set_settler` from the owner → redeploy
+       `openad-settler`. In between, batches revert with "not settler" and are retried.
+   - `docs/deploy-mainnet.md`:
+     - the settler is a dedicated EOA, never the Safe or one of its signers;
+     - `set_settler` goes through the Safe;
+     - the deploy script requires `OPENAD_SETTLER_ADDRESS`.
+   - `docs/deploy-gcp.md`:
+     - §5, **L218 only** (L217 borders #16's hunk): the key is the dedicated settler EOA's (see
+       `docs/deploy-sepolia.md`), never the deployer's or the owner's.
+     - §8's settler paragraph (L341-344): one sentence saying the service refuses to start if its
+       key owns the vault.
+   - `.env.example`:
+     - L90-93: staging and prod use a dedicated, gas-only settler EOA.
+     - The contracts block (L118-123): `# OPENAD_SETTLER_ADDRESS=` (read by `deploy.py` and
+       `set_settler.py`; required off Anvil).
+5. **Docs.**
+   - ARCHITECTURE §3.9 (L384-387): the settler key is a dedicated EOA that holds gas only. It is
+     never the contracts' owner, and off Anvil the process refuses to start if it is.
+   - ARCHITECTURE §8 L608: the owner (deploy) key never leaves the contracts environment
+     (Moccasin wallet or Safe); the settler holds a separate, gas-only key that can only call
+     `settle_batch`.
+   - ADR-0017 L51-54: the same, for the settler service.
+   - `docs/threat-model.md`:
+     - A new **T20** row after T19: compromise of the settler container's key. Mitigations: a
+       dedicated gas-only EOA; the deploy refuses the deployer off Anvil; the startup refusal;
+       Secret Manager IAM; rotation with `set_settler`.
+     - The residual bullet at L64 adds "or anyone holding the settler key, until `set_settler`
+       rotates it".
+6. **Tests.**
+   - `contracts/tests/test_deploy_settler.py`:
+     - a table of `resolve_settler` cases: pyevm and anvil default to the deployer; an override
+       is honoured; `base-sepolia` and `base` raise without one; a settler equal to the deployer
+       raises, in mixed case too; the zero address and malformed input raise;
+     - the pyevm deploy still sets `settler() == deployer`, and with `OPENAD_SETTLER_ADDRESS`
+       set (monkeypatch), `settler()` equals it;
+     - `set_settler.py` uses the same helper.
+   - `api/tests/test_settler_identity.py`: item 3's rules, with fakes and no chain.
+
+**Owns:** `contracts/script/`, the new contracts and api tests, `openad/settler/`,
+`docs/PROTOCOL.md` §10, `deploy-sepolia.md`, `deploy-mainnet.md`, and the listed hunks of
+`deploy-gcp.md`, `.env.example`, ARCHITECTURE, ADR-0017 and the threat model.
+
+**Must not touch:** `contracts/src/` (D8: no protocol contract changes; `set_settler` already
+exists on `CampaignVault`), `infra/`, `scripts/`, `.github/`, `AGENTS.md` (#16 edits it), ROADMAP
+and README.
+
+**Verify:**
+```bash
+cd /home/claude/OpenAd-44/contracts && uv run mox compile && uv run pytest -q
+cd /home/claude/OpenAd-44/api && uv run ruff check src tests && uv run ruff format --check src tests \
+  && uv run mypy src && uv run pytest -q
+OPENAD_TEST_PG_URL='postgresql+asyncpg://postgres@/openad_test_44?host=/tmp/pgdata_jit16' uv run pytest -q
+cd /home/claude/OpenAd-44/contracts && OPENAD_SETTLER_ADDRESS=0x00000000000000000000000000000000000000a1 uv run mox run deploy   # pyevm: prints that settler
+grep -n "set_settler(boa.env.eoa)" script/deploy.py && echo "FAIL deployer settler" || echo ok
+git -C /home/claude/OpenAd-44 diff --stat origin/main...HEAD
+```
+
+**Done when:**
+- No path off Anvil or pyevm can make the deployer the settler.
+- The settler process refuses a key that owns the vault.
+- Rotation is scripted and documented; the docs and PROTOCOL §10 match the code; T20 is in.
+- The contracts and api suites pass, with PG too.
 - The Opus review passes.
-- Then the planner's CLOSE (item 8) is committed on the branch, and the orchestrator:
-  1. marks #16 ready and waits for CI 5/5;
+
+### Step 45 — CPC click integrity (slice R, `fix/cpc-click-integrity`)
+
+_Specced 2026-09-25 10:05 UTC (REPLAN). Facts checked at `f50076d`; line numbers are main's._
+
+**When and where:**
+- Worktree `/home/claude/OpenAd-45`, branch `fix/cpc-click-integrity` off `f50076d`. It runs in
+  parallel with 42, 43, 44 and 46.
+- Opus coder, Opus review. **Risk: high**: publisher CPC earnings and advertiser spend.
+- Postgres DB `openad_test`.
+- Commit on the branch (`fix(api): …`). The orchestrator opens the PR. Don't touch
+  `docs/ROADMAP.md` or README: 47 records this step as 6.14.
+
+**Evidence:**
+- **L2: CDN caching of serve JSON breaks click tokens and analytics.**
+  - `routers/serve.py:84` sets `Cache-Control: public, max-age=<ttl>` for every status,
+    including campaign responses. Each of those carries a one-time click token (`serve.py:71-81`).
+  - A shared cache hands one token to many visitors. The first click pays; every later one is
+    "used", and `resolve_click` returns no landing, so the visitor gets a **404**.
+  - Cached serves never record a `ServeEvent`, so impressions are undercounted.
+  - The runbook (§9 L396-399) and ADR-0017 (L152-154) recommend a CDN on `/v1/serve/*`.
+- **L2: the burst key is the proxy's IP, and it never evicts.**
+  - `routers/clicks.py:19` keys the burst rule on `request.client.host`. Behind Cloud Run's front
+    end, every visitor shares that address.
+  - So the second click on a slot within 2 s, from anyone, is marked `burst` and not paid
+    (`services/clicks.py:144`).
+  - `_BURST` (`services/clicks.py:16`) is a plain dict that grows by one key per client and slot,
+    forever.
+- **L2: origin enforcement is off in staging and prod.** `config.py:55` defaults it to false, and
+  `api.yaml` doesn't set it. The guide (`embed-code.md` L50-54) and ARCHITECTURE §3.4 describe
+  paid creatives showing only on the slot's domain.
+
+**Items**
+1. **Campaign serve responses are never shared** (`routers/serve.py`).
+   - `status == "campaign"` → `Cache-Control: private, no-store`, with no `ETag`.
+   - Lease, house and empty keep `public, max-age=<ttl>`, `Vary: Origin` and the ETag. The 404
+     for an unknown slot and `/media` don't change.
+   - The embed needs no change: it fetches per view, and the serve contract's JSON is unchanged.
+   - ARCHITECTURE §3.4 (L232-240 only): the rule, and why (one token per response; each response
+     is an impression). §3.3's "Serving (public, cacheable)" heading (L161) is 47's to fix after
+     the merge, because 46 edits §3.3 on #16.
+2. **A CDN caches media only.**
+   - Runbook §9 (L396-399 only): an optional CDN may cache `/v1/serve/*/media`, never
+     `/v1/serve/{id}`.
+   - ADR-0017 L152-154 and L186-187, in place: the same scope.
+3. **The burst key is the trusted client key.**
+   - `routers/clicks.py`: the key is `client_key(request, settings.trusted_proxy_hops)`. Reuse
+     `openad.ratelimit.client_key`; move it to a neutral module only if the import direction
+     forces it, and keep `ratelimit.client_key` importable.
+   - The burst rule runs only when that key identifies the visitor: `trusted_proxy_hops > 0`, or
+     `settings.is_dev` (in dev and test the TCP peer is the visitor). Put the condition in one
+     helper, e.g. `clicks.burst_rule_active(settings)`.
+   - Otherwise (staging or prod with 0 hops) the rule is skipped, and `clicks.burst_rule_disabled`
+     is logged once, at app startup (`main.py`'s lifespan).
+   - Unchanged: the hourly per-campaign cap, the single-use token and the budget checks.
+   - `services/clicks.py`: replace the unbounded `_BURST` dict with a bounded map, like
+     `ratelimit.TokenBucketLimiter`:
+     - at most 10 000 keys, with LRU eviction;
+     - expired entries dropped on insert;
+     - keyed, as today, by an HMAC of `client_key:slot_id`, so no raw IP is stored.
+4. **Origin enforcement is on in the hosted environments.**
+   - `infra/gcp/services/api.yaml`: append `OPENAD_SERVE_ENFORCE_ORIGIN: "true"` at the **end** of
+     the env list, after L74. 43 edits only L1-7, the annotations and L46. Local dev and compose
+     stay off.
+   - `.env.example` L34-36: staging and prod set it in `api.yaml`.
+   - ARCHITECTURE §3.4 (L238-240):
+     - it is on in `infra/gcp` (staging and prod), and off by default for local development;
+     - a browser can't forge `Origin`, but a script can, so it narrows third-party embedding and
+       doesn't stop click farms.
+   - Guide `docs/guide/publisher/embed-code.md` L50-54: paid creatives show only on pages whose
+     host is the slot's registered domain or a subdomain of it. That is separate from the
+     domain-verification badge.
+   - 47 adds `OPENAD_SERVE_ENFORCE_ORIGIN=true` to the runbook's manual api command, which 43
+     owns.
+   - The hops setting's docs:
+     - `.env.example` L81-84: it also keys the click burst rule, and with 0 on Cloud Run the rule
+       is skipped;
+     - ARCHITECTURE §3.8 (L378-380): the click vars line;
+     - a new ARCHITECTURE §8 bullet after L613: the burst map holds at most 10 000 HMAC'd keys,
+       in process memory only.
+5. **Runbook §11:** a new "### Click integrity" subsection, inserted at L456 (between "Sign-in
+   origin" and "Auth rate limit"):
+   - once a CPC campaign serves, `curl -sI …/v1/serve/<cpc slot>` shows `private, no-store`;
+   - a request with a foreign `Origin` to a leased slot gets `house` or `empty`;
+   - the burst rule stays off until the next subsection's steps verify the XFF hop count, and then
+     uses the same `OPENAD_TRUSTED_PROXY_HOPS`.
+6. **Threat model:** amend **T13**'s row in place (L53):
+   - tokens are never shared through a cache (`private, no-store`);
+   - the burst HMAC uses the trusted-hop client key, and is off until the hops are verified;
+   - in staging and prod, paid serves happen only on the slot's domain.
+   There is no new row. T21 is reserved: use it only for a genuinely new threat, placed after T20,
+   and say so in the handback.
+7. **Tests**, in a new `api/tests/test_click_integrity.py`. Change `test_cpc_serve.py` and
+   `test_serve.py` only where they assert the old behaviour.
+   - Headers:
+     - a campaign serve → `private, no-store`, and no `public`;
+     - two serves in a row mint different tokens;
+     - lease, house and empty → `public, max-age=30` with `Vary: Origin`;
+     - an unknown slot → `public, max-age=60`;
+     - media stays public.
+   - With hops 1:
+     - two clicks through the same peer within 2 s, with different right-most XFF client
+       entries, are both payable;
+     - the same client twice → the second is `burst`;
+     - a forged left-hand entry doesn't change the key.
+   - With `env=staging` and hops 0: two clicks from one peer within 2 s are both payable, and the
+     disable log is emitted. With `env=test` or `dev` and hops 0, the rule applies to the TCP peer.
+   - Eviction: inserting more than the maximum keeps the map bounded and evicts the oldest; an
+     expired entry doesn't block.
+   - `serve_enforce_origin=True`: a leased slot with a matching `Origin` serves the lease; a
+     foreign `Origin` gets house or empty, with `origin_ok=false`. Extend the existing test if
+     there is one.
+   - Mutation check: reverting each change (the header, the key source, the skip rule, the bound)
+     fails at least one test.
+
+**Owns:**
+- `routers/serve.py`, `routers/clicks.py` and `services/clicks.py`;
+- `main.py`'s lifespan log only, and `ratelimit.py` only if `client_key` moves;
+- the new test file;
+- the listed hunks of `api.yaml`, `.env.example`, ARCHITECTURE, ADR-0017, the runbook and the
+  threat model;
+- guide `embed-code.md` L50-54, and `marketplace/performance.md` L8-15 only if a sentence there
+  becomes false.
+
+**Must not touch:** `config.py`'s defaults (enforcement stays off locally), the embed,
+`infra/` except `api.yaml` after L74, `scripts/`, `.github/`, ROADMAP and README.
+
+**Verify:**
+```bash
+cd /home/claude/OpenAd-45/api
+uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy src && uv run pytest -q
+OPENAD_TEST_PG_URL='postgresql+asyncpg://postgres@/openad_test?host=/tmp/pgdata_jit16' uv run pytest -q
+grep -n "public, max-age" src/openad/routers/serve.py     # none on the campaign path
+grep -n "_BURST: dict" src/openad/services/clicks.py && echo "FAIL unbounded" || echo ok
+grep -n "request.client.host" src/openad/routers/clicks.py && echo "FAIL proxy ip" || echo ok
+git -C /home/claude/OpenAd-45 diff --stat origin/main...HEAD
+```
+
+**Done when:**
+- The three L2s are closed, with tests that fail on the old code (the mutation check).
+- The docs say exactly what the code does.
+- The api suite passes, with PG too.
+- The Opus review passes.
+
+### Step 46 — Docs truth on #16 (slice Final, `chore/launch-final`)
+
+_Specced 2026-09-25 10:05 UTC (REPLAN). Facts checked at #16's head `cc040ef`. Line numbers are
+#16's. Above ARCHITECTURE L190 and above `.env.example` L31 they equal main's._
+
+**When and where:**
+- Primary tree `/home/claude/OpenAd`, branch `chore/launch-final`, draft **PR #16**, head
+  `cc040ef`. It runs in parallel with 42–45, which edit main in their own worktrees. The
+  orchestrator pushes to the same branch; don't open a new PR.
+- Sonnet coder, Opus review. **Risk: low**: docs, marketing copy, two web presets and one
+  screenshot.
+- The planner's JIT edits sit uncommitted in `.cursor/` in this tree. Don't stage `.cursor/`: the
+  orchestrator commits it.
+- Only 46 may run the default-port Playwright suites (D14): `test:demo` on 4173 and
+  `capture:screenshots` on 4174. Use Chromium from `/opt/pw-browsers`, and never run
+  `playwright install`. Revert any `package-lock.json` libc churn.
+- Commit on the branch (`docs(launch): …`, `fix(web): …`).
+- Stay inside the hunks below. 42–45 edit the same files on main, and 47 merges them into #16;
+  the hunks were chosen so that the merge stays clean.
+
+**Evidence (the slice review's findings, re-checked at `cc040ef`):**
+- **L2, the demo script can't run as written** (`docs/business/demo-script.md` L67-69).
+  - The 15-minute track switches to "Advertiser — Fastlane L2", but the persona switcher offers
+    only Nimbus Wallet and Basecamp Weekly (`web/src/demo/PersonaSwitcher.tsx`,
+    `SWITCHER_PERSONAS`).
+  - Fastlane couldn't open a campaign on either CPC slot anyway. Slot 1 is 300×250, and Fastlane
+    has no 300×250 creative. Slot 3 needs approval, and Fastlane's only 728×90 creative (4) is
+    still pending verification.
+  - Nimbus Wallet's creative 3 is a verified 300×250, and slot 1 waives approval
+    (`web/src/demo/fixtures.ts`). `flows.spec.ts` already opens a campaign on slot 1 through the
+    same dialog.
+- **L2, pitch-deck Slide 4 claims more than the demo shows** (`pitch-deck.md` L44-50).
+  - "Click settles in a batch": the demo has no click traffic and no settler. Its settlements are
+    seeded fixtures (`fixtures.ts`, `settlement(...)`), and its serve picks the highest max CPC, a
+    documented simplification (`demoServe.ts`).
+  - "Embed updates": the tour buys a future period of slot 0, so the embed keeps showing the
+    current lease.
+  - The notes say "walk the linked recording", and no recording exists.
+- **L2, ARCHITECTURE §3.3 has drifted from the code** (L149, L157, L167-172).
+  - `GET /v1/slots` takes `domain`, `kind` (0–3), `category`, `limit` (1–200, default 50) and
+    `offset` (`routers/slots.py`). It has no `verified` filter. It returns `{items, total}` of
+    `SlotOut` (terms and listing), with no periods and no prices.
+  - The owner-only `PUT` and `DELETE /v1/slots/{slot_id}/listing` (#13) are missing.
+  - `GET /v1/publishers/{address}/pricing-suggestion?slot_id=` needs a SIWE session, and the
+    wallet must be the publisher and own the slot. It sits under "Public reads".
+- **L2, the phishing-blocklist claim** (ARCHITECTURE L303-304; `.env.example` L55).
+  - The doc says `click_url` is checked against a phishing blocklist through
+    `OPENAD_SAFE_BROWSING_KEY`.
+  - No code reads that setting; `config.py:65` only defines it.
+  - `check_click_url` (`services/media.py:72`) accepts `""` or any `https://` URL.
+- **L3s:**
+  - `README.md` L161 says MUI; the web app uses Tailwind, RainbowKit and wagmi
+    (`web/package.json`). README L90 lists what setup deploys without `CampaignVault`, which
+    `contracts/script/deploy.py` deploys too.
+  - `docs/threat-model.md` L3-5 call `CampaignVault` and the settler "Specified (not
+    implemented)" and put GCP out of scope, and L12 says "Specified ADR-0014". Both have shipped
+    (PROTOCOL §11, ADR-0014, ADR-0017).
+  - `web/index.html` L14: the OG text says "Publishers sell ad slots". L8-10 cite "the JIT
+    backlog, step 14+15", which is now ROADMAP 7.1.
+  - `WhyPage.tsx` L63 says "Publishers lease ad slots". What a publisher sells is a period
+    (GLOSSARY: Slot, Period).
+  - `lib/earnings.ts` L20-22: the crypto (40%) and agency (20%) presets state point rates for
+    categories that `competitive.md` L15 calls "varies" and "negotiated". The only range the docs
+    back is ~30–50% for network and exchange intermediaries.
+
+**Items**
+1. **Demo script, 15-minute track** (`docs/business/demo-script.md` L63-73).
+   - Step 3: stay as Nimbus Wallet (no persona switch). On `#/campaigns`:
+     - click "Open campaign";
+     - set Slot id `1` (CPC, approval waived) and Creative `3` (Nimbus's 300×250);
+     - keep the default max CPC (0.2 USDC) and budget (10 USDC), click "Next" twice, then "Fund
+       with permit".
+   - Then point at the new row, "… slot 1 · creative 3 … remaining 10.00 USDC of 10.00 USDC":
+     `remaining` never exceeds what was funded, and closing the campaign refunds what's left.
+   - Step 4 stays: Basecamp Weekly approves Fastlane's pending creative 4, which is in the seeded
+     approvals.
+   - Check every other step of all three tracks against the demo as it is today, and fix
+     anything else that's untrue. Fastlane may appear only where it is true.
+   - Add one test to `e2e/demo/flows.spec.ts`, "demo script: the 15-minute CPC step as
+     written":
+     - connect (Nimbus is the default persona);
+     - open the campaign exactly as step 3 says;
+     - assert that the new row reads `slot 1 · creative 3` and `remaining 10.00 USDC of
+       10.00 USDC`. The seeded campaigns are 1–3, so the new one is Campaign 4.
+2. **Pitch-deck Slide 4** (`docs/business/pitch-deck.md` L42-50): describe only what the demo
+   shows.
+   - LEASE: a publisher mints a slot and sets its calendar and terms. An advertiser buys a period
+     in one simulated transaction and gets the receipt: price, publisher/fee split and tx hash.
+   - CPC: an advertiser funds a campaign, whose budget sits in escrow. The embed shows the top
+     campaign's creative, and the publisher's earnings include seeded batch settlements. Say that
+     the demo has no live click traffic and no settler.
+   - The `<open-ad>` embed renders each slot's current creative without reading the chain.
+   - Speaker notes:
+     - drop "otherwise walk the linked recording";
+     - if the demo can't run live, use the screenshots in `docs/business/assets/`;
+     - keep the simulated-data sentence.
+   - The orchestrator regenerates the hosted deck from this file after CLOSE.
+3. **ARCHITECTURE §3.3** (L146-174):
+   - L149: `GET /v1/slots?domain=&kind=&category=&limit=&offset=`, with the ranges above. It
+     returns `{items, total}`: slots with their terms and listing. Periods and indicative prices
+     come from `/periods`.
+   - Move `pricing-suggestion` to "Authenticated": SIWE session, and the wallet must be the
+     publisher and own `slot_id`. L157 keeps the public dashboard reads.
+   - Add `PUT /v1/slots/{slot_id}/listing` and `DELETE /v1/slots/{slot_id}/listing`, slot owner
+     only (§3.2 `slot_listings`, #13).
+   - Check the `POST /v1/slots/{slot_id}/domain-verification` line against the router
+     (`method=meta_tag|dns_txt`, `check=true`), and change it only if it's wrong.
+   - Don't touch L161 ("Serving (public, cacheable)"): 47 fixes it after 45 merges.
+4. **Say honestly that there's no phishing blocklist.**
+   - ARCHITECTURE §3.5 step 4 (L303-304):
+     - `click_url` must be empty or `https://` (`check_click_url`);
+     - there is no phishing or malware blocklist yet (ROADMAP 7.19);
+     - `OPENAD_SAFE_BROWSING_KEY` is reserved, and nothing reads it;
+     - takedown is the publisher's approval and the moderator's revoke.
+   - `.env.example` L55 only: one comment line above the commented-out key that says the same.
+   - **ROADMAP 7.19**, after 7.18: "Phishing and malware check on click URLs".
+     - Check each `click_url` against a URL-reputation service (e.g. Google Safe Browsing, with
+       `OPENAD_SAFE_BROWSING_KEY`) at verification and on the scheduled re-check. Otherwise,
+       drop the setting.
+     - Pointers: `api/src/openad/services/media.py` (`check_click_url`),
+       `api/src/openad/config.py`, `docs/ARCHITECTURE.md` §3.5, `docs/threat-model.md`.
+   - `docs/threat-model.md`: one residual bullet at the end of the list, after L87.
+     - Click URLs are checked for `https://` only.
+     - A publisher that waives approval accepts any such landing page.
+     - The moderator's revoke is the takedown (7.19).
+5. **Stale docs.**
+   - `README.md`: L90, setup also deploys `CampaignVault`; L161, `Vite + React + Tailwind +
+     wagmi/RainbowKit`.
+   - `docs/threat-model.md` L3-5:
+     - in scope: the v1 protocol including `CampaignVault`, the indexer and API serve path, the
+       CPC settler process (ADR-0014), the web app, and the GCP deploy configuration (ADR-0017,
+       `infra/gcp/`);
+     - out of scope: live Base mainnet operations, GCP organization and account security, and
+       English occupancy auctions.
+   - `docs/threat-model.md` L12: drop "Specified".
+   - Don't touch L37-66 of the threat model: 44 and 45 edit T13, T20 and L64 on main.
+   - `web/index.html`, L8-14 only (L18-22 are 42's):
+     - the comment cites ROADMAP 7.1;
+     - the OG description says that publishers sell periods of their ad slots, for example:
+       "Publishers sell each period of an ad slot by Dutch auction; advertisers buy a period in
+       one transaction. No custody, no tracking, 2.5% default fee."
+6. **`/why` copy and presets.**
+   - `WhyPage.tsx` L62-63: publishers sell periods of their slots by Dutch auction (LEASE), or
+     open them to pay-per-click campaigns (CPC). Keep the rest of the paragraph.
+   - `lib/earnings.ts` L10-23:
+     - three presets inside the one range `competitive.md` backs (~30–50% for network and
+       exchange intermediaries): 30%, 40% and 50% (3000, 4000 and 5000 bps);
+     - each labelled "approx.", and none named "crypto" or "agency";
+     - the first (30%, the conservative end) stays the default, so the headline uplift is the
+       smallest of the three;
+     - update the doc comments.
+   - The payout caption must still read naturally. `WhyPage.tsx` L166 strips the "(approx. …)"
+     suffix, so pick labels that give e.g. "Ad network (30% take) payout".
+   - Tests:
+     - `earnings.test.ts` pins the three bps values, checks that every label says "approx.", and
+       checks that no label says "crypto" or "agency";
+     - `WhyPage.test.tsx` switches to a new preset id, and asserts that the network payout
+       changes while OpenAd's doesn't;
+     - the glossary test also rejects `/\b(sell|lease)(s|d|ing)? (an? )?(ad )?slots?\b/i`.
+   - At 1,000,000 impressions and a $5.00 eCPM, the default now shows 3,500.00 USDC against
+     OpenAd's 4,875.00, an uplift of 1,375.00 a month and 16,500.00 a year. The e2e `/why` test's
+     4,875.00 stays.
+7. **Re-capture `why-calculator.png`.**
+   - Run `npm run build:demo`, then `npm run capture:screenshots -w e2e` twice. The two runs must
+     be byte-identical.
+   - Only `why-calculator.png` should change. If another PNG differs from `cc040ef`, restore it
+     (`git checkout -- <file>`) and name it in the handback.
+   - The PNG must be ≤ 400 KB.
+8. **Formatting:** run `npx prettier --write` on the business docs and web files you edited.
+   Leave `docs/` tables outside `docs/business/` as they are (7.7).
+
+**Owns** (on #16 only):
+- `docs/business/demo-script.md`, and `docs/business/pitch-deck.md` Slide 4;
+- `docs/ARCHITECTURE.md` §3.3 (L146-160 and L167-174) and §3.5 step 4 (L303-304);
+- `.env.example` L55;
+- `docs/ROADMAP.md` 7.19 (new, after 7.18);
+- `README.md` L90 and L161;
+- `docs/threat-model.md` L3-5, L12, and one new bullet after L87;
+- `web/index.html` L8-14, `WhyPage.tsx`, `WhyPage.test.tsx`, `lib/earnings.ts` and
+  `lib/earnings.test.ts`;
+- one new test in `e2e/demo/flows.spec.ts`;
+- `docs/business/assets/why-calculator.png`.
+
+**Must not touch:**
+- Anything 42–45 own (D14):
+  - `docs/deploy-gcp.md`, `infra/`, `scripts/`, `.github/`, `api/` and `contracts/`;
+  - `docs/PROTOCOL.md`, `docs/adr/`, `docs/deploy-sepolia.md`, `docs/deploy-mainnet.md`, and the
+    guide's `embed-code.md`;
+  - `web/src/lib/wagmi.ts`, `web/Dockerfile`, `web/nginx/`, `web/vite.config.ts`, and
+    `web/index.html` L15-28.
+- ARCHITECTURE outside the hunks above, including L161: §3.4, §3.8, §3.9, §7 and §8 are 43's,
+  44's and 45's, or 47's.
+- `docs/threat-model.md` L37-66, and `.env.example` except L55.
+- 47's lines, which need the PR numbers: `docs/business/launch-checklist.md`, README "What's in
+  the box", and ROADMAP 6.x.
+- `.cursor/`, which is the planner's.
+
+**Verify:**
+```bash
+cd /home/claude/OpenAd
+export PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers \
+  PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome
+npm run typecheck && npm run lint && npm run test && npm run build && npm run build:demo \
+  && node web/scripts/check-demo-bundle.mjs
+npm run test:demo -w e2e                                  # 4173; includes the new script test
+npm run capture:screenshots -w e2e && sha256sum docs/business/assets/*.png > /tmp/jit46-cap1.sha
+npm run capture:screenshots -w e2e && sha256sum -c /tmp/jit46-cap1.sha     # byte-identical
+git status --short docs/business/assets                   # why-calculator.png only
+npx prettier --check docs/business/demo-script.md docs/business/pitch-deck.md \
+  web/src/lib/earnings.ts web/src/lib/earnings.test.ts web/src/features/marketing/WhyPage.tsx \
+  web/src/features/marketing/WhyPage.test.tsx web/index.html e2e/demo/flows.spec.ts
+grep -n "Fastlane" docs/business/demo-script.md           # none in step 3; review any other hit
+grep -n "recording\|settles in a batch" docs/business/pitch-deck.md && echo "FAIL slide 4" || echo ok
+grep -n "verified=\|not on the phishing blocklist" docs/ARCHITECTURE.md && echo "FAIL arch" || echo ok
+grep -n "MUI" README.md && echo "FAIL readme" || echo ok
+grep -n "not implemented\|Specified" docs/threat-model.md && echo "FAIL scope" || echo ok
+grep -rn "sell ad slots\|lease ad slots\|step 14+15" web/index.html web/src && echo "FAIL copy" || echo ok
+grep -n "'crypto'\|'agency'" web/src/lib/earnings.ts && echo "FAIL presets" || echo ok
+git status --short                                        # no package-lock churn; .cursor/ unstaged
+git diff --stat cc040ef..HEAD                             # owned files only
+```
+
+**Done when:**
+- The demo script's 15-minute track runs as written, which the new e2e test proves. Slide 4
+  claims only what the demo shows, and cites no recording.
+- ARCHITECTURE §3.3 and §3.5 match the code, 7.19 exists, and `.env.example` and the threat model
+  say that there's no blocklist.
+- README, the threat model's scope, the OG text and the `/why` copy follow the glossary. The
+  presets sit inside the backed range, with tests.
+- `why-calculator.png` is re-captured deterministically. Web tests, lint, typecheck, build and the
+  demo suite pass.
+- No file outside the owned hunks changed, and the Opus review passes.
+
+### Step 47 — Final, post-merge pass (slice Final; starts once 42–45 have merged and 46 has passed)
+
+_Specced 2026-09-25 10:05 UTC (REPLAN). 42–45's PR numbers aren't known yet. The orchestrator
+gives them when it launches 47, and they replace `#<42>` … `#<45>` below._
+
+**When and where:**
+- Primary tree `/home/claude/OpenAd`, `chore/launch-final` (#16). It starts after 42–45 have all
+  merged into main and 46's review has passed.
+- Sonnet coder, Opus review. **Risk: low**: a merge, plus docs.
+- The orchestrator pushes. `.cursor/` stays unstaged, because it's the planner's.
+
+**Items**
+1. **Merge main.** `git fetch origin && git merge origin/main` into `chore/launch-final`.
+   - D14's hunk plan predicts no textual conflicts. If one appears, keep both sides' meaning and
+     name the conflict in the handback.
+   - Then re-read the text that now sits side by side:
+     - `docs/threat-model.md`: 46's scope and residual bullet, next to 44's T20 and L64 and 45's
+       T13;
+     - ARCHITECTURE:
+       - §3.3–§3.5: 46's lines next to 45's §3.4;
+       - §7–§8: #16's table and CI sentence next to 43's manual block, 44's §8 key line, and
+         45's burst-map bullet;
+     - `.env.example`: 46's L55 next to 42–45's lines;
+     - `docs/deploy-gcp.md`:
+       - §3: #16's password and connection-string text next to 43's VPC and verify-first
+         paragraph;
+       - §5: #16's text next to 44's L218;
+       - §11's subsections.
+2. **ROADMAP 6.11–6.14**, after 6.10, in 6.8 and 6.9's format: `[x]`, "_Done 2026-09-25 (PR #N)._",
+   Pointers and Acceptance. Write each from what its PR shipped (its diff and its as-shipped
+   record in §5):
+   - 6.11: the deploy images boot (#<42>);
+   - 6.12: Cloud Run wiring (#<43>);
+   - 6.13: a dedicated settler key (#<44>), with T20;
+   - 6.14: CPC click integrity (#<45>), with T13 amended.
+
+   Then:
+   - 6.10's acceptance gains three conditions:
+     - the settler is a dedicated, gas-only EOA (6.13);
+     - the staging environment's `vars` are set (6.12);
+     - every "(inferred; verify before deploy)" fact in the runbook has been checked.
+   - 7.13: its `deploy.yml` placeholder part is done in 6.12 (#<43>): `--only stack|all` refuses
+     unset URLs, and `deploy.yml` passes the environment's `vars`. The PSL-aware guard, the
+     prod-mode IP-literal test and the macOS `host_of` check stay open.
+   - 7.20 and up, only for the follow-ups that 42–45's handbacks or reviews deferred.
+3. **ARCHITECTURE, after the merge:**
+   - §3.3 L161: the heading matches 45's rule, e.g. "Serving (public; campaign responses are
+     never cached, § 3.4)".
+   - The §7 table, Media cache, production cell: "GCS, plus an optional CDN on
+     `/v1/serve/*/media` only (ADR-0017)".
+   - §7's CI sentence: CI's `docker` job builds the api, web and web-demo images and boot-checks
+     each (6.11).
+4. **Runbook `docs/deploy-gcp.md`, after the merge:**
+   - §14: the bucket line uses `<MEDIA_BUCKET>` (43's per-project name).
+   - §8's manual api command: add `OPENAD_SERVE_ENFORCE_ORIGIN=true` to `--set-env-vars`, as in
+     `api.yaml` (45).
+   - §3's connection-string paragraph (#16's text): one sentence that points at 43's
+     verify-first note (unix socket versus private-IP TCP).
+5. **Launch checklist** (`docs/business/launch-checklist.md`).
+   - Done:
+     - L12 becomes "Docker images build and boot-check in CI (`api`, `web`, `web-demo`)",
+       citing #<42>;
+     - add one row each for #<43>, #<44> and #<45>.
+   - User actions:
+     - set the `staging` environment's `vars` in GitHub (the list in 43's `deploy.yml`);
+     - grant the WIF deployer the Cloud Build roles, and pre-create the `<PROJECT_ID>_cloudbuild`
+       bucket (§2, §10);
+     - create a dedicated, gas-only settler EOA:
+       - fund it with a little Base Sepolia ETH;
+       - set `OPENAD_SETTLER_ADDRESS` for the contracts deploy;
+       - store its key as `openad-settler-key-<ENV>` (`docs/deploy-sepolia.md`);
+     - optionally, get a WalletConnect project id (without one, the app offers browser wallets
+       only), then check the browser console for CSP reports in staging;
+     - map `demo.<domain>`, and set `WEB_DEMO_URL` and `DEMO_URL` (§9);
+     - the XFF row (L35): verifying the chain and setting `OPENAD_TRUSTED_PROXY_HOPS` also turns
+       on the CPC click burst rule (6.14);
+     - verify the runbook's "(inferred; verify before deploy)" facts in staging.
+6. **README and deck.**
+   - README "What's in the box": one bullet for the launch fixes (#<42>–#<45>):
+     - images that boot on Cloud Run;
+     - private database networking, and public services that anyone can reach;
+     - a dedicated settler key;
+     - CPC click integrity.
+   - `pitch-deck.md` Slide 11, "Built": add "deploy and click-integrity fixes". The orchestrator
+     regenerates the deck.
+7. **Gates:** re-run everything.
+   - contracts: `mox compile` and `pytest`;
+   - api: ruff, format, mypy and pytest, with PG on `openad_test`;
+   - web and embed: `typecheck`, `lint`, `test`, `build`, `build:demo` and `check-demo-bundle`;
+   - `check:sh` and `test:demo`;
+   - the YAML e2e suite, if the docker stack runs.
+   - CI on #16: every check green.
+8. **Then the orchestrator runs a targeted Opus re-review** of every finding in the slice review
+   (L1 ×6, L2 ×8, the L3s) against #16's head.
+   - Each finding is either closed, or recorded as a Phase 7 item with a reason.
+   - A FIX sends the planner a REPLAN; a PASS leads to CLOSE.
+
+**Must not touch:** product code, which arrived with 42–45's merge; `.cursor/`; and any line not
+listed above, except to resolve a merge conflict.
+
+**Verify:**
+```bash
+cd /home/claude/OpenAd
+git log --merges --oneline -1                             # the merge of origin/main
+for n in 6.11 6.12 6.13 6.14 7.19; do grep -c "\*\*$n " docs/ROADMAP.md; done   # 1 each
+grep -rn "#<4[2-5]>\|#TBD" --exclude-dir=node_modules --exclude-dir=.cursor . && echo FAIL || echo ok
+grep -rn "openad-media-<ENV>" docs/deploy-gcp.md infra/ && echo "FAIL bucket" || echo ok
+grep -n "SERVE_ENFORCE_ORIGIN" docs/deploy-gcp.md infra/gcp/services/api.yaml
+grep -n "CDN in front of serve\|Serving (public, cacheable)" docs/ARCHITECTURE.md && echo FAIL || echo ok
+(cd contracts && uv run mox compile && uv run pytest -q)
+(cd api && uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy src && uv run pytest -q)
+(cd api && OPENAD_TEST_PG_URL='postgresql+asyncpg://postgres@/openad_test?host=/tmp/pgdata_jit16' uv run pytest -q)
+npm run typecheck && npm run lint && npm run test && npm run build && npm run build:demo \
+  && node web/scripts/check-demo-bundle.mjs
+npm run check:sh && npm run test:demo -w e2e
+git diff --stat origin/main...HEAD                        # #16's files only (plus .cursor/ after CLOSE)
+```
+
+**Done when:**
+- Main is merged into #16, and every conflict (none are predicted) is resolved and named.
+- ROADMAP 6.11–6.14 cite their PRs; 6.10, 7.13 and 7.19 are right; the docs above describe the
+  merged code.
+- All gates pass locally, and CI is green on #16.
+- The Opus review passes, and then the orchestrator's targeted re-review passes.
+
+### CLOSE — Archive the plan (planner; after 47 and a passing targeted re-review; moved here from 36b's item 8)
+
+- The planner writes the files, and the orchestrator commits them on #16.
+- Write `.cursor/jit_history/2026-09-25-market-fit-launch.md` in the compact archive style of
+  `2026-09-12-sme-ux-critique-loop.md`:
+  - the title "# JIT_PLAN — Market fit, hardening and launch (archived)";
+  - a header: created 2026-09-24, closed when #16 merges; ROADMAP 6.1–6.9 and 6.11–6.14 `[x]`,
+    6.10 open (user-run), and Phase 7 (7.1–7.19, plus any 7.20 and up from 47).
+- **Decisions:** D1–D15, condensed.
+- **Outcome:**
+  - The PR list, each with its slice and merge commit:
+    - #4 `801440e`, #5 `8887adb`, #6 `e8a34b8`, #7 `866d7fe`, #8 `591e576`, #9 `07eeece`,
+      #10 `eba40cd`, #11 `c3f39dc`, #12 `d5d46a0`, #13 `abb2b81`, #14 `5f27fb8`, #15 `2c4101b`,
+      #17 `3605473`, #18 `289bb72`, #19 `f50076d`;
+    - then 42–45's PRs, with the merge commits read from `git log --merges` at CLOSE;
+    - #16 "merges last" (its commit doesn't exist yet at CLOSE).
+  - A **step → PR map**: 36b's table (in git history at `486ab0b`), plus:
+    - 42 → #<42>, 43 → #<43>, 44 → #<44>, 45 → #<45>;
+    - 36, 36b, 46 and 47 → #16.
+    - Steps 2, 17+18 and 32+33 were folded into other steps.
+  - The demo and deck links, which stay private until the owner shares them.
+  - The open user actions:
+    - 36b's list: the 6.10 live deploy, a custom domain, the WIF secrets, the Sepolia deploy plus
+      `84532.json`, verifying XFF and then enabling the limiter, confirming `max_connections`,
+      the audit, legal, and sharing the Artifacts;
+    - plus: the staging environment's `vars`; the WIF Cloud Build roles and bucket; the
+      dedicated settler EOA; an optional WalletConnect id; the demo's domain mapping; and
+      verifying the inferred GCP facts.
+  - The residual risks:
+    - 36b's list: not audited; the per-instance limiter is off until XFF is verified; DNS
+      rebinding (T17); T18's per-address verify limit and concurrency; DNS TXT doesn't work; the
+      same-site guard isn't PSL-aware;
+    - plus:
+      - the click burst rule stays off until the hop count is verified;
+      - origin enforcement narrows embedding, but a script can forge `Origin`;
+      - there's no phishing blocklist (7.19);
+      - a leaked settler key can over-report payable clicks within the caps until
+        `set_settler` rotates it (T20);
+      - the GCP facts marked "inferred" stay unverified until staging.
+  - A pointer to Phase 7 (7.1–7.19, and any 7.20 and up).
+- **Identity fence:** as in §6.
+- Delete `.cursor/JIT_PLAN.md`, as `45645e1` did. The full plan stays in git history.
+- Refresh `.cursor/JIT_INDEX.md`:
+  - ADRs 0001–0017;
+  - the Phase 6 section points at the archive;
+  - drop the "accepted" and "in progress" wording and the per-step worktree and DB notes;
+  - the hosted demo is "rebuilt from main after #16";
+  - keep D15's durable rules: images, the settler EOA and click integrity.
+- Then the orchestrator:
+  1. marks #16 ready and waits for CI to go green;
   2. merges #16;
-  3. republishes the demo Artifact from main (maps gone; same URL, still private);
-  4. regenerates the hosted deck from `pitch-deck.md` (Slides 10 and 11 changed; same URL);
+  3. republishes the demo Artifact from main (same URL, still private);
+  4. regenerates the hosted deck from `pitch-deck.md` (Slides 4, 10 and 11; same URL);
   5. sends the user the final report: what shipped, the demo and deck links with the share
      reminder, and the user actions from the Outcome section.
-
 
 ## 6. Identity fence (unchanged)
 
@@ -1164,6 +1889,7 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - 2026-09-25 07:00 UTC — REVISE: **41 accepted** and launched now (orchestrator override of its Where): Sonnet coder in the new worktree `/home/claude/OpenAd-q` on `fix/periods-range-cap` off `5f27fb8`. Its PG tests use `openad_test_q` on the same pgserver socket, and T19 goes directly after T17 (the orchestrator restores T17 → T18 → T19 on merge). **D13 amended**: 39, 40 and 41 are independent and merge in whatever order they go green, each later one merging main in first; 36 merges last, then merges main in, re-captures the screenshots and replaces `#TBD-36`. **40 launched** (Sonnet) in `/home/claude/OpenAd-p`. 39 and 36 are still in fix round 1. D13 now lists the expected textual overlaps: threat-model (39/41), `routers/slots.py` (39/41), ARCHITECTURE §3.3 (36/41) and `.env.example` (36/39).
 - 2026-09-25 07:40 UTC — STEP_DONE 39 plus 36's R2 status. **39 DONE**: R1 FIX → R2 FIX → R3 FIX (coder escalated to Opus) → R4 PASS; `4bc78c1` + `687dbf4` + `7c11561`; **PR #17**, which `origin/main` already shows merged as `3605473` (the orchestrator reported CI pending); api 269/6 (274/1 with PG). §5's spec is replaced by an as-shipped record; the T18 residuals and three backlog notes go to §8. **36 R2 FIX**: all R1 findings resolved and IAM matches every secret; draft **PR #16** (`#TBD-36` = #16). The R2 leftovers and the orchestrator's GTM launch-plan re-base fold into a new **36b** post-merge pass, specced now (merge main, re-capture, `#TBD-36` → #16, PR citations for #17/40/41, the CLOSE archive in the same PR). Planner findings while speccing it: `capture-screenshots.mjs` finds the bought row by position, so it times out once 40 lists periods from the current index (36b item 4, or relay to 40); `git merge-tree` shows 36's main merge clean and main vs 41 conflicting only in the threat-model T18/T19 order, so D13's overlap list is updated. Observed, not yet reported: 40 committed `50b0285`, 41 `5f31a5c` + `6b10332`.
 - 2026-09-25 08:27 UTC — STEP_DONE 40 and 41; 36b launched. **41 DONE**: R1 FIX (L2 the new query's three filters were untested; L3 a docstring; L3 `from`/`to` above 2^256 − 1 gave a 500, pulled into scope → `le=UINT256_MAX`) → R2 PASS, two L3s fixed anyway (an ORM `load` listener instead of SQL text; each param bounded separately); `5f31a5c` + `6b10332` + `7000e4a` (main merged in, T18 before T19) + `a6ba05f`; **PR #18 merged `289bb72`**; pytest 274/6, PG 279/1; EXPLAIN is an index scan on `pk_leases`. **40 DONE**: R1 FIX (L1 a paused CPC slot read 'cpc' — the spec's CPC-before-paused order was wrong, the orchestrator ruled paused wins, and the as-shipped record carries the amended order; L2 a calendar-only `currentPeriodIndex` for the slot page; L2 a full-status oracle; L3 `periodsWindowSize`) → R2 PASS with two L3s (the ceil test line → 36b; the zero-period guard → Phase 7); `50b0285` + `5511a0a` + `173a7c5`; **PR #19 merged `f50076d`**; web 236, test:demo 14/14, YAML 13/13, BigInt oracle 730,418 cases with 0 mismatches. §5's compact specs are replaced by as-shipped records. **36b launched** (Sonnet; Opus review to follow); the orchestrator merged `f50076d` into #16 cleanly as `44aa234`, as D13's check predicted. PR numbers 39 = #17, 41 = #18, 40 = #19 are recorded in 36b and in the CLOSE step → PR map. Added to 36b's ROADMAP pass (relay, not in the coder's brief yet): a 7.7 note that CI's prettier covers only part of `web/`, and a new 7.18 (the missing 'no terms' filter chip and the zero-period guard).
+- 2026-09-25 10:05 UTC — REPLAN (slice review FIX). The orchestrator's Opus slice review of the launch state (main `f50076d` plus #16 `cc040ef`) returned **FIX**. Six L1s: the api image has no `contracts/deployments`, so the indexer and settler exit before their liveness listener binds; the non-demo web image boots to a blank page, because an empty WalletConnect id reaches RainbowKit; Cloud Run has no route to the private-IP Cloud SQL (whose tier may also need `--edition=ENTERPRISE`); `services replace` leaves api, web and web-demo private; the WIF deployer can't run `gcloud builds submit`; and the deploy makes the contract owner's key the settler's. Eight L2s: origin enforcement is off in staging and prod; the click burst rule keys on the proxy's IP and never evicts; a CDN on serve JSON would share one-time click tokens and hide impressions; the CSP blocks API media and the fonts; the demo script's Fastlane step can't run; Slide 4 over-claims and cites a recording that doesn't exist; ARCHITECTURE §3.3 has drifted; and the phishing-blocklist claim is false. Plus L3s. The planner re-checked each against the code and confirmed them all. For example, RainbowKit throws in `getWalletConnectConnector`, `REPO_ROOT` is `/` in the image, `pricing-suggestion` is SIWE-only, and `check_click_url` checks only for https. Added **D14** (the split; hunk ownership per file; T20, 6.11–6.14 and 7.19 pre-assigned; the merge order; shared resources; unverified GCP facts marked inferred) and **D15** (the fix rules). New slices O–R, each in its own worktree off `f50076d`: **42** `fix/deploy-images` (Sonnet), **43** `fix/cloud-run-wiring` (Sonnet), **44** `fix/settler-key` (Opus) and **45** `fix/cpc-click-integrity` (Opus), in `/home/claude/OpenAd-42` … `-45`. Plus **46**, docs truth on #16 in the primary tree (Sonnet). All five are specced and [>]. Then **47**: the post-merge pass on #16 (merge main, 6.11–6.14 with the PR numbers, the docs that describe 42–45, and the gates), followed by the orchestrator's targeted Opus re-review, and then **CLOSE** (moved from 36b's item 8 and updated for 42–47). The 36 and 36b specs are replaced by an as-shipped record; the full text is at `486ab0b`. Five backlog notes added.
 
 ## 8. Backlog (found during the run; not scheduled)
 
@@ -1208,3 +1934,9 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - CI's prettier step covers only `web/src/demo`, `e2e/demo`, `web/src/features/marketing` and `web/src/app/routes.tsx`, so the root `format:check` (all of `web/`) never runs in CI (`web/src/lib/auction.ts` had a pre-existing violation) → 7.7 (36b).
 - The new `'no terms'` state has no Discover filter chip, the same pre-existing gap as `'no calendar'` → 7.18 (36b).
 - The remaining unscheduled items above → ROADMAP Phase 7 in 36 (36b adds the 7.7 and 7.14 notes, 7.17 and 7.18).
+
+- The runbook's §8 manual `gcloud run deploy` commands repeat the manifests' flags, env vars and annotations, so they drift with every change (42, 43 and 47 all edit them). Generate them from the manifests, or keep only `services replace` → a 7.20 candidate for 47.
+- `gcloud builds submit` streams its logs, which is why 43 grants the deployer `roles/logging.viewer`. Using `--async` and polling `gcloud builds describe` would avoid that role → Phase 7 candidate.
+- WalletConnect's CSP endpoints (42's `https://*.walletconnect.com`, `https://*.walletconnect.org` and the relay's `wss://`) are inferred, not verified. Check the CSP reports in staging before setting a project id in prod (a launch-checklist user action, via 47).
+- Whether Cloud Run can reach a private-IP-only Cloud SQL instance through the `/cloudsql/…` unix socket, or needs private-IP TCP, is unverified. 43 documents both forms, marked "(inferred; verify before deploy)".
+- The demo fixtures number slots from 0, but on chain `mint_slot` starts at 1 (`erc721._counter + 1`), and the real `pricing-suggestion` rejects `slot_id=0` (`ge=1`). This is harmless in the demo, and the runbook's smoke check uses slot 1. Not scheduled.
