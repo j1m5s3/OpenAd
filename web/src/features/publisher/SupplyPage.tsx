@@ -13,6 +13,7 @@ import {
 } from '../../lib/labels';
 import { targetChainId } from '../../lib/wagmi';
 import { approvalActionLabel } from './components/ApproveDialog';
+import { SlotPerformance } from './components/SlotPerformance';
 import { SlotSetupWizard } from './components/SlotSetupWizard';
 import { usePublisher, usePublisherApprovals } from './api';
 
@@ -170,6 +171,8 @@ export function SupplyPage() {
         </p>
         <p className="mt-1 text-sm text-muted">Slots: {pub.data?.slotIds.join(', ') || 'none'}</p>
       </section>
+
+      <SlotPerformance slotIds={pub.data?.slotIds ?? []} />
 
       <FormCard title="Pricing suggestion" onSubmit={(e) => void suggest(e)} pending={false}>
         <Field name="slotId" label="Slot id" defaultValue="1" hintKey="pricingSlotId" />

@@ -9,6 +9,7 @@ import { formatUsdc } from '../../lib/format';
 import { quoteFeeCopy } from '../../lib/permit';
 import { targetChainId } from '../../lib/wagmi';
 import { useAdvertiser } from './api';
+import { AdvertiserPerformance } from './components/AdvertiserPerformance';
 import { CreativeWizard } from './components/CreativeWizard';
 import { OpenCampaignDialog, TopUpDialog } from './components/OpenCampaignDialog';
 
@@ -114,6 +115,8 @@ export function CampaignsPage() {
         </p>
       )}
       {msg && <p className="text-sm text-accent">{msg}</p>}
+
+      <AdvertiserPerformance address={address} />
 
       <section className="rounded-2xl border border-line bg-surface p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">

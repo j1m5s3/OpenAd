@@ -12,6 +12,16 @@ export type CreativeOut = components['schemas']['CreativeOut'];
 export type PublisherOut = components['schemas']['PublisherOut'];
 export type AdvertiserOut = components['schemas']['AdvertiserOut'];
 export type ApprovalOut = components['schemas']['ApprovalOut'];
+export type SlotAnalyticsOut = components['schemas']['SlotAnalyticsOut'];
+export type AdvertiserAnalyticsOut = components['schemas']['AdvertiserAnalyticsOut'];
+export type AnalyticsTotals = components['schemas']['AnalyticsTotals'];
+export type DailyBucket = components['schemas']['DailyBucket'];
+export type BySlotOut = components['schemas']['BySlotOut'];
+
+export interface AnalyticsWindowParams {
+  from?: number;
+  to?: number;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -102,4 +112,18 @@ export const api = {
       `/v1/slots/${slotId.toString()}/domain-verification?method=${method}`,
       { method: 'POST' },
     ),
+  slotAnalytics: (slotId: bigint | string, window: AnalyticsWindowParams = {}) => {
+    const qs = new URLSearchParams();
+    if (window.from !== undefined) qs.set('from', String(window.from));
+    if (window.to !== undefined) qs.set('to', String(window.to));
+    const suffix = qs.size ? `?${qs.toString()}` : '';
+    return request<SlotAnalyticsOut>(`/v1/analytics/slots/${slotId.toString()}${suffix}`);
+  },
+  advertiserAnalytics: (address: string, window: AnalyticsWindowParams = {}) => {
+    const qs = new URLSearchParams();
+    if (window.from !== undefined) qs.set('from', String(window.from));
+    if (window.to !== undefined) qs.set('to', String(window.to));
+    const suffix = qs.size ? `?${qs.toString()}` : '';
+    return request<AdvertiserAnalyticsOut>(`/v1/analytics/advertisers/${address}${suffix}`);
+  },
 };
