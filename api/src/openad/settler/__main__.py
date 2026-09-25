@@ -10,6 +10,7 @@ from eth_account import Account
 from openad.chain.client import make_web3
 from openad.chain.deployments import load_deployment
 from openad.db.session import Database
+from openad.health import Liveness, stale_after_seconds, start_liveness_server_from_env
 from openad.logging import configure_logging, get_logger
 from openad.settler.runner import SettlerRunner
 from openad.settler.settings import SettlerSettings
@@ -24,10 +25,17 @@ async def main() -> None:
         sys.exit(1)
     account = Account.from_key(settings.settler_key)
     deployment = load_deployment(settings.deployments_path, settings.chain_id)
+    liveness = Liveness(stale_after_seconds(settings.settler_poll_seconds))
+    start_liveness_server_from_env(liveness)  # no-op unless Cloud Run's $PORT is set
     db = Database(settings.database_url)
     try:
         runner = SettlerRunner(
-            settings, db.sessions, deployment, make_web3(settings.rpc_url), account
+            settings,
+            db.sessions,
+            deployment,
+            make_web3(settings.rpc_url),
+            account,
+            liveness=liveness,
         )
         await runner.run_forever()
     finally:

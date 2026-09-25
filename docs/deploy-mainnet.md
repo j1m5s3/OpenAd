@@ -3,6 +3,8 @@
 Do **not** broadcast from this repository until a later explicit request. There is no
 `contracts/deployments/8453.json` in tree.
 
+Hosting the api/indexer/settler/web on GCP once `8453.json` exists: `docs/deploy-gcp.md` (ADR-0017).
+
 ## Owner and timelock
 
 1. Deploy `CreativeRegistry`, `AdSlot`, `Marketplace` with a **multisig** as Ownable owner

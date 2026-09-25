@@ -5,9 +5,7 @@ Serve never fetches advertiser URLs; only the verifier writes the cache.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
-from pathlib import Path
 
 import httpx
 from eth_hash.auto import keccak
@@ -30,6 +28,7 @@ from openad.models.offchain import (
     VERIFY_PENDING,
     VERIFY_VERIFIED,
 )
+from openad.services.media_store import dispatch_get, media_store_for
 
 log = get_logger(__name__)
 
@@ -159,10 +158,8 @@ async def verify_creative(session: AsyncSession, creative_id: int, settings: Set
     row.error = None if status == VERIFY_VERIFIED else status
     row.checked_at = datetime.now(UTC)
     if status == VERIFY_VERIFIED:
-        cache_dir: Path = settings.media_cache_path
-        path = cache_dir / f"{creative_id}.bin"
-        await asyncio.to_thread(_write_cache, path, data)
-        row.cached_path = str(path)
+        ref = await media_store_for(settings).put(f"{creative_id}.bin", data)
+        row.cached_path = ref
     await session.commit()
     log.info("media.verify", creative_id=creative_id, status=status)
     return status
@@ -196,16 +193,7 @@ async def verify_pending(session: AsyncSession, settings: Settings) -> int:
     return count
 
 
-def _write_cache(path: Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
-
-
-async def read_cached(path: str) -> bytes | None:
-    def _read() -> bytes | None:
-        file = Path(path)
-        if not file.is_file():
-            return None
-        return file.read_bytes()
-
-    return await asyncio.to_thread(_read)
+async def read_cached(ref: str, *, settings: Settings) -> bytes | None:
+    """Read cached media bytes for a `cached_path` value, dispatching by ref scheme so a
+    database holding refs from an earlier backend keeps reading after a switch."""
+    return await dispatch_get(ref, settings=settings)

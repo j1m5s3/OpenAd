@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     serve_ttl_seconds: int = Field(default=30, ge=1)
     serve_enforce_origin: bool = False
     media_cache_dir: Path = Path("api/.cache/media")
+    # "local" (default; same-disk indexer + api) or "gcs" (ADR-0017; required on Cloud Run,
+    # where the indexer and api are separate containers with no shared disk).
+    media_backend: Literal["local", "gcs"] = "local"
+    media_gcs_bucket: str | None = None
+    media_gcs_prefix: str = "media"
     max_media_bytes: int = 2 * 1024 * 1024
     ipfs_gateway: str = "https://ipfs.io/ipfs/"
     verify_interval_seconds: int = 6 * 3600
@@ -83,6 +88,12 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.env in ("dev", "test")
+
+    @model_validator(mode="after")
+    def _require_gcs_bucket(self) -> Settings:
+        if self.media_backend == "gcs" and not self.media_gcs_bucket:
+            raise ValueError("OPENAD_MEDIA_GCS_BUCKET is required when OPENAD_MEDIA_BACKEND=gcs")
+        return self
 
 
 @lru_cache

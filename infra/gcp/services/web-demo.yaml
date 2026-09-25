@@ -1,0 +1,28 @@
+# Cloud Run service spec for `openad-web-demo` (ADR-0016 / ADR-0017): the VITE_DEMO_MODE=1
+# build, public, scale-to-zero-capable. A separate service from `openad-web` so the demo and
+# the real site promote/rollback independently (ADR-0017 "Services").
+#
+# CSP_CONNECT_SRC is left at the image's own demo-safe default ('self', set in web/Dockerfile)
+# and is repeated here explicitly: this is the HTTP-layer half of ADR-0016's "never opens an
+# RPC connection, never calls the API" invariant — the demo build must never widen it.
+#
+# Required env vars at render time: PROJECT_ID, REGION, ENV, IMAGE_TAG.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: openad-web-demo
+  labels:
+    env: ${ENV}
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    spec:
+      containers:
+        - image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/openad/web-demo:${IMAGE_TAG}
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: CSP_CONNECT_SRC
+              value: "'self'"

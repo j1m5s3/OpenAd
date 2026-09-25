@@ -212,7 +212,17 @@ Triggered by the indexer on `CreativeRegistered` and re-run on a schedule
    dimensions, else `failed:dimensions`.
 4. `click_url` must be `https://` and not on the phishing blocklist (`OPENAD_SAFE_BROWSING_KEY`,
    optional in dev).
-5. Store bytes at `cached_path` (local disk in dev, object storage in prod). Mark `verified`.
+5. Store bytes at `cached_path` via `services/media_store.py`'s `MediaStore` (local disk in dev,
+   GCS in prod behind `OPENAD_MEDIA_BACKEND`, ADR-0017). Mark `verified`.
+
+**Storage backends (ADR-0017).** `media_store.py` defines a `MediaStore` protocol with `put`
+and `get`. `OPENAD_MEDIA_BACKEND=local` (default) keeps today's disk cache under
+`OPENAD_MEDIA_CACHE_DIR`; `cached_path` is the absolute path. `OPENAD_MEDIA_BACKEND=gcs`
+(`OPENAD_MEDIA_GCS_BUCKET` required) stores objects at `gs://<bucket>/<prefix>/<key>` and
+`cached_path` is that ref. Reads dispatch on the ref's scheme, so switching backends does not
+require migrating already-written rows. This exists because on Cloud Run the indexer (writer)
+and the api (reader) are separate containers with no shared disk — local-only storage would
+silently break serve media in that topology.
 
 `NFT_REF`:
 
@@ -381,13 +391,15 @@ web/src/
 | Chain       | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC               | public RPC              |
 | USDC        | `MockUSDC`                                            | Circle testnet USDC      | native USDC             |
 | DB          | `docker compose up postgres`                          | managed Postgres         | managed Postgres        |
-| Media cache | local `./.cache/media`                                | object storage           | object storage + CDN    |
+| Media cache | local `./.cache/media`                                | GCS (`OPENAD_MEDIA_BACKEND=gcs`) | GCS + CDN in front of serve |
 | Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` (committed) | `8453.json` (committed) |
+| Production (GCP, ADR-0017) | n/a (Compose is the local target) | Cloud Run (`api`/`indexer`/`settler`/`web`) + Cloud SQL, one GCP project | same topology, separate project/instance, manual promotion |
 
 Local loop (canonical on Windows: `.\scripts\setup.cmd`, `.\scripts\dev-up.cmd`, `.\scripts\dev-down.cmd`;
 `npm run stack:*` is the same if PowerShell can load `npm.ps1`; bash twins on Linux/macOS/WSL
 per the ADR-0007 amendment). CI is `.github/workflows/ci.yml` (contracts, api, web/embed,
-Playwright, `check:sh`). Live GCP and Base mainnet are out of scope.
+Playwright, `check:sh`). Production hosting is GCP Cloud Run (ADR-0017, `docs/deploy-gcp.md`);
+CI's deploy job (step 27+28) is gated on GCP secrets and never broadcasts to Base mainnet.
 
 ```text
 .\scripts\setup.cmd                      # .env, docker, protocol deploy, alembic upgrade, npm install

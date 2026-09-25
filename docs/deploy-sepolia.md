@@ -3,6 +3,8 @@
 Live broadcast is **optional**. This session does not require a deployer key or
 `contracts/deployments/84532.json`. GCP and Base mainnet (4.6) are out of scope.
 
+Hosting the api/indexer/settler/web on GCP once `84532.json` exists: `docs/deploy-gcp.md` (ADR-0017).
+
 ## Prerequisites
 
 1. A Moccasin encrypted wallet imported in a real terminal (agent terminals cannot paste keys):
