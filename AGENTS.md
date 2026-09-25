@@ -39,26 +39,29 @@ Do not read the old prototype (`C:\source\mixed-lang\old-ad-nft\…`); its lesso
 
 ## Where things are
 
-| Need                                 | Location                                                                         |
-| ------------------------------------ | -------------------------------------------------------------------------------- |
-| Contract semantics                   | `docs/PROTOCOL.md` (CPC: §11 Implemented)                                    |
-| Contract signatures                  | `contracts/src/interfaces/*.vyi` (`ICampaignVault.vyi` = ROADMAP 5.2)        |
-| Contract code / tests / deploy       | `contracts/src/`, `contracts/tests/`, `contracts/script/deploy.py`               |
-| Addresses + ABIs per chain           | `contracts/deployments/<chainId>.json` (the only contracts → off-chain hand-off) |
-| API app, settings, routers, services | `api/src/openad/` (see `ARCHITECTURE.md` §3.1)                                   |
-| Indexer                              | `api/src/openad/indexer/`                                                        |
-| Serve endpoint + media cache         | `api/src/openad/serve/`, `api/src/openad/services/serve.py`                      |
-| Serve JSON contract                  | `api/src/openad/schemas/serve.py` ⇔ `embed/src/types.ts`                         |
-| Web app                              | `web/src/` (feature folders; wagmi for writes; API for reads)                    |
-| Embed element                        | `embed/src/open-ad.ts`                                                           |
-| Playwright E2E                       | `e2e/` (YAML scenarios, mock EIP-1193)                                           |
-| Headed SME / UX critique             | `.cursor/skills/sandbox-sme-critique/`, `sandbox-ux-critique/`; `docs/qa/`        |
-| Playwright MCP                       | `.cursor/mcp.json` (`playwright` + `openad-sim`)                                 |
-| Local sim daemon                     | `sim/` (opt-in Anvil personas; ADR-0012)                                         |
-| Env vars                             | `.env.example` (all prefixed `OPENAD_`; web uses `VITE_`)                        |
-| Local infra                          | `docker-compose.yml` (Anvil + Postgres); `docker-compose.stack.yml` (api/indexer/settler)|
-| API image                            | `api/Dockerfile` (also used for the indexer and settler processes)               |
-| CI                                   | `.github/workflows/ci.yml` (no GCP / no mainnet broadcast)                       |
+| Need                                 | Location                                                                                  |
+| ------------------------------------ | ----------------------------------------------------------------------------------------- |
+| Contract semantics                   | `docs/PROTOCOL.md` (CPC: §11 Implemented)                                                 |
+| Contract signatures                  | `contracts/src/interfaces/*.vyi` (`ICampaignVault.vyi` = ROADMAP 5.2)                     |
+| Contract code / tests / deploy       | `contracts/src/`, `contracts/tests/`, `contracts/script/deploy.py`                        |
+| Addresses + ABIs per chain           | `contracts/deployments/<chainId>.json` (the only contracts → off-chain hand-off)          |
+| API app, settings, routers, services | `api/src/openad/` (see `ARCHITECTURE.md` §3.1)                                            |
+| Indexer                              | `api/src/openad/indexer/`                                                                 |
+| Serve endpoint + media cache         | `api/src/openad/serve/`, `api/src/openad/services/serve.py`                               |
+| Serve JSON contract                  | `api/src/openad/schemas/serve.py` ⇔ `embed/src/types.ts`                                  |
+| Web app                              | `web/src/` (feature folders; wagmi for writes; API for reads)                             |
+| Embed element                        | `embed/src/open-ad.ts`                                                                    |
+| Playwright E2E                       | `e2e/` (YAML scenarios, mock EIP-1193)                                                    |
+| Headed SME / UX critique             | `.cursor/skills/sandbox-sme-critique/`, `sandbox-ux-critique/`; `docs/qa/`                |
+| Playwright MCP                       | `.cursor/mcp.json` (`playwright` + `openad-sim`)                                          |
+| Local sim daemon                     | `sim/` (opt-in Anvil personas; ADR-0012)                                                  |
+| Env vars                             | `.env.example` (all prefixed `OPENAD_`; web uses `VITE_`)                                 |
+| Local infra                          | `docker-compose.yml` (Anvil + Postgres); `docker-compose.stack.yml` (api/indexer/settler) |
+| API image                            | `api/Dockerfile` (also used for the indexer and settler processes)                        |
+| CI                                   | `.github/workflows/ci.yml` (no GCP / no mainnet broadcast)                                |
+| Business docs                        | `docs/business/` (market fit, GTM, pitch deck, demo script, launch checklist)             |
+| Demo mode                            | `web/src/demo/` (ADR-0016); `e2e/demo/` (Playwright suite + screenshot capture)           |
+| GCP deploy                           | `infra/gcp/`, `docs/deploy-gcp.md`, `scripts/deploy-gcp.sh` (ADR-0017)                    |
 
 ## Commands
 
@@ -102,6 +105,9 @@ npm run typecheck && npm run lint && npm run test && npm run build
 npm run test:e2e                                    # Playwright YAML (needs Chromium once)
 npm run dev:web                                     # http://localhost:5173
 npm run dev:embed                                   # demo page
+npm run build:demo                                  # static web/dist-demo (ADR-0016)
+npm run test:demo -w e2e                            # demo-mode Playwright suite (no stack needed)
+npm run capture:screenshots -w e2e                  # regenerate docs/business/assets/*.png
 ```
 
 ## Working style expected of you

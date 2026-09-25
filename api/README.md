@@ -2,12 +2,12 @@
 
 Off-chain services for OpenAd, one Python package (`openad`) run as four processes:
 
-| Process | Command | Purpose |
-| --- | --- | --- |
-| api | `uv run uvicorn openad.main:app --reload` | Public read API (`/v1/slots…`), serving edge (`/v1/serve/…`), click 302 (`/v1/c/…`), auth |
-| indexer | `uv run python -m openad.indexer` | Contract events → Postgres (`indexer/`) |
-| settler | `uv run python -m openad.settler` | Payable clicks → `CampaignVault.settle_batch` (holds `OPENAD_SETTLER_KEY`) |
-| (serve) | same process as api for now | May move to a CDN worker (ROADMAP 4.4) |
+| Process | Command                                   | Purpose                                                                                   |
+| ------- | ----------------------------------------- | ----------------------------------------------------------------------------------------- |
+| api     | `uv run uvicorn openad.main:app --reload` | Public read API (`/v1/slots…`), serving edge (`/v1/serve/…`), click 302 (`/v1/c/…`), auth |
+| indexer | `uv run python -m openad.indexer`         | Contract events → Postgres (`indexer/`)                                                   |
+| settler | `uv run python -m openad.settler`         | Payable clicks → `CampaignVault.settle_batch` (holds `OPENAD_SETTLER_KEY`)                |
+| (serve) | same process as api for now               | May move to a CDN worker (ROADMAP 4.4)                                                    |
 
 Design: [`/docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) §3. Rules: [`/docs/CONVENTIONS.md`](../docs/CONVENTIONS.md) §4
 and `.cursor/rules/python-api.mdc`. Serving rule: [`/docs/PROTOCOL.md`](../docs/PROTOCOL.md) §7.
@@ -31,7 +31,8 @@ src/openad/
   chain/           deployments.py (artifact loader), client.py (AsyncWeb3) — indexer + settler
   indexer/         events.py (EXPECTED_EVENTS), handlers.py (one per event), runner.py, __main__.py
   settler/         batches.py, runner.py, settings.py (OPENAD_SETTLER_KEY), __main__.py
-alembic/           migrations (0001_baseline, 0002_cpc)
+alembic/           migrations (0001_baseline, 0002_cpc, 0003_analytics_indexes,
+                     0004_slot_listings, 0005_auth_prune_indexes)
 tests/             pytest + pytest-asyncio; SQLite in-memory; httpx ASGI client
 ```
 
@@ -48,8 +49,12 @@ uv run alembic revision --autogenerate -m "describe change"
 uv run python -m openad.db.bootstrap     # test/dev helper; refuses OPENAD_ENV=prod
 ```
 
-Local containers (not GCP): `api/Dockerfile` runs `alembic upgrade head` then uvicorn.
-The indexer uses the same image with a different command.
+Local containers (not GCP): `api/Dockerfile`'s `CMD` runs uvicorn only — it does **not** run
+migrations (ADR-0017 "Migrations"; a rolling deploy could otherwise race two containers each
+running `alembic upgrade head`). `docker-compose.stack.yml` runs a separate `migrate` service
+first; in GCP, a Cloud Run Job (`infra/gcp/jobs/migrate.yaml`) runs before traffic shifts to a
+new `api` revision (`docs/deploy-gcp.md` §7). The indexer and settler reuse the same image with a
+different command.
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.stack.yml up --build

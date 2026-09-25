@@ -70,6 +70,8 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
   - ROADMAP numbering: 6.8 is auth hardening (37), 6.9 is capacity and deploy hardening (38),
     and 6.10 is the live GCP deploy (user-run, left open by 36).
   - Phase 7 is the post-launch backlog.
+  - 39 (outbound-fetch bounds) was accepted on 2026-09-25. It starts after #14 merges, runs in
+    parallel with 36, and merges before 36.
 - **D10 — SIWE binding rule (37, ADR-0009 amendment).**
   - A SIWE message is accepted only if its EIP-4361 `domain` equals the authority (host:port)
     of an allowed origin and its `URI` has that same origin.
@@ -82,6 +84,9 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
   - Amended in 37's fix round 1 (orchestrator, 2026-09-25): messages follow the EIP-4361 ABNF
     strictly (two empty lines when there is no statement, which is what viem's
     `createSiweMessage` emits); addresses must be EIP-55 checksummed; clock skew is ±300 s.
+  - Shipped in PR #15. The limiter stays off in `infra/` until the XFF chain is verified in
+    staging (runbook steps). Invalid bodies on `/v1/auth/*` get a house-style 422
+    `invalid_request`; other routes keep FastAPI's default.
 - **D11 — Web and api share a registrable domain in production (38).** The session cookie is
   `SameSite=Lax`, and `*.run.app` hosts are separate sites. Required by the runbook and guarded
   by `deploy-gcp.sh` (`--allow-cross-site-auth` overrides). The guard compares the last two DNS
@@ -92,6 +97,11 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
   pool of 4 + 2 overflow; the indexer and settler get 2 + 1 each; the migrate job uses Alembic's
   single connection. That is 31 steady, 34 with Postgres's 3 reserved, and ≈64 during a rollout
   overlap. Raising `maxScale` or any pool means redoing the budget in `docs/deploy-gcp.md` §3.
+- **D13 — Merge order to launch (2026-09-25).** 39 (outbound-fetch bounds) → 40 (Discover and
+  slot-page period state, web only) → 36. 41 (periods range cap), if accepted, also merges before
+  36. Then 36 merges main in and re-captures the screenshots, so Discover shows 40's fix. 36
+  records 39, 40 and 41 in the ROADMAP, because it is the only step that edits the ROADMAP.
+  The planner archives the plan in 36's PR.
 
 ## 3. Slices → branches
 
@@ -106,10 +116,12 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 | G Docs polish (README, demo script, guide) | `docs/launch-polish` | 6.7 | A–F |
 | I Fix: buy receipt after confirmation (found in G review) | `fix/buy-receipt` | 6.2 follow-up | #10 merged; merge before G |
 | H Fix: fresh-DB Alembic chain (found in review) | `fix/alembic-fresh-db` | 6.6 prerequisite | — (merge before D ships and before F) |
-| J Auth hardening (SIWE binding, nonce/session hygiene, rate limit) | `fix/auth-hardening` | 6.8 | #13 merged |
-| K Capacity and deploy hardening (pool budget, scale caps, same-site, media hops) | `feat/ops-hardening` (#14) | 6.9 | #13 merged; merge after J |
-| L Outbound-fetch bounds (**proposed**: indexer media deadline, domain-check fetch) | `fix/outbound-fetch-bounds` | noted under 6.9 by 36 | #14 merged; merge before Final |
-| Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` | 6.3/6.6/6.7 ticks, 6.10, Phase 7 | J, K and (if accepted) L merged |
+| J Auth hardening (SIWE binding, nonce/session hygiene, rate limit) | `fix/auth-hardening` (#15, merged `2c4101b`) | 6.8 | #13 merged |
+| K Capacity and deploy hardening (pool budget, scale caps, same-site, media hops) | `feat/ops-hardening` (#14, merged `5f27fb8`) | 6.9 | #13 merged; merge after J |
+| L Outbound-fetch bounds (accepted: indexer media deadline, domain-check fetch) | `fix/outbound-fetch-bounds` | noted under 6.9 by 36 | #14 merged; merge before Final |
+| M Discover and slot-page period state (first-period anchoring) | `fix/discover-auction-state` | noted under 6.7 by 36 | #14 merged; merge after L, before Final |
+| N Periods range cap (**proposed**) | `fix/periods-range-cap` | noted under 6.9 by 36 | L merged (T19 after T18); merge before Final |
+| Final: launch finalization (old 17+18 + 32+33) | `chore/launch-final` | 6.3/6.6/6.7 ticks, 6.10, Phase 7 | started after J and K merged; merges after L, M and (if accepted) N |
 
 ## 4. Micro-steps (one line each; ✱ active, [>] active in parallel, ○ pending, ✓ done)
 
@@ -152,259 +164,110 @@ batch; 2.5% default fee vs 30–50% for ad networks; no tracking; LEASE + CPC). 
 ### Slice G — `docs/launch-polish`
 - ✓ 30+31. G: README rewrite, `docs/business/{competitive,demo-script,launch-checklist}.md`, `capture-screenshots.mjs` (pinned epoch, byte-identical; `buy-leased.png` instead of buy-confirmed, so it doesn't depend on I), checklist mainnet row and demo-script fixes. FIX r1 → PASS r2. `23b1c5b`, merged main `f27df3c`; **PR #11 merged `c3f39dc`**. Deferred to 36: README "Coming next" still lists the embed panel and share row, which are now on main.
 - → 32+33. G: **merged into step 36.**
+
 ### Slice J — `fix/auth-hardening` (after #13; primary tree)
-- ✱ 37. J: SIWE domain/URI binding to allowed origins (a strict EIP-4361 parser in `openad/siwe.py`); atomic single-use nonce; auth-table pruning plus migration `0005` indexes; opt-in per-instance auth rate limit with the `trusted_proxy_hops` rule; web `location.host`; the sim signs as the web origin; ADR-0009 amendment; threat model T15/T16; ROADMAP 6.8 `[x]`. **Risk: high. Opus.** **(full spec below)**
+- ✓ 37. J: SIWE bound to allowed origins (strict EIP-4361 ABNF, EIP-55 only, ±300 s skew, nonce 8–64, message ≤ 4096); atomic single-use nonce; pruning (two DELETEs) plus migration `0005_auth_prune_indexes`; opt-in limiter left off in `infra/` (XFF unconfirmed; runbook verify-then-enable); house-style 422 on `/v1/auth/*`; web and sim use viem's `createSiweMessage`; CI api job runs the full suite on `postgres:16`; ADR-0009 amendment, T15/T16, ROADMAP 6.8 `[x]`. R1 FIX (2 L2) → R2 PASS. `eb8193f` + `2ce0f5b` (JIT), **PR #15 merged `2c4101b`**. api 219/5 (223/1 with PG), web 212, embed 5, sim 13 + 1, test:demo 14/14, YAML e2e 13/13; live uvicorn checks pass. **(as-shipped record below)**
 
 ### Slice K — `feat/ops-hardening` (after #13; worktree `/home/claude/OpenAd-o`; parallel with 37, merge after it)
-- ✓ 38. K: pools at all four `Database(...)` sites (api 4 + 2, indexer and settler 2 + 1, migrate job no pool env); `maxScale` api 4, web and web-demo 10; `max_connections=100` pinned by flag, budget 31 steady / 34 with reserved / ≈64 in a rollout overlap; same-site guard in `deploy-gcp.sh` (`--allow-cross-site-auth`); media hops validated (≤3, https, private and reserved hosts refused outside dev); T17; ROADMAP 6.9 `[x]`. R1 FIX (2 L1) → R2 FIX → R3 (Opus) PASS, L3 only. `4370d09` (base `abb2b81`), **PR #14 open**, CI pending; merges after 37 (the orchestrator merges main in first). api 154 passed / 4 skipped (157 / 1 with PG); `check:sh` and YAML ok. **(as-shipped record below)**
+- ✓ 38. K: pools at all four `Database(...)` sites (api 4 + 2, indexer and settler 2 + 1, migrate job no pool env); `maxScale` api 4, web and web-demo 10; `max_connections=100` pinned by flag, budget 31 steady / 34 with reserved / ≈64 in a rollout overlap; same-site guard in `deploy-gcp.sh` (`--allow-cross-site-auth`); media hops validated (≤3, https, private and reserved hosts refused outside dev); T17; ROADMAP 6.9 `[x]`. R1 FIX (2 L1) → R2 FIX → R3 (Opus) PASS, L3 only. `4370d09` (base `abb2b81`), Main merged in as `2f313d9` (conflicts only in ROADMAP and threat-model ordering; checks green); **PR #14 merged `5f27fb8`**. api 154 passed / 4 skipped (157 / 1 with PG); `check:sh` and YAML ok. **(as-shipped record below)**
 
-### Slice L — `fix/outbound-fetch-bounds` (**proposed** by the planner 2026-09-25; after #14; the orchestrator decides)
-- ○ 39. L: one overall deadline on media fetches and a per-pass budget for indexer verification, so a slow-drip media host can't stall block indexing; the domain meta check releases its DB connection before fetching, is bounded (deadline, body cap, 38's hop rules) and gets a per-slot cooldown; T18. **Risk: medium.** **(compact spec below)** If declined, it goes to Phase 7 with the §8 severity note.
+### Slice L — `fix/outbound-fetch-bounds` (accepted 2026-09-25; after #14; worktree `/home/claude/OpenAd-o`; merges before Final)
+- [>] 39. L: one overall deadline on media fetches and a per-pass budget for indexer verification, so a slow-drip media host can't stall block indexing; the domain meta check releases its DB connection before fetching, is bounded (deadline, body cap, 38's hop rules) and gets a per-slot cooldown; T18. **Accepted**; Sonnet coder, Opus review. Coded on `fix/outbound-fetch-bounds` (base `2f313d9`) in `/home/claude/OpenAd-o`. R1 FIX (2 L1, 3 L2) → **fix round 1 in progress**. The scope grew to `POST /v1/creatives/{id}/verify` and raw-byte reads (the spec's fix-round block). **Risk: medium.** **(compact spec below)**
 
-### Final — `chore/launch-final` (after 37, 38 and, if accepted, 39 merge)
-- ○ 36. Final (primary tree, off `origin/main`). It covers:
+### Slice M — `fix/discover-auction-state` (added 2026-09-25; worktree `/home/claude/OpenAd-p`; merges after L, before Final)
+- ○ 40. M: Discover's state, SlotCard's timing copy and the slot page's period window follow the open-ended calendar (the next purchasable period, `sale_end`, overlapping windows when `lead > period`) instead of the first period. A unit table plus a brute-force cross-check; demo e2e rows found by their index cell. Web and e2e only; no ROADMAP edit (36 records it). Sonnet coder, Opus review. **Risk: medium.** **(compact spec below)**
+
+### Slice N — `fix/periods-range-cap` (**proposed** 2026-09-25; after L, in `/home/claude/OpenAd-o`; merges before Final)
+- ○ 41. N: cap `GET /v1/slots/{id}/periods` at 60 periods (422 `invalid_window`) and read its leases in one query; T19. Found while speccing 40: one unauthenticated request can hold a pooled DB connection indefinitely. Sonnet. **Risk: low.** **(compact spec below)** If declined, it goes to Phase 7 with the §8 severity note.
+
+### Final — `chore/launch-final` (started off `2f313d9` in parallel with 39; merges last, after 39, 40 and, if accepted, 41)
+- ✱ 36. Final (primary tree, `chore/launch-final` off `2f313d9`; R1 FIX → **fix round 1 in progress**, see §5). It covers:
   - ROADMAP: 6.3 `[x]` with a dated amended-acceptance note; 6.6 split into artifacts `[x]` and a new **6.10** live deploy `[ ]` (6.8 and 6.9 come from 37 and 38); 6.7 `[x]`; a Phase 7 backlog.
   - Sourcemaps off; the `PLAYWRIGHT_CHROMIUM_PATH` hook in the main e2e config.
   - Onramp guide page; guide README and SUMMARY.
   - README "What's in the box" (including the hardening and the same-site domain requirement) and two new deterministic screenshots.
   - Business docs (the launch checklist gains the custom-domain, XFF and budget user actions), ARCHITECTURE §7 truth fixes, a scorecard automated-checks section, AGENTS.md pointers.
-  - The runbook's DB-password flow (§3/§5) and a DNS TXT truth fix, both routed from 38.
+  - The runbook's DB-password flow (§3/§5) and a DNS TXT truth fix (routed from 38); the web-origin host rule and a stale `api/README.md` (routed from 37).
+  - After merging main: re-capture the screenshots (40 changes Discover) and record 39, 40 and 41 in the ROADMAP.
   - The planner archives the plan in the same PR.
   **Risk: low.** **(full spec below, re-sequenced)**
 
 ## 5. Active step — full spec
 
-### Step 37 — Auth hardening: SIWE domain binding, atomic nonce use, auth-table pruning, auth rate limit (slice J)
+### Step 37 — Auth hardening (slice J): DONE, as-shipped record
 
-**Where:** the primary tree `/home/claude/OpenAd`, branch `fix/auth-hardening`. The orchestrator
-creates it after #13 merges: `git fetch && git switch -c fix/auth-hardening origin/main`. The
-uncommitted JIT edits carry over; the coder does **not** stage `.cursor/`.
-**Coder model:** **Opus.** **Risk: high.**
-- This is the only authentication path for off-chain writes: house ads, domain verification and
-  listings.
-- A mistake either reopens the hole or locks every publisher out.
-- It also touches three clients: web, sim and the api tests.
-- It runs in parallel with step 38 (done, PR #14). **Merge 37 first**, then merge main into 38;
-  step 38 lists the expected conflicts.
+**Status:** R2 PASS. Commits `eb8193f` (feature) and `2ce0f5b` (JIT files) on
+`fix/auth-hardening`, base `abb2b81`, pushed. **PR #15 merged as `2c4101b`.** The full pre-implementation spec is in git history
+(`2ce0f5b`). The record below is what shipped, including the fix-round-1 amendments.
 
-**Amendments (fix round 1; the orchestrator's decisions on the R1 findings, 2026-09-25).** They
-supersede the Design and Tests text below where the two differ:
-- A1. `parse_siwe` follows the EIP-4361 ABNF strictly: the address line, an empty line, then
-  either a statement line and an empty line or, with no statement, a second empty line. viem's
-  `createSiweMessage` (2.56.3 in this tree) emits exactly this, and the web, sim and test
-  helpers emit the same layout.
-- A2. Addresses must be EIP-55 checksummed; an all-lowercase address is rejected.
-- A3. Clock skew is ±300 s: `Issued At` ∈ `[now − NONCE_TTL − 300, now + 300]`, and `Not Before`
-  ≤ `now + 300`.
-- A4. Nonce `[A-Za-z0-9]{8,64}` (64 is the column size); `SiweIn.message` ≤ 4096 characters.
-- A5. Pruning runs as two `DELETE` statements (nonces, then sessions).
-- A6. A SQLite `before_cursor_execute` test proves the nonce is consumed by one conditional
-  `UPDATE`.
-- A7. CI: the api job gets a `postgres:16` service and sets `OPENAD_TEST_PG_URL`, so the PG-gated
-  tests (migrations, auth) run in CI.
+**As shipped** (beyond the original spec, per the orchestrator's amendments):
+- **Parser** (`api/src/openad/siwe.py`):
+  - strict EIP-4361 ABNF layout (two empty lines when there is no statement);
+  - EIP-55 addresses only;
+  - statement, URI and Request ID character sets tightened to EIP-4361 / RFC 3986;
+  - nonce `[A-Za-z0-9]{8,64}`; `SiweIn.message` ≤ 4096 characters.
+- **Binding:** `domain` must be the authority of an allowed origin, and `URI` must have that
+  same origin. Allowed origins come from `OPENAD_SIWE_ALLOWED_ORIGINS`, falling back to
+  `OPENAD_CORS_ORIGINS`. Clock skew is ±300 s.
+- **Nonce:** consumed by one conditional `UPDATE`, only after the signature checks out. A SQLite
+  `before_cursor_execute` test proves it.
+- **Pruning:** two `DELETE`s, throttled from `issue_nonce`; migration `0005_auth_prune_indexes`.
+  The `created_at` range uses `ix_auth_nonces_created_at`; the `used` delete seq-scans
+  (documented).
+- **Errors:** any invalid body on `/v1/auth/*` gives a house-style 422 `invalid_request`
+  (`InvalidRequestError`). Other routes keep FastAPI's default body, verified byte-identical on
+  17 non-auth error cases.
+- **Clients:**
+  - Web `permit.ts` and the sim build messages with viem's `createSiweMessage`.
+  - The web signs with `window.location.host`.
+  - The sim signs as `OPENAD_SIM_WEB_ORIGIN` (default `http://localhost:5173`).
+  - The demo nonce is `demo…`, because viem rejects hyphens.
+- **Rate limit:** opt-in and per instance. It stays **off** in `infra/` because Cloud Run's
+  right-most XFF semantics are unconfirmed. `docs/deploy-gcp.md` has verify-then-enable steps,
+  run with max-instances=1 during the test.
+- **CI:** the api job gets a `postgres:16` service and a "pytest with Postgres" step that runs
+  the full suite.
+- **Docs:** ADR-0009 amendment, T15 and T16, the ARCHITECTURE auth section, `.env.example`,
+  ROADMAP 6.8 `[x]`.
 
-**The vulnerability (confirmed by the planner against the tree):**
-- `services/auth.py:31-37` `_parse_siwe` regex-searches the first `0x` address, `Nonce:` and
-  `Chain ID:` anywhere in the message. It never checks the EIP-4361 domain line, URI, version or
-  timestamps.
-- Relay attack:
-  1. A phishing site calls our `POST /v1/auth/nonce` server-side.
-  2. It asks the victim to sign a well-formed SIWE message for **its own** domain. The wallet
-     shows no mismatch, because the domain matches the phishing page.
-  3. It POSTs the message and signature to our `/v1/auth/verify`.
-  4. Our API accepts it and mints a session for the victim's address. The attacker can then
-     edit the victim's house ads and listings.
-- Also, the nonce is consumed with a read-then-write (`services/auth.py:51-61`), so two
-  concurrent verifies with the same nonce can both pass.
-- `POST /v1/auth/nonce` inserts a row per call and nothing deletes used or expired nonces.
-  Expired `sessions` rows are deleted only on logout (`services/auth.py:78-84`).
-- ADR-0009 has drifted from the implementation. It says the API uses the Python `siwe` library
-  and an HMAC cookie payload; the code uses regex parsing and a random server-side session id.
+**Checks** (coder and reviewer, same tree):
+- api: ruff, format and mypy clean; pytest 219 passed / 5 skipped; 223 / 1 with
+  `OPENAD_TEST_PG_URL`; a fresh `alembic upgrade head` works.
+- npm: typecheck, lint, test (web 212, embed 5, sim 13 + 1 skipped), build, build:demo,
+  check-demo-bundle, CI prettier and `check:sh` pass. test:demo 14/14; main YAML e2e 13/13 (on a
+  throwaway config, since deleted).
+- Live uvicorn:
+  - The web builder and the sim as `localhost:5173` and `127.0.0.1:5173` get 200 plus a cookie.
+  - The API's own origin and `evil.example` get 401.
+  - A client clock 4 min fast or 14 min behind passes; 6 min fast or 16 min behind is refused.
+  - A 4096-character message gets 200; 4097 gets a house-style 422.
+  - The limiter returns 429 with `Retry-After`.
 
-**Read first:**
-- `api/src/openad/services/auth.py`, `api/src/openad/routers/auth.py`, `api/src/openad/models/auth.py`.
-- `api/src/openad/config.py` (`cors_origins` L43, `cors_origin_list` L75, `is_dev`),
-  `api/src/openad/errors.py`, `api/src/openad/main.py` (error handler, CORS).
-- `api/tests/test_auth.py` and `api/tests/test_slot_listings.py`. Both build `_siwe()` with
-  domain `localhost`, URI `http://localhost:5173` and a **fixed past** `Issued At`, so they must
-  change.
-- `api/tests/test_migrations.py` and `api/alembic/versions/20260925_0004_slot_listings.py`
-  (head `0004_slot_listings`).
-- `web/src/features/auth/useSiwe.ts:31-37` (domain = `window.location.hostname`),
-  `web/src/lib/permit.ts:42-61` (`buildSiweMessage`), `web/src/lib/permit.test.ts`.
-- `sim/src/api.ts:134-150`. The sim signs with domain `'localhost'` and **URI = the API base
-  URL**, which the new rules reject. Also `sim/src/siwe.ts` (`siweLooksValid`).
-- `docs/adr/0009-siwe-sessions.md`, `docs/threat-model.md` (table ends at T14),
-  `docs/ARCHITECTURE.md` (the auth section), `.env.example`, `infra/gcp/services/api.yaml`
-  (env block), `docs/deploy-gcp.md`.
+**Reviews:**
+- R1 FIX:
+  - L2: the atomic consume was tested only on PG, which CI didn't run.
+  - L2: the parser accepted non-ABNF layouts and lowercase addresses, which defeats wallet-side
+    SIWE detection.
+  - L3s: the prune's `OR` defeated the index; the XFF test needs one instance; nonce and message
+    caps; ±60 s skew was too tight.
+- R2 PASS. The remaining L3s are in §8 (Phase 7).
 
-**Design**
-1. **Strict EIP-4361 parser** in a new `api/src/openad/siwe.py`: pure functions, no DB, no new
-   dependency. `parse_siwe(message) -> SiweMessage` (a frozen dataclass).
-   - Line 1: `^(?P<domain>[^\s/]+) wants you to sign in with your Ethereum account:$`.
-   - Line 2: the address, `^0x[0-9a-fA-F]{40}$`, EIP-55 checksummed only (A2). Store it
-     lower-cased.
-   - Line 3: empty. Then either a one-line statement and an empty line, or a second empty line
-     when there is no statement (A1).
-   - Then, in this exact order, exactly once each: `URI: <abs-uri>`, `Version: 1`,
-     `Chain ID: <int>`, `Nonce: <[A-Za-z0-9]{8,64}>` (A4), `Issued At: <RFC 3339>`.
-   - Optional fields, in the EIP-4361 order: `Expiration Time:`, `Not Before:`, `Request ID:`,
-     `Resources:` followed by `- <uri>` lines.
-   - Reject unknown or duplicate lines, CR characters, and anything after the last field.
-   - Errors raise `UnauthorizedError("malformed SIWE message")`. Keep messages generic.
-2. **Validation** in `verify_siwe`, in this order: parse, bind, chain, time, signature, consume
-   nonce, create session.
-   - **Bind:** the allowed origins are `settings.siwe_origin_list`, a new setting
-     `siwe_allowed_origins: str | None`, falling back to `cors_origin_list`.
-     - `domain` must equal `urlsplit(origin).netloc` for some allowed origin.
-     - The `URI` origin (`scheme://netloc`) must equal that **same** allowed origin.
-     - Otherwise `UnauthorizedError("domain not allowed")`.
-   - **Chain:** `Chain ID == settings.chain_id` (as today). `Version == "1"`.
-   - **Time (A3):** `Issued At` must be within `[now − NONCE_TTL − 300, now + 300]` seconds.
-     `Expiration Time`, if present, must be > now. `Not Before`, if present, must be ≤ now + 300.
-   - **Signature:** `Account.recover_message(encode_defunct(text=message))` must equal the
-     parsed address (as today).
-   - **Consume nonce atomically, only after the signature checks out:**
-     `UPDATE auth_nonces SET used = true WHERE nonce = :n AND used = false AND created_at >= :now - NONCE_TTL`.
-     Require `rowcount == 1`, otherwise `UnauthorizedError("invalid nonce")`. Then insert the
-     session in the same transaction.
-3. **Clients use the authority, including the port** (EIP-4361 `domain` is an RFC 3986
-   authority):
-   - `web/src/features/auth/useSiwe.ts`: `domain: window.location.host`, with `uri`
-     unchanged (`window.location.origin`).
-   - `sim/src/api.ts`: sign as the **web app** origin. Add a sim setting `webOrigin`, default
-     `http://localhost:5173` (env `SIM_WEB_ORIGIN`), so domain = its host and uri = that
-     origin, not the API base URL.
-   - Update `sim/src/siwe.ts` `siweLooksValid` to the new shape.
-   - The demo (`demoApi` authVerify) needs no change. Confirm the demo suite still passes.
-4. **Auth-table pruning:**
-   - `prune_auth(session, now)` deletes `auth_nonces` where `used` or
-     `created_at < now − NONCE_TTL`, and `sessions` where `expires_at < now`.
-   - Call it from `issue_nonce` at most once per 60 s per process (a module-level monotonic
-     timestamp, injectable for tests).
-   - Add `index=True` on `AuthNonce.created_at` and `Session.expires_at`, plus a migration
-     `20260925_0005_auth_prune_indexes.py`: explicit DDL with `CREATE/DROP INDEX IF (NOT)
-     EXISTS` like 0003, and `down_revision = "0004_slot_listings"`. The parity test must stay
-     green on SQLite and Postgres (pgserver; JIT_INDEX).
-5. **Best-effort auth rate limit** in a new `api/src/openad/ratelimit.py`:
-   - A per-process token bucket keyed by client, used as a FastAPI dependency on
-     `POST /v1/auth/nonce` and `POST /v1/auth/verify` only.
-   - When exceeded: 429 `{"error":"rate_limited","message":…}` with `Retry-After`.
-   - Bounded memory: an LRU of at most 10 000 keys.
-   - Settings:
-     - `auth_rate_limit_per_minute: int = 0` (**0 = disabled**, the default, so local dev and
-       any unknown proxy setup are unaffected);
-     - `trusted_proxy_hops: int = 0`. The client key is `request.client.host` when it's 0;
-       otherwise it's the N-th entry from the **right** of `X-Forwarded-For`, falling back to
-       `client.host` if the header is shorter. Spoofed left-side entries must not matter.
-   - `infra/gcp/services/api.yaml`: add `OPENAD_AUTH_RATE_LIMIT_PER_MINUTE=30` and
-     `OPENAD_TRUSTED_PROXY_HOPS=1` **only if** the coder can confirm from Cloud Run
-     documentation that Google's front end appends the real client IP as the right-most
-     `X-Forwarded-For` entry for direct Cloud Run ingress. If that can't be confirmed, leave
-     both unset (limiter off) and add a `docs/deploy-gcp.md` step: "verify the XFF chain in
-     staging logs, then enable".
-   - Either way, `deploy-gcp.md` states the limit is per instance and recommends Cloud Armor
-     rate limiting on the load balancer for a global limit.
-6. **Settings and docs:**
-   - `.env.example` gets commented lines for `OPENAD_SIWE_ALLOWED_ORIGINS`,
-     `OPENAD_AUTH_RATE_LIMIT_PER_MINUTE` and `OPENAD_TRUSTED_PROXY_HOPS`.
-   - `docs/ARCHITECTURE.md` auth section: the binding rule, the pruning, the limiter.
-   - `docs/adr/0009-siwe-sessions.md`: an "Amendment (2026-09-25)" that records the actual
-     implementation (in-house strict EIP-4361 parser instead of the `siwe` package; a random
-     256-bit server-side session id instead of an HMAC payload), the domain/URI binding to
-     allowed origins, atomic nonce use, pruning, and the proxy-hops rule. Don't rewrite the
-     original decision text.
-   - `docs/threat-model.md`:
-     - **T15** "SIWE message relayed from another domain": domain and URI bound to allowed
-       origins; single-use atomic nonce with a 10-minute TTL; chain id; issued-at window.
-     - **T16** "Auth table growth / nonce flooding": pruning plus the per-instance limiter,
-       with Cloud Armor recommended.
-   - `docs/ROADMAP.md`: add **6.8 "Auth hardening (SIWE binding, nonce/session hygiene)"**
-     `[x]` `_Done 2026-09-25._` after 6.7, with pointers and acceptance matching this step.
-     Step 38 adds 6.9; step 36 adds 6.10 for the live deploy.
-
-**Tests** (`api/tests/test_auth_hardening.py`, plus updates to the existing helpers)
-- Move the `_siwe()` helpers to one shared test helper that uses a fresh `Issued At` and domain
-  `localhost:5173`, and update `test_auth.py`, `test_slot_listings.py` and any other user of it.
-  Test keys come from `Account.create()`, as today; no keys in `src/`.
-- **Relay:** a valid signature, a real nonce and domain `evil.example` with URI
-  `https://evil.example` → 401, and the nonce is **still unused**. Also 401 for:
-  - URI origin allowed but domain different;
-  - domain allowed but URI on another origin;
-  - a scheme mismatch (`http` vs `https`);
-  - `localhost` without the port while the allowed origin has `:5173`.
-  - The allowed origin → 200 plus a cookie.
-- **Parser:**
-  - reordered fields, a duplicate `Nonce:` or an unknown line → reject;
-  - an address inside the statement is ignored (line 2 is authoritative);
-  - `Version: 2`, a CRLF message, trailing junk → reject;
-  - `Issued At` older than the TTL, or in the future beyond the skew → reject;
-  - `Expiration Time` in the past, or `Not Before` in the future → reject;
-  - a `Resources:` list parses.
-- **Nonce:** a second verify with the same nonce → 401. A direct test of the atomic consume
-  shows `rowcount` 0 on reuse, plus the `before_cursor_execute` test (A6).
-- **Pruning:** used and expired nonces and expired sessions are removed; live ones stay; the
-  throttle means a second call within 60 s doesn't prune; and nonce issuance still works when
-  the prune deletes rows.
-- **Rate limit:**
-  - disabled by default;
-  - with 3/min: the 4th request gets 429 and `Retry-After`;
-  - independent keys are independent;
-  - `hops=0` ignores XFF;
-  - `hops=1` uses the right-most entry, so spoofed left entries don't matter;
-  - the LRU cap holds;
-  - it only applies to the two auth routes.
-- **Migrations:** `test_migrations.py` passes with 0005 on SQLite and with `OPENAD_TEST_PG_URL`.
-- **Web:** `permit.test.ts` covers a message with host plus port. If a `useSiwe` test exists,
-  it asserts `window.location.host`.
-- **Sim:** the sim unit tests are updated for `webOrigin`.
-
-**Constraints**
-- No keys in `api/` or `web/` source; the AGENTS invariants hold.
-- Error bodies use the house style.
-- No change to `SameSite=Lax` or `Secure` behaviour.
-- No new runtime dependency.
-- No behaviour change to non-auth routes.
-- Keep `siwe_allowed_origins` unset in `docker-compose*.yml`: the default follows
-  `OPENAD_CORS_ORIGINS`.
-
-**Verify**
-```bash
-cd /home/claude/OpenAd
-(cd api && uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy src && uv run pytest -q)
-(cd api && OPENAD_TEST_PG_URL=<pgserver url> uv run pytest -q tests/test_migrations.py tests/test_auth.py tests/test_auth_hardening.py)
-(cd api && rm -f /tmp/fresh.db && OPENAD_DATABASE_URL=sqlite+aiosqlite:////tmp/fresh.db uv run alembic upgrade head && echo fresh-ok)
-npm run typecheck && npm run lint && npm run test && npm run build && npm run build:demo
-node web/scripts/check-demo-bundle.mjs
-PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:demo -w e2e
-grep -n "_ADDR.search\|_NONCE.search\|_CHAIN.search" api/src/openad/services/auth.py && echo "FAIL old regex parser still used" || echo parser-ok
-grep -n "location.hostname" web/src/features/auth/useSiwe.ts && echo "FAIL hostname" || echo host-ok
-git status --short   # .cursor/ not staged
-```
-Optional (docker available): `docker compose up -d`, start the api, run
-`npm run sim:once`-style sim sign-in (or `e2e/scripts/smoke-devwallet.mjs`), and confirm a real
-SIWE round trip returns 200 from `http://localhost:5173`.
-
-**Done when:**
-- A relayed SIWE message for a foreign domain is rejected, and the nonce isn't burned.
-- Allowed-origin sign-in works from web, sim and tests.
-- Nonce use is atomic.
-- Used and expired auth rows are pruned, and 0005 passes parity on SQLite and Postgres.
-- The limiter exists, is off by default, and is enabled on Cloud Run only if the XFF semantics
-  are confirmed.
-- ADR-0009 is amended, T15 and T16 are added, and ROADMAP 6.8 is `[x]`.
-- All checks are green. Ship: PR, CI 5/5, merge, **before** 38 and 36.
+**Routed to 36:**
+- viem's host rule for the web origin (in 36's facts);
+- the stale `api/README.md`;
+- `OPENAD_SESSION_SECRET`, which no code reads (Phase 7).
 
 
 ### Step 38 — Capacity and deploy hardening (slice K): DONE, as-shipped record
 
 **Status:** R3 (Opus) PASS. Commit `4370d09` on `feat/ops-hardening` (base `abb2b81`) in
-`/home/claude/OpenAd-o`, pushed; **PR #14** is open with CI pending. After 37 merges, the
-orchestrator merges main into it, re-verifies, then merges #14. JIT files are not edited there.
+`/home/claude/OpenAd-o`, pushed; Main was merged in as `2f313d9`
+(conflicts only in ROADMAP and threat-model ordering; all checks green), and **PR #14 merged as
+`5f27fb8`**. JIT files are not edited there.
 The pre-implementation compact spec is in git history with this plan. The record below is what
 shipped, including the orchestrator's amendments.
 
-**Merging after 37** (38's commit checked against 37's working tree at 05:17 UTC):
+**Merging after 37** (done in `2f313d9`; predicted from 37's working tree at 05:17 UTC):
 - Textual conflicts are expected only in two files:
   - `docs/ROADMAP.md`: both insert after L212. Keep 6.8, then 6.9.
   - `docs/threat-model.md`: both insert after the T14 row and after the residual-risk list. Keep
@@ -483,17 +346,32 @@ git diff --name-only origin/main...HEAD | grep '^\.cursor/' && echo "FAIL JIT fi
 ```
 
 
-### Step 39 — Bound outbound fetches (slice L, **proposed**, compact spec)
+### Step 39 — Bound outbound fetches (slice L, accepted, compact spec)
 
-_Planner finding, 2026-09-25, verified against `4370d09`. Not yet accepted: the orchestrator
-decides whether it runs before 36 or goes to Phase 7._
+_Planner finding, verified against `4370d09`. **Accepted** by the orchestrator on 2026-09-25: it
+runs before 36 merges._
+
+**Fix round 1 (R1 FIX; the orchestrator's scope decisions, 2026-09-25).** These supersede the
+items below where they differ:
+- F1 (L1). `POST /v1/creatives/{id}/verify` also held a pooled connection during `fetch_media`.
+  It is now in scope, with the same read, commit, fetch, write pattern as item 3.
+- F2 (L1). `_check_meta`'s body loop rescanned the buffer (O(n²)), and decoded chunks allowed a
+  gzip bomb. Both `_check_meta` and `fetch_media` send `Accept-Encoding: identity` and read with
+  `aiter_raw`, so the byte caps apply to wire bytes. A server that ignores `identity` fails
+  closed (hash or tag mismatch).
+- F3 (L2). The cooldown was read-then-write. It is now one atomic conditional `UPDATE` (a row
+  count of 1 wins).
+- F4 (L2). The T18 residual text is corrected, and `_check_meta`'s deadline gets a test.
+- L3s, including a guard for a re-issued token, are the coder's call in fix round 1. Leftovers
+  go to §8.
 
 **Where:**
-- After #14 merges, on a fresh branch `fix/outbound-fetch-bounds` off `origin/main`, reusing the
-  `/home/claude/OpenAd-o` worktree. JIT files are not edited there.
-- It reuses 38's `_hop_allowed` and 37's `RateLimitedError`.
-- It edits no ROADMAP line (36 records it under 6.9), so 36's coder can start in parallel.
-  Merge 39 first.
+- Sequence: #15 (37) merges → main is merged into #14 → #14 (38) merges → 39 starts on a fresh
+  branch `fix/outbound-fetch-bounds` off `origin/main` in the `/home/claude/OpenAd-o` worktree.
+  JIT files are not edited there.
+- It reuses 38's `_hop_allowed` and 37's `RateLimitedError(message, retry_after=…)`.
+- 36 starts at the same time in the primary tree, off the same main. 39 edits no ROADMAP line
+  (36 records it under 6.9). Merge 39 first; 36 then merges main in.
 
 **Coder model:** Sonnet, with an Opus review. **Risk: medium.** It changes the indexer loop and a
 user-facing route. The failure mode is availability, not funds.
@@ -567,12 +445,197 @@ grep -n "follow_redirects=True" api/src/openad/services/*.py && echo FAIL || ech
 - Ship: PR, CI, merge before 36.
 
 
+### Step 40 — Discover and slot-page period state follow the open-ended calendar (slice M, compact spec)
+
+_Added by the orchestrator on 2026-09-25, from 36's review: the demo labels slot 0 "Ended" while
+period 4 is buyable. The planner verified it against `5f27fb8` and widened it to the slot page's
+period window, which is anchored to the first period in the same way._
+
+**Where:**
+- Worktree `/home/claude/OpenAd-p`, branch `fix/discover-auction-state`, off `origin/main`
+  (`5f27fb8`).
+- It touches only `web/` and `e2e/demo/` (code, tests, fixtures). It edits no ROADMAP line; 36
+  records it.
+- Merge order: 39 → 40 → 36.
+
+**Coder model:** Sonnet, with an Opus review. **Risk: medium.** The state drives the Discover
+filter, the featured row, the SlotCard copy and the slot page's buy list. A wrong rule hides
+buyable inventory or offers closed periods.
+
+**Evidence** (at `5f27fb8`):
+- **Discover state:**
+  - `web/src/lib/auction.ts:47-58` `auctionState` looks only at `firstPeriodStart`. It returns
+    `'ended'` once `now ≥ firstPeriodStart + periodSeconds`.
+  - But PROTOCOL §4.1 says periods are unbounded upward
+    (`start(i) = first_period_start + i·period_seconds`). The horizon is bounded only by
+    `lead_seconds` and, optionally, `sale_end`: `buy` requires `end ≤ sale_end` when it is
+    non-zero.
+  - So in production every slot reads "Ended", and drops out of the Live filter, one period
+    after launch.
+- **Callers:**
+  - `SlotCard.tsx:12-13` shows the badge, and its "live in …" and "period starts …" copy also
+    use the first period (via `auctionOpenAt` and `firstPeriodStart`).
+  - `DiscoverPage.tsx:46,51` uses it for the filter and the featured row.
+  - The existing unit test (`auction.test.ts:52-58`) encodes the bug.
+- **Slot page:**
+  - `usePeriods` calls `api.listPeriods(slotId)` with the default `from=0, to=14`
+    (`lib/api.ts:95`).
+  - Once a calendar is 15 periods old, the page lists only closed periods. `nextOpenPeriod` is
+    then undefined, so the page falls back to the generic "Advertise here" copy, and nothing can
+    be bought from the UI.
+- **The rule to mirror:** `api/src/openad/services/periods.py` (`list_periods`, `dutch_price`),
+  which follows PROTOCOL's `buy` checks:
+  - no terms, or `lead_seconds == 0` → not sellable;
+  - paused;
+  - `sale_end ≠ 0 and end > sale_end` → beyond sale end;
+  - leased;
+  - `now < max(0, start − lead)` → not open;
+  - `now ≥ end` → closed;
+  - otherwise Dutch before `start`, remainder after.
+
+**Items**
+1. **`lib/auction.ts`: a calendar-aware `auctionStatus(slot, now)`.** It returns
+   `{ state, current?, next?, opensAt?, startsAt?, endsAt? }`. Keep `auctionState(slot, now)` as
+   a thin wrapper.
+   - Notation: `P = periodSeconds`, `S0 = firstPeriodStart`, `L = leadSeconds`, `E = saleEnd`,
+     `start_k = S0 + k·P`, `end_k = start_k + P`, `open_k = max(0, start_k − L)`.
+   - Checked first:
+     - no terms, or LEASE with `L ≤ 0` → `'no terms'` (today, no terms reads `'paused'`);
+     - CPC → `'cpc'`;
+     - paused → `'paused'`;
+     - `calendarVersion == 0`, or `S0`/`P` null → `'no calendar'`.
+   - Then:
+     - `kLast = E == 0 ? ∞ : floor((E − S0) / P) − 1`, the last period with `end_k ≤ E`.
+     - `cur = now ≥ S0 ? floor((now − S0) / P) : −1`, and `next = cur + 1`.
+     - `'ended'` iff `E ≠ 0` and (`kLast < 0` or `now ≥ end_kLast`). A slot with `E == 0` is
+       never `'ended'`.
+     - `'live'` iff `next ≤ kLast` and `now ≥ open_next`: the next period's Dutch window is open.
+       With `L > P`, later windows are open too, and `next` is still the soonest start.
+     - `'remainder'` iff `cur ≥ 0` (so `cur ≤ kLast`) and not live.
+     - `'upcoming'` otherwise (`now < open_0`).
+   - SlotOut has no lease data, so the state describes the schedule, not whether a period is
+     sold. Say so in the doc comment; the slot page's list shows what's unsold.
+2. **`SlotCard` copy**, taken from the status:
+   - upcoming → "live {formatTimeLeft(open_0)}";
+   - live → "period starts {formatTimeLeft(start_next)}";
+   - remainder → "next auction {formatTimeLeft(open_next)}" when `next ≤ kLast`, otherwise
+     "final period ends {formatTimeLeft(end_cur)}".
+   - Remove the first-period `auctionOpenAt`, or re-implement it on the status. Its only
+     caller is SlotCard.
+3. **Slot page:** request the window around now.
+   - `from = max(0, cur)` (the current period first; also showing one earlier period is fine),
+     and `to = from + 14`. Put `from` in the query key.
+   - "Next open period" and the "Advertise here" copy then come from real, current periods.
+4. **Tests:**
+   - A table in `auction.test.ts`:
+     - `E = 0` at `k = 0, 1, 1000` never ends;
+     - `L < P` gives remainder, then live, within one period;
+     - `L == P` (the demo's case) is always live after `open_0`;
+     - `L > P` (e.g. 2.5·P) is live;
+     - `E` with `kLast`, and `E < S0 + P` → ended;
+     - boundaries: `now == open_next` → live, `now == start_k`, and `now == end_kLast` → ended;
+     - `open_0` saturating at 0;
+     - paused, CPC, no terms, `L = 0`, no calendar.
+     - Replace the test that encodes the bug.
+   - A brute-force cross-check: for random `(S0, P, L, E, now)`, enumerate the periods with the
+     per-period rule above (what `services/periods.py` does, minus leases) and compare the
+     derived state.
+   - A slot-page test that the periods request starts at the current index.
+5. **Demo and e2e:**
+   - Fixtures stay relative to `demoNow()`. With `L == P == DAY`, slots 0, 2 and 4 now read
+     "live"; slot 5 is paused, and slots 1 and 3 are CPC.
+   - Add a demo e2e assertion that slot 0's card is live (the reviewer's case).
+   - `flows.spec.ts` `buyFirstPeriod` finds rows by position (`tbody tr` `.nth(periodIndex)`),
+     which breaks once the list stops starting at period 0. Find rows by their index cell
+     instead, as the period-3 test already does.
+   - Run test:demo, and the YAML scenarios that click the state filters
+     (`gen1-discover-filters`, `gen4-ended-filter`) if docker is up.
+
+**Verify**
+```bash
+cd /home/claude/OpenAd-p
+npm run typecheck && npm run lint && npm run test && npm run build && npm run build:demo
+node web/scripts/check-demo-bundle.mjs
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:demo -w e2e
+grep -rn "firstPeriodStart" web/src/components web/src/features --include='*.tsx' && echo "REVIEW first-period logic in UI" || echo ui-ok
+git status --short   # web/ and e2e/ only
+```
+
+**Done when:**
+- No UI state is derived from the first period alone.
+- Slots with `E == 0` never read "Ended".
+- The slot page lists the current window, whatever the calendar's age.
+- The table, cross-check, slot-page and demo e2e tests are green.
+- Ship: PR, CI, merge after 39 and before 36.
+
+
+### Step 41 — Cap the periods range (slice N, **proposed**, compact spec)
+
+_Planner finding while speccing 40, verified against `5f27fb8`. The orchestrator decides._
+
+**Evidence:**
+- `GET /v1/slots/{id}/periods` (`routers/slots.py:38-50`) takes `from` and `to` with only `ge=0`.
+- `services/periods.py` then loops over `range(from, to + 1)`, with one `session.get(Lease, …)`
+  per index.
+- So one unauthenticated request with `to=1000000000` holds a pooled DB connection, and builds an
+  unbounded list, until the process dies.
+- About 24 such requests take every api connection (38's budget), and serve fails.
+
+**Where:**
+- After 39 merges: a fresh branch `fix/periods-range-cap` off `origin/main`, in
+  `/home/claude/OpenAd-o`. That way T19 lands after 39's T18.
+- api and docs only, so it can run in parallel with 40 (web only).
+- No ROADMAP edit; 36 records it under 6.9. Merge it before 36.
+
+**Coder model:** Sonnet. **Risk: low.** The callers ask for 15 periods (web, after 40), 8 (sim)
+and 5 (sim planner), all under the cap.
+
+**Items**
+1. Reject ranges wider than 60 periods (`to − from + 1 > 60`) with a house-style 422. Reuse the
+   analytics `InvalidWindowError` (`invalid_window`). Keep the defaults.
+2. Replace the per-index lease reads with one query over
+   `(slot_id, calendar_version, period_index BETWEEN from AND to)`.
+3. Tests:
+   - 60 is accepted and 61 → 422;
+   - leases in the range are still reported;
+   - optionally, the query count no longer grows with the range.
+4. Docs:
+   - ARCHITECTURE §3.3 notes the cap;
+   - `docs/threat-model.md` gets **T19** "Unbounded work per request".
+
+**Verify:** api ruff, format and mypy, plus pytest (also with `OPENAD_TEST_PG_URL`).
+
+**Done when:**
+- The cap and the single query are in, and T19 is added.
+- Checks are green.
+- Ship: PR, CI, merge before 36.
+
+
 ### Step 36 — Launch finalization (replaces 17+18 and 32+33; one branch, one PR, the last step)
 
 _Refreshed 2026-09-25 03:35 UTC against `feat/slot-listings` @ `496422e`, which is what main will
-contain once #13 merges. Re-sequenced in the same pass: **36 now runs after the hardening steps
-37 and 38 (and 39, if accepted) merge**, so its docs describe the hardened state. Facts refreshed
-again after STEP_DONE 38._
+contain once #13 merges. Re-sequenced in the same pass: **36 starts after the hardening steps
+37 and 38 merge, and merges after 39, 40 and (if accepted) 41**, so its docs describe the
+hardened state. Facts refreshed again after STEP_DONE 37 (39 accepted) and the 40/41 REVISE._
+
+**Progress (fix round 1, 2026-09-25).** Coded on `chore/launch-final` off `2f313d9`.
+- R1 FIX, L1s:
+  - the `gcloud sql users set-password` syntax is wrong;
+  - the onramp guide falsely says the app shows the USDC address;
+  - regenerated screenshots inherit a scroll offset;
+  - `docs/GLOSSARY.md` still claims DNS TXT verification.
+- R1 FIX, L2s:
+  - the host-rule note names `VITE_API_URL`;
+  - `VITE_SOURCEMAP` in `.env` does nothing, because it is a shell variable at build time;
+    document it that way;
+  - 6.7's acceptance needs a dated amended note.
+- New deploy bug, in scope (runbook only): §5 grants the settler no `secretAccessor` on
+  `openad-database-url-<ENV>`, so the settler can't start.
+- Shipped beyond the spec so far:
+  - a latent capture-script bug: after a LEASE buy it waited for the CPC-only "Confirmed on
+    chain"; it now waits for "Lease confirmed";
+  - stale ARCHITECTURE §5 claims ("6.2 in progress", "SPA fallback").
+- `#TBD-36` placeholders stand for this PR's number; the orchestrator replaces them.
 
 **Why merged:** 17+18 (guide, ROADMAP 6.3, ship C) and 32+33 (ROADMAP ticks, README, guide
 SUMMARY, qa note, archive) edit the same files: `docs/ROADMAP.md`, `docs/guide/SUMMARY.md` and
@@ -581,9 +644,12 @@ SUMMARY), the glossary term and a 6.3 progress block. What's left is one truthfu
 polish pass.
 
 **Where:** the primary tree `/home/claude/OpenAd`, branch `chore/launch-final`. The orchestrator
-creates it after **37, 38 and (if accepted) 39** have merged: `git fetch && git switch -c chore/launch-final origin/main`. The
-planner's JIT edits are uncommitted in the primary tree and carry over, because main's JIT files
-equal `35281a3`'s. If git refuses the switch, stash, switch, then pop. The coder does **not**
+creates it after **#15 (37) and #14 (38)** have merged, while 39 runs in `/home/claude/OpenAd-o`:
+`git fetch && git switch -c chore/launch-final origin/main`. After 39, 40 (and 41, if accepted)
+merge, merge main into `chore/launch-final`, re-run `capture:screenshots` (40 changes Discover's
+labels) and re-verify. The planner's later JIT edits are uncommitted in the primary
+tree and carry over, because main's JIT files will equal `2ce0f5b`'s once #15 merges (#14 and 39
+don't touch `.cursor/`). If git refuses the switch, stash, switch, then pop. The coder does **not**
 stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
 **Coder model:** Sonnet. **Risk:** low.
 - It's docs, plus a one-line build flag and a one-line e2e config hook.
@@ -600,21 +666,44 @@ stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
 - Demo: https://claude.ai/artifact/AzkEcWfmUT23GCo2qkWxE7 (v2 from `d5d46a0`). Deck:
   https://claude.ai/artifact/Day12XXUFNi7CJdNpa2MUH. Both are private until the owner shares
   them.
-- PRs: #4 A, #5 E, #6 H, #7 F, #8 B, #9 D, #10 C1, #11 G, #12 I, #13 C2, #14 K (38, capacity and
-  deploy hardening), then J (37, auth hardening) and L (39) if accepted. Take the numbers from
-  `git log`.
-- After 37 and 38: SIWE is bound to allowed origins (strict EIP-4361, EIP-55 addresses, ±300 s
-  skew); nonce use is atomic; auth rows are pruned; an opt-in per-instance auth rate limit
-  exists; **web and api must share a registrable domain** (SameSite=Lax), and `deploy-gcp.sh`
-  refuses otherwise unless `--allow-cross-site-auth` is passed; every media redirect hop is
-  validated (host blocking applies outside dev only, because the sim uses loopback, ADR-0012).
-  ROADMAP 6.8 and 6.9 are `[x]` from those steps.
+- PRs: #4 A, #5 E, #6 H, #7 F, #8 B, #9 D, #10 C1, #11 G, #12 I, #13 C2, #15 J (37, auth
+  hardening), #14 K (38, capacity and deploy hardening), then L (39, outbound-fetch bounds). Take
+  the numbers from `git log`.
+- After 37 and 38:
+  - SIWE is bound to allowed origins (strict EIP-4361 built with viem's `createSiweMessage` on
+    web and sim, EIP-55 addresses, ±300 s skew); nonce use is atomic; auth rows are pruned.
+  - Invalid bodies on `/v1/auth/*` get a house-style 422 `invalid_request`.
+  - The opt-in per-instance auth rate limit exists but is **off** in `infra/`, because the XFF
+    chain is unverified. `docs/deploy-gcp.md` has the verify-then-enable steps (max-instances=1
+    during the test).
+  - CI's api job runs the full suite against Postgres.
+  - **Web and api must share a registrable domain** (SameSite=Lax). `deploy-gcp.sh` refuses
+    otherwise unless `--allow-cross-site-auth` is passed.
+  - Every media redirect hop is validated. Host blocking applies outside dev only, because the
+    sim uses loopback (ADR-0012).
+  - ROADMAP 6.8 and 6.9 are `[x]` from those steps.
+- 39 (merges before 36): media fetches have one overall deadline, and indexer verification has a
+  per-pass budget. The domain meta check, and `POST /v1/creatives/{id}/verify`, hold no DB
+  connection while they fetch. Both fetchers read raw bytes with `Accept-Encoding: identity`. The
+  meta check is bounded and has a per-slot cooldown (T18).
+- 40 (merges before 36): Discover's state, SlotCard's timing copy and the slot page's period
+  window follow the open-ended calendar. Before 40, every slot read "Ended" one period after its
+  first. Demo slots 0, 2 and 4 now read "live".
+- 41 (only if accepted; merges before 36): `GET /v1/slots/{id}/periods` accepts at most 60
+  periods per request (T19).
+- Web-origin host rule: viem's `createSiweMessage` rejects IPv6 literals and single-label hosts
+  other than `localhost` (e.g. `devbox:5173`, `LOCALHOST:5173`). So the web origin must be
+  `localhost`, an IPv4 address or a dotted hostname.
+- `api/README.md` is stale:
+  - its migration list stops at `0002_cpc`;
+  - it says `api/Dockerfile` migrates on start, but slice F moved migrations to the compose
+    `migrate` service and the Cloud Run Job.
 - Capacity (38, as shipped): pools api 4 + 2, indexer and settler 2 + 1, the migrate job one
   Alembic connection; `maxScale` api 4, web and web-demo 10; Cloud SQL `max_connections=100`
   pinned by flag; budget 31 steady, 34 with 3 reserved, ≈64 during a rollout overlap. Quote
   `docs/deploy-gcp.md` §3 rather than restating numbers from memory.
-- DNS TXT domain verification is documented (`docs/ARCHITECTURE.md` L268,
-  `docs/guide/marketplace/faq.md` L12) but can't succeed: `dnspython` isn't a dependency, so
+- DNS TXT domain verification is documented (`docs/ARCHITECTURE.md`, in the domain-verification
+  paragraph; `docs/guide/marketplace/faq.md` L12) but can't succeed: `dnspython` isn't a dependency, so
   `_check_dns` returns False on ImportError. The web UI only uses the meta tag.
 - `docs/deploy-gcp.md` §3 creates the `openad` DB user with
   `--password="$(openssl rand -base64 32)"`, which is never shown or stored, yet §5 needs
@@ -664,11 +753,13 @@ stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
      `docs/deploy-gcp.md` and `docs/business/launch-checklist.md`. Its acceptance: GCP project
      plus runbook; WIF secrets set; Base Sepolia deploy with `84532.json` committed; staging
      smoke checks pass (`/v1/health`, serve, the embed on a real publisher origin); web and api
-     on one registrable domain; the auth rate limit enabled once the XFF chain is verified (if 37
-     left it off).
+     on one registrable domain; the auth rate limit enabled once the XFF chain is verified (37
+     left it off; follow the runbook's verify-then-enable steps).
 3. **ROADMAP 6.7 → `[x]`** once items 4–11 land. Leave 6.8 and 6.9 (from 37 and 38) as they are,
-   except that if 39 merged, 6.9's delivered text gets one line naming the outbound-fetch bounds
-   (T18).
+   except for these delivered-text lines:
+   - 6.9 names 39's outbound-fetch bounds (T18) and, if accepted, 41's periods range cap (T19);
+   - 6.7 gets a dated line for 40 (Discover and the slot page follow the open-ended calendar).
+   All of them merge before 36.
 4. **ROADMAP Phase 7 — Post-launch backlog**, all `[ ]`, one line each with pointers:
    - per-slot OG (edge or server render);
    - publish `@openad/embed` to npm or a CDN;
@@ -690,8 +781,13 @@ stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
      `deploy.yml` `--only stack` passing real `API_URL`/`WEB_URL` to the same-site guard; a
      PSL-aware guard (multi-part suffixes such as `co.uk`, `web.app`); `host_of` checked on a
      real macOS bash 3.2;
-   - if 39 was declined, the outbound-fetch bounds (JIT §8 severity note); if it merged,
-     bounded-concurrency media verification;
+   - bounded-concurrency media verification (39 bounds each fetch and each pass);
+   - auth follow-ups from 37:
+     - a test that percent-encoded URIs and resources are accepted;
+     - OpenAPI still documents FastAPI's 422 shape for `/v1/auth/verify`;
+     - rename `openad.errors.InvalidRequestError`, which clashes conceptually with SQLAlchemy's;
+     - cap `SiweIn.signature` (about 256);
+     - `OPENAD_SESSION_SECRET` is read by no code: drop it or use it;
    - DNS TXT domain verification (add `dnspython` with a resolver lifetime, or drop the method).
 5. **Sourcemaps off by default:** `web/vite.config.ts` gets
    `sourcemap: process.env.VITE_SOURCEMAP === '1'`, with a commented `# VITE_SOURCEMAP=1` line in
@@ -730,7 +826,7 @@ stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
       - Point Next PRs at ROADMAP Phase 7.
       - User actions: add a **custom domain (required: web and api on one registrable domain)**
         row; add "verify the X-Forwarded-For chain in staging, then enable the auth rate limit"
-        if 37 left it off; add "confirm `max_connections` ≥ 100 before the first deploy
+        (37 left it off; link the runbook steps); add "confirm `max_connections` ≥ 100 before the first deploy
         (`gcloud sql instances describe openad-<ENV> --format='value(settings.databaseFlags)'`),
         and redo the budget in `docs/deploy-gcp.md` §3 before raising `maxScale` or a pool".
         Keep the existing rows.
@@ -767,6 +863,15 @@ stage `.cursor/`. The planner's archive commit (item 13) lands in the same PR.
       version.
     - DNS TXT truth fix: `docs/ARCHITECTURE.md` and `docs/guide/marketplace/faq.md` say the meta
       tag is the supported method today and DNS TXT is Phase 7.
+    - Web-origin host rule (routed from 37), in three places:
+      - ARCHITECTURE §3.3;
+      - `.env.example`, next to `OPENAD_CORS_ORIGINS` and `OPENAD_SIWE_ALLOWED_ORIGINS`;
+      - `docs/deploy-gcp.md` §9.
+      The web origin must be `localhost`, an IPv4 address or a dotted hostname.
+    - `api/README.md`:
+      - bring the migration list up to date (0001–0005);
+      - replace the "Dockerfile runs `alembic upgrade head`" line with the compose `migrate`
+        service and the Cloud Run Job.
 12. **No product code** beyond items 5 and 6. If a doc claim is false against main, fix the doc
     and list it in the commit.
 13. **Planner, after the coder passes review, in the same PR:**
@@ -807,7 +912,7 @@ git status --short   # no .cursor/ staged by the coder; no api/, contracts/ chan
 
 **Done when:**
 - ROADMAP is truthful: 6.1–6.9 `[x]` (6.3 with a dated amended-acceptance note; 6.8 and 6.9 from
-  37 and 38), 6.10 open as user-run, Phase 7 backlog listed.
+  37 and 38, and 6.9 also names 39), 6.10 open as user-run, Phase 7 backlog listed.
 - `dist` and `dist-demo` contain zero `.map` files.
 - The onramp page exists and is linked from 4 places.
 - README and business docs describe only shipped features, with deterministic fresh screenshots.
@@ -815,6 +920,9 @@ git status --short   # no .cursor/ staged by the coder; no api/, contracts/ chan
   without invented persona verdicts; AGENTS.md pointers are added.
 - The runbook's DB-password flow works end to end without echoing the password, and no doc
   claims DNS TXT verification works.
+- The web-origin host rule is documented, and `api/README.md` matches the tree.
+- After merging main (39, 40, and 41 if accepted): the screenshots are re-captured (Discover
+  shows 40's labels) and deterministic, and the ROADMAP names 39, 40 and 41.
 - All checks pass.
 - After the planner archives the plan: PR, CI 5/5, merge. Then the orchestrator:
   1. republishes the demo Artifact from main (maps gone; the same URL, so it's still private);
@@ -859,6 +967,8 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - 2026-09-25 03:35 UTC — REVISE on top of STEP_DONE 16: two production-hardening steps added **before** 36, from the orchestrator's evidence, which the planner re-read and confirmed. **37** (slice J, `fix/auth-hardening`, Opus, high): SIWE relay because `_parse_siwe` ignores the EIP-4361 domain and URI; also found a non-atomic nonce consume, and that the sim signs with URI = the API base URL, which the fix will reject, so the sim moves to the web origin; ADR-0009 has drifted from the code (says the `siwe` library and an HMAC cookie). **38** (slice K, `feat/ops-hardening`, medium): pool and scale budget, same-site domain requirement, media redirect hops (the orchestrator's item E fits cleanly there). ROADMAP numbering: 6.8 is J, 6.9 is K, 6.10 is the live deploy (36). The limiter is off by default and enabled on Cloud Run only if the XFF semantics are confirmed. 36 is re-sequenced after 37 and 38.
 - 2026-09-25 03:42 UTC — Planner resumed after a context compaction and re-verified the tree. PR #13 merged `abb2b81` (on `origin/main`), so slice C is fully shipped. 37 is coding in the primary tree on `fix/auth-hardening` (Opus) and 38 in `/home/claude/OpenAd-o` on `feat/ops-hardening` (38 marked [>]); both branches are at `abb2b81` with no edits yet. The REVISE edits to the JIT files are uncommitted in the primary tree and ride with J. 38's spec now names its expected merge conflicts with 37 (threat-model rows T15/T16 then T17, ROADMAP 6.8 then 6.9, possibly `main.py`).
 - 2026-09-25 05:26 UTC — STEP_DONE 38: R1 FIX (2 L1) → R2 FIX → R3 (Opus) PASS, L3 only; `4370d09`, **PR #14** open, CI pending, merges after 37. The orchestrator's final numbers are recorded as the as-shipped record in §5 (pools 4 + 2 / 2 + 1 / none for the migrate job; `maxScale` api 4, web and web-demo 10; `max_connections=100` by flag; budget 31 / 34 / ≈64; host blocking outside dev only) and as D12. 37's fix-round-1 decisions are recorded as A1–A7 and in D10. Overlap check of 38's commit against 37's working tree: textual conflicts only in `docs/ROADMAP.md` and `docs/threat-model.md`. Routed to 36: the runbook DB-password gap, and a DNS TXT truth fix (found while checking the backlog: `dnspython` isn't a dependency, so DNS verification can't succeed). Planner finding: outbound fetches have per-read timeouts only; the indexer verifies media inline, so one permissionless creative with a slow-drip URL can stall block indexing, and the domain meta check holds a pooled DB connection while it fetches. Proposed as step 39 (slice L) for the orchestrator to accept or defer. Backlog gains 38's L3 and follow-ups.
+- 2026-09-25 05:36 UTC — STEP_DONE 37: R1 FIX (2 L2) → R2 PASS; `eb8193f` + `2ce0f5b` (JIT files up to the STEP_DONE 38 pass), **PR #15** open, CI pending. api 219/5 (223/1 with PG), web 212, embed 5, sim 13 + 1, demo 14/14, YAML e2e 13/13; live uvicorn relay, clock-skew, size and limiter checks pass. §5's full spec is replaced by an as-shipped record (the full text is in `2ce0f5b`). **39 accepted**: after #15 → main merged into #14 → #14, it starts in `/home/claude/OpenAd-o` (Sonnet, Opus review) while 36 starts in the primary tree off the same main; 39 merges first. 36 refreshed: new PR order (#15 before #14), 37's shipped facts, the web-origin host rule (viem rejects IPv6 literals and single-label hosts other than `localhost`), the stale `api/README.md` (migration list at 0002, and a claim that the Dockerfile migrates on start), and a definite 6.9 line for 39. 37's L3s and `OPENAD_SESSION_SECRET` go to the Phase 7 list. JIT_INDEX: `OPENAD_SIM_WEB_ORIGIN`, migration head `0005`, CI Postgres.
+- 2026-09-25 06:55 UTC — REVISE and progress. #15 merged `2c4101b`; main merged into #14 as `2f313d9` (conflicts only in ROADMAP and threat-model ordering, as predicted); #14 merged `5f27fb8`. 39 was coded off `2f313d9` and is in fix round 1 after R1 FIX. Its scope grew to `POST /v1/creatives/{id}/verify`, raw-byte reads with `Accept-Encoding: identity`, and an atomic cooldown; recorded as F1–F4. 36 was coded off `2f313d9` and is in fix round 1 after R1 FIX (set-password syntax, onramp claim, screenshot scroll offset, GLOSSARY DNS TXT, `VITE_API_URL` in the host note, `VITE_SOURCEMAP` is shell-only, the 6.7 amended note, and a new deploy bug: the settler lacks `secretAccessor` on the database-URL secret). Shipped extras are recorded. **New step 40** (slice M, `fix/discover-auction-state` in `/home/claude/OpenAd-p`): Discover state anchored to the first period. The planner verified it and widened it to the slot page, which lists periods 0–14 only, so older calendars show nothing buyable. It also found that `buyFirstPeriod` in the demo e2e addresses rows by position. **Proposed 41** (slice N): `GET /v1/slots/{id}/periods` has no range cap and does one DB read per index, so one unauthenticated request can hold a pooled connection indefinitely. Added D13 (merge order 39 → 40 (→ 41) → 36). Backlog: the sim planner lists periods 0–4 only.
 
 ## 8. Backlog (found during the run; not scheduled)
 
@@ -885,7 +995,14 @@ _Timestamps before 2026-09-25 03:35 were planner estimates (the brief asked for 
 - 38 L3: no prod-mode test that public IP literals (`8.8.8.8`, `[2001:4860:4860::8888]`, `[::ffff:8.8.8.8]`, `ads.example.`) are accepted; removing the IPv4-mapped unwrap survives mutation.
 - `deploy.yml` `--only stack` passes no `API_URL`/`WEB_URL`, so the example.com placeholders pass the same-site guard. The guard compares two labels (false accept under `co.uk`, `web.app`); a PSL-aware check is Phase 7.
 - `host_of` in `deploy-gcp.sh` isn't verified on a real macOS bash 3.2.
-- Outbound fetches → **proposed step 39**: no overall deadline on media fetches (hops or body; httpx `timeout=` is per read); the indexer verifies inline and sequentially (`indexer/runner.py:225`); `_check_meta` (`services/offchain.py:204`) follows redirects unchecked, reads the whole body and holds a pooled DB connection during the fetch. Severity if deferred: one permissionless creative registration can stall block indexing, and ~24 slow domain checks can exhaust the api pool (4 × (4 + 2)) so serve fails.
+- Outbound fetches → **step 39, accepted 2026-09-25**: no overall deadline on media fetches (hops or body; httpx `timeout=` is per read); the indexer verifies inline and sequentially (`indexer/runner.py:225`); `_check_meta` (`services/offchain.py:204`) follows redirects unchecked, reads the whole body and holds a pooled DB connection during the fetch. Severity if deferred: one permissionless creative registration can stall block indexing, and ~24 slow domain checks can exhaust the api pool (4 × (4 + 2)) so serve fails.
 - DNS TXT domain verification can't succeed: `dnspython` isn't a dependency (`_check_dns` returns False on ImportError). The UI only uses the meta tag, but the docs claim both → doc truth fix **scheduled in 36**; the feature goes to Phase 7.
 - `docs/deploy-gcp.md` §3 DB password is never shown or stored (and base64 isn't URL-safe) → **scheduled in 36**.
+- 37 L3: no test that percent-encoded URIs and resources are accepted (removing `_PCT_ENCODED` survives mutation); OpenAPI still documents FastAPI's 422 shape for `/v1/auth/verify`; `openad.errors.InvalidRequestError` clashes conceptually with SQLAlchemy's `InvalidRequestError`; `SiweIn.signature` is uncapped (cap about 256) → Phase 7 (36).
+- `OPENAD_SESSION_SECRET` is read by no code (only `config.py` defines it; ADR-0009, ADR-0017, the runbook and `api.yaml` still set it) → Phase 7: drop it or use it.
+- viem's `createSiweMessage` rejects IPv6 literals and single-label hosts other than `localhost` → web-origin host rule documented in 36.
+- `api/README.md` is stale: the migration list stops at 0002, and it says the Dockerfile migrates on start → **scheduled in 36**.
+- The slot page lists periods 0–14 only (`lib/api.ts:95` defaults), so a calendar older than 15 periods shows nothing buyable → **in step 40**.
+- `GET /v1/slots/{id}/periods` has no range cap and reads leases one index at a time (`routers/slots.py:38-50`, `services/periods.py:47-49`) → **proposed step 41**. Severity if deferred: one unauthenticated request can hold a pooled DB connection indefinitely; about 24 take the api's whole pool.
+- The sim planner lists periods 0–4 only (`sim/src/planner/snapshot.ts:48`), so sim activity dies out after five periods → Phase 7, or fold it into 40 if the orchestrator widens 40 to `sim/`.
 - The remaining unscheduled items above → ROADMAP Phase 7 in 36.

@@ -113,30 +113,30 @@ api/src/openad/
 
 Chain-derived (rebuildable):
 
-| Table                 | Key                                         | Source events                                                                                 |
-| --------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `slots`               | `slot_id`                                   | `SlotMinted`, `Transfer` (owner), `CalendarSet` (version, period_seconds, first_period_start) |
-| `terms`               | `slot_id`                                   | `TermsSet` (`sale_mode`, `floor_cpc`, prices), `PausedSet`                                    |
-| `leases`              | `(slot_id, calendar_version, period_index)` | `LeaseSet` + `Purchased` (price, fee, approval_mode, tx hash)                                 |
-| `creatives`           | `creative_id`                               | `CreativeRegistered`, `NftCreativeRegistered`, `CreativeRevoked`                              |
-| `approvals`           | `(publisher, creative_id)`                  | `ApprovalRequested`, `ApprovalSet`                                                            |
-| `allowed_advertisers` | `(publisher, advertiser)`                   | `AdvertiserAllowed`                                                                           |
-| `protocol_config`     | singleton per chain                         | `MarketSet`, `FeeSet`, `TreasurySet`, `ModeratorSet`, `CampaignVaultSet`, vault owner events  |
-| `campaigns`           | `campaign_id`                               | `CampaignOpened` + top-up / max CPC / pause / close / finalize                                |
-| `campaign_settlements`| `batch_id`                                  | `Settled`                                                                                     |
-| `indexer_cursor`      | `(chain_id, contract)`                      | last processed block number + hash; one row with `contract = "protocol"` covers all contracts |
+| Table                  | Key                                         | Source events                                                                                 |
+| ---------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `slots`                | `slot_id`                                   | `SlotMinted`, `Transfer` (owner), `CalendarSet` (version, period_seconds, first_period_start) |
+| `terms`                | `slot_id`                                   | `TermsSet` (`sale_mode`, `floor_cpc`, prices), `PausedSet`                                    |
+| `leases`               | `(slot_id, calendar_version, period_index)` | `LeaseSet` + `Purchased` (price, fee, approval_mode, tx hash)                                 |
+| `creatives`            | `creative_id`                               | `CreativeRegistered`, `NftCreativeRegistered`, `CreativeRevoked`                              |
+| `approvals`            | `(publisher, creative_id)`                  | `ApprovalRequested`, `ApprovalSet`                                                            |
+| `allowed_advertisers`  | `(publisher, advertiser)`                   | `AdvertiserAllowed`                                                                           |
+| `protocol_config`      | singleton per chain                         | `MarketSet`, `FeeSet`, `TreasurySet`, `ModeratorSet`, `CampaignVaultSet`, vault owner events  |
+| `campaigns`            | `campaign_id`                               | `CampaignOpened` + top-up / max CPC / pause / close / finalize                                |
+| `campaign_settlements` | `batch_id`                                  | `Settled`                                                                                     |
+| `indexer_cursor`       | `(chain_id, contract)`                      | last processed block number + hash; one row with `contract = "protocol"` covers all contracts |
 
 Off-chain only:
 
-| Table                     | Purpose                                                                                                                                       |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `house_ads`               | Publisher fallback creative per slot (`media_url`, `click_url`). Set via authenticated API.                                                   |
+| Table                     | Purpose                                                                                                                                                                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `house_ads`               | Publisher fallback creative per slot (`media_url`, `click_url`). Set via authenticated API.                                                                                                                                        |
 | `slot_listings`           | Publisher-provided audience description (`summary`, `audience`, `categories`) per slot (ROADMAP 6.3). Self-described, not verified. Set via authenticated API (owner-only). Off-chain and not rebuildable from chain — back it up. |
-| `domain_verifications`    | `(slot_id, method, token, verified_at)`. See § 3.6.                                                                                           |
-| `creative_verifications`  | `(creative_id, status, checked_at, cached_path, resolved_image_url, error)`. See § 3.5.                                                       |
-| `serve_events`            | Append-only: `(slot_id, lease key or campaign_id or null, served_kind, origin_ok, at, gsp_cpc?)`. No IPs, no user agents, no cookies. |
-| `click_events`            | Token hash, campaign_id, payable flag, IVT reason, GSP, optional settle batch. No raw IPs. |
-| `auth_nonces`, `sessions` | SIWE login state. Used or expired nonces and expired sessions are pruned from `POST /v1/auth/nonce`, at most once a minute per process (§ 3.3). |
+| `domain_verifications`    | `(slot_id, method, token, verified_at)`. See § 3.6.                                                                                                                                                                                |
+| `creative_verifications`  | `(creative_id, status, checked_at, cached_path, resolved_image_url, error)`. See § 3.5.                                                                                                                                            |
+| `serve_events`            | Append-only: `(slot_id, lease key or campaign_id or null, served_kind, origin_ok, at, gsp_cpc?)`. No IPs, no user agents, no cookies.                                                                                              |
+| `click_events`            | Token hash, campaign_id, payable flag, IVT reason, GSP, optional settle batch. No raw IPs.                                                                                                                                         |
+| `auth_nonces`, `sessions` | SIWE login state. Used or expired nonces and expired sessions are pruned from `POST /v1/auth/nonce`, at most once a minute per process (§ 3.3).                                                                                    |
 
 Migrations: Alembic, one revision per PR that touches models. Postgres in dev/prod, SQLite in
 unit tests.
@@ -184,6 +184,11 @@ Sign-in rules (ADR-0009 and its 2026-09-25 amendment; threat model T15, T16):
     `OPENAD_CORS_ORIGINS`.
   - The web app signs with `window.location.host` and `window.location.origin`. The sim
     signs as `OPENAD_SIM_WEB_ORIGIN`. Neither ever signs as the API's own URL.
+  - **Web-origin host rule.** The web app and the sim build the SIWE message with viem's
+    `createSiweMessage`, which rejects an IPv6 literal host and any single-label host other
+    than `localhost` (for example `devbox:5173` or `LOCALHOST:5173`). So the web origin's host
+    must be `localhost`, an IPv4 address, or a dotted hostname — set `OPENAD_CORS_ORIGINS` (and
+    `OPENAD_SIWE_ALLOWED_ORIGINS`, if it differs) and the web build's own origin accordingly.
 - **Checks in order:** parse, bind, chain id (`OPENAD_CHAIN_ID`), time, signature.
   - `Issued At` must be within `[now − 10 min − 5 min, now + 5 min]` (5 minutes of skew).
   - `Expiration Time` and `Not Before` are honoured, with 5 minutes of skew for `Not Before`.
@@ -300,8 +305,12 @@ publisher and advertiser see the failure reason in their dashboards.
 ### 3.6 Domain verification
 
 Off-chain badge, not a protocol rule. The slot owner requests a token via the API and proves
-control by either a DNS TXT record `openad-verification=<token>` at `_openad.<domain>` or a
-`<meta name="openad-site-verification" content="<token>">` tag on `https://<domain>/`. Re-checked
+control with a `<meta name="openad-site-verification" content="<token>">` tag on
+`https://<domain>/` — the only method the web UI offers today, and the only one that can
+currently succeed. The API also accepts a DNS TXT record `openad-verification=<token>` at
+`_openad.<domain>` as a documented alternative, but `dnspython` is not a project dependency, so
+that check always returns "not verified" (an `ImportError` is treated the same as a missing
+record); adding the dependency, or dropping the method, is Phase 7 (`docs/ROADMAP.md`). Re-checked
 weekly. The marketplace UI shows unverified slots with a warning.
 
 ### 3.7 Indexer
@@ -375,7 +384,7 @@ path (§3.4), so serve-path latency is unaffected.
     `block_number` — so this is a **total only**, not part of the daily series): `charged` is
     spend, `charged − fee` is earnings, `fee` is the fee.
   - CPC accrued: Σ `click_events.gsp_cpc` of payable clicks, bucketed by `click_events.at` day.
-    Reported as `accrued_cpc_spend` and labelled *accrued* because it is unsettled and
+    Reported as `accrued_cpc_spend` and labelled _accrued_ because it is unsettled and
     fee-inclusive (the settler has not yet netted out its fee).
   - Settled and accrued CPC spend are never added into one field.
 - **eCPM:** `ecpm = earnings_or_spend * 1000 // impressions`, integer USDC base units per 1000
@@ -483,14 +492,15 @@ web/src/
   sessions) installs `window.ethereum` as a JSON-RPC forwarder to Vite `/anvil` → Anvil.
   Addresses only in `web/`; Anvil unlocked accounts sign. Production builds omit the module.
 - **Demo mode (ADR-0016).** `VITE_DEMO_MODE=1` builds boot `web/src/demo/install.ts` instead of
-  the real providers: in-memory seeded fixtures answer reads (`lib/api.ts` request resolver,
-  6.2 in progress), a wagmi `mock` connector + in-memory EIP-1193 simulator answers writes (6.2
-  in progress), a network guard rejects/throws on `fetch`, `XMLHttpRequest`, `WebSocket`,
-  `EventSource` and `navigator.sendBeacon` for any URL that is not a same-origin static asset
-  (same-origin `/v1` and `/anvil` paths and the configured `VITE_API_URL` origin are denied
-  too), and a persistent `DemoBanner` renders. Never opens an RPC connection, never calls the
-  API, never signs with a real wallet. Tree-shaken out of normal builds; `npm run build:demo`
-  (6.2, in progress) will produce static `web/dist-demo` (SPA fallback).
+  the real providers: in-memory seeded fixtures answer reads (`lib/api.ts` request resolver), a
+  wagmi `mock` connector + in-memory EIP-1193 simulator answers writes, a network guard
+  rejects/throws on `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource` and
+  `navigator.sendBeacon` for any URL that is not a same-origin static asset (same-origin `/v1`
+  and `/anvil` paths and the configured `VITE_API_URL` origin are denied too), and a persistent
+  `DemoBanner` renders. Never opens an RPC connection, never calls the API, never signs with a
+  real wallet. Tree-shaken out of normal builds; `npm run build:demo` produces a static
+  `web/dist-demo` (hash router, relative base — no server-side fallback needed, ADR-0016 hosting
+  amendment).
 - **QA loop.** Headed SME/UX critique lives in `docs/qa/` and `.cursor/skills/sandbox-*-critique/`.
   Playwright MCP is configured in `.cursor/mcp.json` beside `openad-sim`. Scripted YAML stays in `e2e/`.
 
@@ -516,22 +526,27 @@ web/src/
 
 ## 7. Environments
 
-|             | Anvil (local)                                         | Base Sepolia (staging)   | Base (production)       | Demo (static)             |
-| ----------- | ----------------------------------------------------- | ------------------------ | ----------------------- | -------------------------- |
-| Chain       | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC               | public RPC              | none (in-memory simulator) |
-| USDC        | `MockUSDC`                                            | Circle testnet USDC      | native USDC             | none (fixture math only)   |
-| DB          | `docker compose up postgres`                          | managed Postgres         | managed Postgres        | none (in-memory fixtures)  |
-| Media cache | local `./.cache/media`                                | GCS (`OPENAD_MEDIA_BACKEND=gcs`) | GCS + CDN in front of serve | none (bundled assets) |
-| Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` (committed) | `8453.json` (committed) | none (not read)            |
-| Build       | `npm run dev:web`                                     | `npm run build -w web`   | `npm run build -w web`  | `npm run build:demo` → `web/dist-demo` (hash router, relative base, no server fallback needed; ADR-0016) |
-| Production (GCP, ADR-0017) | n/a (Compose is the local target) | Cloud Run (`api`/`indexer`/`settler`/`web`) + Cloud SQL, one GCP project | same topology, separate project/instance, manual promotion | any static host, or the `web-demo` image |
+|             | Anvil (local)                                         | Base Sepolia (staging)                                          | Base (production)                                             | Demo (static)                                                                                            |
+| ----------- | ----------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Chain       | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC                                                      | public RPC                                                    | none (in-memory simulator)                                                                               |
+| USDC        | `MockUSDC`                                            | Circle testnet USDC                                             | native USDC                                                   | none (fixture math only)                                                                                 |
+| DB          | `docker compose up postgres`                          | managed Postgres                                                | managed Postgres                                              | none (in-memory fixtures)                                                                                |
+| Media cache | local `./.cache/media`                                | GCS (`OPENAD_MEDIA_BACKEND=gcs`)                                | GCS + CDN in front of serve                                   | none (bundled assets)                                                                                    |
+| Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` — committed once deployed (none yet; ROADMAP 6.10) | `8453.json` — committed once deployed (none yet; ROADMAP 4.6) | none (not read)                                                                                          |
+| Build       | `npm run dev:web`                                     | `npm run build -w web`                                          | `npm run build -w web`                                        | `npm run build:demo` → `web/dist-demo` (hash router, relative base, no server fallback needed; ADR-0016) |
+
+The hosted demo linked from the root `README.md` is exactly the Demo column above: a static
+`web/dist-demo` build with no backend, chain, or API — private until the owner shares it.
 
 Local loop (canonical on Windows: `.\scripts\setup.cmd`, `.\scripts\dev-up.cmd`, `.\scripts\dev-down.cmd`;
 `npm run stack:*` is the same if PowerShell can load `npm.ps1`; bash twins on Linux/macOS/WSL
 per the ADR-0007 amendment). CI is `.github/workflows/ci.yml` (contracts; api, whose pytest
 also runs against a Postgres 16 service with `OPENAD_TEST_PG_URL`; web/embed; Playwright;
-`check:sh`). Production hosting is GCP Cloud Run (ADR-0017, `docs/deploy-gcp.md`);
-CI's deploy job (step 27+28) is gated on GCP secrets and never broadcasts to Base mainnet.
+`check:sh`). Production hosting is GCP Cloud Run (ADR-0017, `docs/deploy-gcp.md`): staging is
+Cloud Run (`api`/`indexer`/`settler`/`web`) plus Cloud SQL in one GCP project; production is the
+same topology in a separate project and instance, promoted manually; the demo build runs from
+any static host, including the `web-demo` Cloud Run image. CI's deploy job is gated on GCP
+secrets and never broadcasts to Base mainnet (ROADMAP 6.10 is the live deploy, user-run).
 
 ```text
 .\scripts\setup.cmd                      # .env, docker, protocol deploy, alembic upgrade, npm install

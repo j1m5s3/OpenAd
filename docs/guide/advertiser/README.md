@@ -10,6 +10,7 @@ HTML/JS creatives are out of scope — raster images only.
 
 ## Sequence
 
+0. No USDC on Base yet? See [Getting USDC on Base](getting-usdc-on-base.md) first.
 1. [Register a creative](creatives.md)
 2. [Request approval](approvals.md) if the slot’s **approval mode** is required
 3. [Buy a period](buy-a-period.md) on Lease slots, or [open a CPC campaign](cpc-campaigns.md)

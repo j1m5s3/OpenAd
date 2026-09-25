@@ -91,7 +91,12 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    build: { sourcemap: true, target: 'es2022' },
+    // Off by default (ROADMAP 6.7): the production web image shipped 170 `.map` files with no
+    // consumer for them. This reads the raw shell environment, not `.env` (Vite does not load
+    // `.env` files into `vite.config.ts` itself, only into application code) — to debug a
+    // production build locally, set it on the command line instead:
+    // `VITE_SOURCEMAP=1 npm run build -w web`.
+    build: { sourcemap: process.env.VITE_SOURCEMAP === '1', target: 'es2022' },
     test: {
       environment: 'jsdom',
       include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],

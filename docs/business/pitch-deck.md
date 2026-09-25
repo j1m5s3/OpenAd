@@ -120,15 +120,18 @@ customer names, quotes, or traction are claimed — the deck is honest about cur
 
 ## Slide 11 — Traction and roadmap
 
-- Current stage: protocol and off-chain stack implemented and tested on local Anvil; Base
-  Sepolia deployment pending (ROADMAP 1.5); no production deployment or customers yet.
-- Near-term roadmap: zero-friction demo mode, publisher growth tooling (embed code, share page),
-  analytics, cross-platform scripts, production (GCP) deployment.
-- Honest framing: this is a pre-launch, testnet-ready product — traction claims will follow
-  activation, not precede it.
+- **Built:** the protocol and off-chain stack, tested end to end on local Anvil; a zero-friction
+  demo mode; publisher growth tooling (embed code, shareable slot page, slot listings with
+  category filters); analytics (CTR, eCPM, spend/earnings); cross-platform run scripts; and
+  production deploy artifacts (Cloud Run configs, migration job, nginx image) plus auth and
+  capacity hardening.
+- **Pending:** the live GCP deployment (ROADMAP 6.10, a user-run step), a Base Sepolia contract
+  deployment, and an independent security audit before any mainnet deploy.
+- Honest framing: this is a pre-launch, testnet-ready product — no customers, users, or traction
+  metrics exist yet; claims will follow activation, not precede it.
 
 > Speaker notes: Do not overstate this slide. If pressed, say plainly: no customers yet, this is
-> the plan to get the first ones.
+> the plan to get the first ones and the runbook to go live.
 
 ## Slide 12 — Team
 

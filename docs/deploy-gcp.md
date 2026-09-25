@@ -62,15 +62,34 @@ gcloud sql instances create openad-<ENV> \
 
 gcloud sql databases create openad --instance=openad-<ENV>
 
-# Generates its own password; do not type one into this shell's history.
-gcloud sql users create openad \
-  --instance=openad-<ENV> --password="$(openssl rand -base64 32)"
+# Generate the password once into a shell variable: never echo it, never type it into a gcloud
+# argument as a literal, and it never lands in this shell's history as plain text. openssl
+# -hex (not -base64) avoids the `+`, `/`, `=` characters base64 can produce, which would
+# otherwise need percent-encoding inside the connection-string URL below. Chained with `&&`,
+# in this same shell, so a failed user-create never writes a secret for a user that doesn't
+# exist — never print `DB_PASS`, and never put it in a plain Cloud Run env var.
+DB_PASS="$(openssl rand -hex 32)"
+gcloud sql users create openad --instance=openad-<ENV> --password="${DB_PASS}" \
+  && printf '%s' "postgresql+asyncpg://openad:${DB_PASS}@/openad?host=/cloudsql/<PROJECT_ID>:<REGION>:openad-<ENV>" \
+    | gcloud secrets create openad-database-url-<ENV> --data-file=-
+unset DB_PASS
 ```
 
-Build the connection string as
-`postgresql+asyncpg://openad:<PASSWORD>@/openad?host=/cloudsql/<PROJECT_ID>:<REGION>:openad-<ENV>`
-(Cloud SQL Auth Proxy / unix socket — no public IP) and store it in Secret Manager (step 5);
-never in a plain Cloud Run env var.
+**Recovery** (password lost, or a rotation): generate a new one the same way, set it, then add a
+new secret version — never reusing the old value. `gcloud sql users set-password` takes the
+username positionally (there is no `--user` flag), and the two commands are chained with `&&` so
+a failed password change never writes a new secret version:
+
+```bash
+DB_PASS="$(openssl rand -hex 32)"
+gcloud sql users set-password openad --instance=openad-<ENV> --password="${DB_PASS}" \
+  && printf '%s' "postgresql+asyncpg://openad:${DB_PASS}@/openad?host=/cloudsql/<PROJECT_ID>:<REGION>:openad-<ENV>" \
+    | gcloud secrets versions add openad-database-url-<ENV> --data-file=-
+unset DB_PASS
+```
+
+Redeploy `openad-api`, `openad-indexer` and `openad-settler` afterward so each picks up the
+`:latest` secret version.
 
 ### Connection budget
 
@@ -96,12 +115,12 @@ budget = api_maxScale × (api pool + overflow)
 **This tier's numbers** (`infra/gcp/services/*.yaml`, `infra/gcp/jobs/migrate.yaml`):
 
 | Process                | Max instances / tasks | Pool + overflow | Connections |
-| ----------------------- | ---------------------: | ----------------: | -----------: |
-| `openad-api`            | 4 (`maxScale`)         | 4 + 2             | 24           |
-| `openad-indexer`        | 1 (pinned)             | 2 + 1             | 3            |
-| `openad-settler`        | 1 (pinned)             | 2 + 1             | 3            |
-| `openad-migrate` (job)  | 1 (one execution)      | n/a (see above)   | 1            |
-| **Steady-state total**  |                        |                   | **31**       |
+| ---------------------- | --------------------: | --------------: | ----------: |
+| `openad-api`           |        4 (`maxScale`) |           4 + 2 |          24 |
+| `openad-indexer`       |            1 (pinned) |           2 + 1 |           3 |
+| `openad-settler`       |            1 (pinned) |           2 + 1 |           3 |
+| `openad-migrate` (job) |     1 (one execution) | n/a (see above) |           1 |
+| **Steady-state total** |                       |                 |      **31** |
 
 Postgres also holds back `superuser_reserved_connections` slots (default **3**) out of
 `max_connections` for superuser roles only **(Postgres's default; inferred for Cloud SQL —
@@ -119,7 +138,7 @@ and the check further down verifies it before every deploy.
 one revision; Cloud Run's default rolling deploy briefly runs the old and new revisions of
 `openad-api`, `openad-indexer` and `openad-settler` side by side while traffic shifts, so those
 three processes' connections can roughly double for that window: `(24 + 3 + 3) × 2 = 60`, plus
-`openad-migrate`'s 1 (it runs to completion *before* traffic shifts, per this runbook's
+`openad-migrate`'s 1 (it runs to completion _before_ traffic shifts, per this runbook's
 ordering, so it is not itself doubled) and the 3 reserved connections, **≈ 64 worst case**.
 Confirm this against Cloud Run's actual rollout behavior for this project before relying on it.
 
@@ -209,11 +228,10 @@ done
 
 ## 5. Secrets
 
-```bash
-# Database URL (built in step 3), one secret per env.
-printf '%s' 'postgresql+asyncpg://openad:<PASSWORD>@/openad?host=/cloudsql/<PROJECT_ID>:<REGION>:openad-<ENV>' \
-  | gcloud secrets create openad-database-url-<ENV> --data-file=-
+`openad-database-url-<ENV>` is already created in step 3, in the same shell that generated the
+password, so it is never typed here. The remaining secrets:
 
+```bash
 # Settler key — ONLY this secret's IAM binding names the settler service account.
 # Generate/import the deployer/settler EOA's private key out of band; never echo it here.
 gcloud secrets create openad-settler-key-<ENV> --data-file=/path/to/local/key/file
@@ -228,8 +246,10 @@ printf '%s' "$(openssl rand -hex 32)" | gcloud secrets create openad-click-hmac-
 
 Grant `roles/secretmanager.secretAccessor` on `openad-database-url-<ENV>`,
 `openad-session-secret-<ENV>` and `openad-click-hmac-secret-<ENV>` to the `openad-api-<ENV>`,
-`openad-migrate-<ENV>` service accounts (and `openad-indexer-<ENV>` for the database URL only —
-it never needs the session or click secrets).
+`openad-migrate-<ENV>` service accounts (and `openad-indexer-<ENV>` and `openad-settler-<ENV>`
+for the database URL only — `infra/gcp/services/settler.yaml` mounts it as
+`OPENAD_DATABASE_URL`; neither needs the session or click secrets, and the settler-key grant
+above is still the only IAM binding naming the settler service account for that secret).
 
 ## 6-8. Build, migrate, deploy — the primary path: `scripts/deploy-gcp.sh`
 
@@ -369,6 +389,15 @@ Then point the api's CORS allowlist and the web build's api URL at those same ho
 `VITE_API_URL=https://api.<domain>` for the web build. `scripts/deploy-gcp.sh`'s same-site guard
 (below) checks these same `API_URL`/`WEB_URL` values.
 
+**Web-origin host rule.** SIWE signs the host the web app is actually served from
+(`window.location.host`, `useSiwe.ts`) — not `VITE_API_URL`, which only points the web build's
+fetches at the API. Viem's `createSiweMessage` (ADR-0009 amendment) rejects an IPv6 literal host
+and any single-label host other than `localhost`, so that web-app host must be `localhost`, an
+IPv4 address, or a dotted hostname. A dotted hostname like `app.<domain>` above always satisfies
+this. The API must recognize the same host too: it has to appear in `OPENAD_CORS_ORIGINS` (and
+in `OPENAD_SIWE_ALLOWED_ORIGINS`, if that's set separately — see `.env.example`), which are
+checked against the same rule (`docs/ARCHITECTURE.md` §3.3).
+
 Domain mappings aren't available in every region (see `gcloud run domain-mappings create
 --help`, or the Cloud Run docs, for the current region list). Where they aren't, front both
 services with a global external Application Load Balancer using serverless NEGs instead — one
@@ -382,13 +411,13 @@ look same-site (both default `*.run.app` hosts, or their last two DNS labels dif
 heuristic, not real Public Suffix List logic). Pass `--allow-cross-site-auth` only when that's
 genuinely fine, e.g. deploying `--only stack` before any web build points at it.
 
-The last-two-labels heuristic is a false-*reject* risk in one direction (it can refuse a
-genuinely same-site pair it doesn't recognize) but a false-*accept* risk in the other, for any
+The last-two-labels heuristic is a false-_reject_ risk in one direction (it can refuse a
+genuinely same-site pair it doesn't recognize) but a false-_accept_ risk in the other, for any
 public suffix longer than one label: `last_two_labels` reduces both `api.foo.co.uk` and
 `app.bar.co.uk` to the same `co.uk` (the real registrable domains are `foo.co.uk` and
 `bar.co.uk` — not same-site), and reduces both `foo.web.app` and `bar.web.app` to the same
 `web.app` (itself a multi-part public suffix like `run.app` — also not same-site), so the guard
-can wrongly *accept* a genuinely cross-site pair on domains shaped like these.
+can wrongly _accept_ a genuinely cross-site pair on domains shaped like these.
 `--allow-cross-site-auth` exists for the documented false-reject case above, not for this
 false-accept gap — a domain on a multi-label public suffix should be checked by hand rather than
 trusted to this heuristic.
@@ -426,7 +455,7 @@ for ROLE in roles/run.admin roles/iam.serviceAccountUser roles/artifactregistry.
 done
 ```
 
-`roles/iam.serviceAccountUser` lets the deployer SA deploy Cloud Run revisions *as*
+`roles/iam.serviceAccountUser` lets the deployer SA deploy Cloud Run revisions _as_
 `openad-api-<ENV>` / `openad-indexer-<ENV>` / `openad-settler-<ENV>` without itself gaining
 access to those service accounts' secrets (it is `actAs`, not `secretAccessor`).
 
@@ -461,7 +490,7 @@ users reach the web app on more than one origin, list each one in both variables
 the TCP peer (hops `0`) or by the N-th `X-Forwarded-For` entry from the right (hops `N`).
 
 - **Why it is off.** It is only safe once you know which `X-Forwarded-For` entry Google's front
-  end writes. The Cloud Run functions request-header reference says only that the *first*
+  end writes. The Cloud Run functions request-header reference says only that the _first_
   entry is "generally" the client
   (https://docs.cloud.google.com/functions/docs/reference/headers).
   The first entry is the one a client can forge. The Cloud Run container contract
@@ -497,6 +526,7 @@ To verify and enable:
 
    Expect `200 200 200 429`, then a `Retry-After` line. If the fourth request is not refused,
    the key comes from an entry the client controls: stop, and keep the limiter off.
+
 3. Straight away, from a **different network** (for example a phone hotspot), send one
    request. Expect `200`: with a single instance, that means a different bucket, so the key
    is the caller's own address. A `429` means the key is a shared proxy address, not the

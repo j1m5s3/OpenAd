@@ -146,28 +146,30 @@ protocol contract changes in this phase (anything that would need one is recorde
       wallet; never opens an RPC connection, never calls the API, never signs or requests a
       real wallet signature; persistent "Demo — simulated data, no real funds" banner; demo
       code tree-shaken out of normal builds; `npm run build:demo` produces a static
-      `web/dist-demo` that runs from any sub-path with **no server-side fallback** (hash router
-      + relative base, ADR-0016 hosting amendment), proven by `npm run test:demo -w e2e`
+      `web/dist-demo` that runs from any sub-path with **no server-side fallback** (hash router + relative base, ADR-0016 hosting amendment), proven by `npm run test:demo -w e2e`
       (`e2e/demo/`, served with no SPA fallback) including a cold deep link.
       _Done 2026-09-25._
-- [ ] **6.3 Publisher growth (embed code, share page, off-chain profile).**
+- [x] **6.3 Publisher growth (embed code, share page, off-chain profile).** _Done 2026-09-25._
       Pointers: `web/src/features/publisher/` · `docs/guide/publisher/`.
       Acceptance: copy-paste embed snippet generator with CMS instructions; public `/slot/:id`
       share page with OG meta and current price; off-chain publisher profile (site URL,
       audience description, category tags) via a SIWE-guarded API endpoint; no chain writes.
-      Progress (step 14+15): serve CORS fixed (`ServeCorsMiddleware`, `docs/ARCHITECTURE.md`
-      §3.4), the web build ships a versioned embed script (`embed/open-ad.v1.js`,
-      `lib/embedSnippet.ts`), `EmbedCodePanel` (platform tabs + "Advertise here" badge) replaces
-      Supply's old snippet, `SlotPage` has a Share row (copy link + X/Farcaster), static
-      `og:*`/`twitter:card` defaults on `index.html`, and `docs/guide/publisher/embed-code.md`.
-      Per-slot OG previews need server rendering — not done here (backlog).
-      Progress (step 16): publisher off-chain profile shipped as **listings** —
-      `slot_listings` table (migration `0004`), `openad/listing_taxonomy.py` (fixed category
-      taxonomy), `PUT`/`DELETE /v1/slots/{id}/listing` (SIWE + owner-only, validated: control
-      characters, URLs in the summary, unknown/too-many categories), `SlotOut.listing` (additive)
-      and `GET /v1/slots?category=`, `ListingEditor` on Supply, a Discover category filter, and
-      `SlotCard`/`SlotPage` badges. `docs/guide/publisher/listing.md`. 17+18 finishes this item
-      (guide index, `[x]`, ship).
+      Delivered: serve CORS fixed (`ServeCorsMiddleware`, `docs/ARCHITECTURE.md` §3.4); the web
+      build ships a versioned embed script (`embed/open-ad.v1.js`, `lib/embedSnippet.ts`);
+      `EmbedCodePanel` (platform tabs + "Advertise here" badge) on Supply; `SlotPage` has a Share
+      row (copy link + X/Farcaster) and static `og:*`/`twitter:card` defaults on `index.html`;
+      publisher-provided **slot listings** — `slot_listings` table (migration `0004`),
+      `openad/listing_taxonomy.py` (fixed category taxonomy), owner-only
+      `PUT`/`DELETE /v1/slots/{id}/listing` (validated: control characters, URLs in the summary,
+      unknown/too-many categories), `SlotOut.listing` (additive) and `GET /v1/slots?category=`,
+      a `ListingEditor` on Supply, a Discover category filter, and `SlotCard`/`SlotPage` badges;
+      `docs/guide/publisher/{embed-code,listing}.md`.
+      **Acceptance amended, 2026-09-25:** the share page is `/slots/:id`, not `/slot/:id`; OG is
+      static site-wide defaults rather than per-slot metadata (per-slot OG needs server or edge
+      rendering — Phase 7); the "off-chain publisher profile" shipped as a per-slot **listing**
+      (summary, audience, up to 3 categories) instead of a separate publisher-level profile,
+      because the site itself is the slot's on-chain `domain` and there is no separate site-URL
+      field to collect.
 - [x] **6.4 Analytics read model (API + UI).** _Done 2026-09-25._
       Pointers: `ARCHITECTURE.md` §3.1, §3.10 · `api/src/openad/schemas/analytics.py` ·
       `api/src/openad/services/analytics.py` · `web/src/lib/analytics.ts` ·
@@ -189,27 +191,39 @@ protocol contract changes in this phase (anything that would need one is recorde
       Acceptance: `scripts/{setup,dev-up,dev-down}.sh` at parity with the `.ps1` scripts,
       shellcheck-clean; `npm run stack:*:sh` and `stack:docker`; ADR-0007 amended (not
       rewritten) to note bash twins exist alongside PowerShell.
-- [ ] **6.6 Production deploy on GCP (ADR-0017).**
-      Pointers: ADR-0017 (new) · `docs/deploy-gcp.md` (new) · `.github/workflows/ci.yml`.
-      Acceptance: Cloud Run services for `api`/`indexer`/`settler` (settler key from Secret
-      Manager, may only `settle_batch`); Cloud SQL Postgres; GCS media-cache backend behind a
-      storage interface with local disk as default; web/demo served as a static site; CI
-      `deploy` job gated on GCP secret presence, demo-site deploy only, no mainnet broadcast.
+- [x] **6.6 Deploy artifacts (ADR-0017).** _Done 2026-09-25._
+      Pointers: ADR-0017 · `docs/deploy-gcp.md` · `.github/workflows/ci.yml`.
+      Acceptance: Cloud Run service configs for `api`/`indexer`/`settler` (settler key from
+      Secret Manager, may only `settle_batch`); Cloud SQL Postgres; GCS media-cache backend
+      behind a storage interface with local disk as default; web/demo served as a static site;
+      CI `deploy` job gated on GCP secret presence, staging/demo only, no mainnet broadcast.
       Prerequisite done: `alembic upgrade head` works on a fresh database (`0001_baseline`
       frozen to explicit DDL; guarded by `api/tests/test_migrations.py`).
-      _Progress (step 27+28): `web/Dockerfile` (+ nginx template, per-variant CSP),
+      Delivered: `web/Dockerfile` (+ nginx template, per-variant CSP),
       `infra/gcp/{cloudbuild.yaml,services/*.yaml,jobs/migrate.yaml}`,
       `scripts/deploy-gcp.sh` (staging/prod, demo/stack/all, dry-run, mainnet-in-CI refusal),
       `.github/workflows/deploy.yml` (WIF, gated on secrets, staging-only, no prod path) and a
-      CI `docker` job all done. `api/Dockerfile`'s CMD no longer migrates (a Cloud Run Job /
-      compose `migrate` service does, before traffic shifts). Remaining: the actual `gcloud`
-      deploy is user-run (step 29 records the outcome); this environment has no `gcloud`._
-- [ ] **6.7 Docs polish and launch readiness.**
-      Pointers: `README.md` · `docs/business/demo-script.md` (new) · `docs/qa/scorecard.md`.
+      CI `docker` job. `api/Dockerfile`'s CMD no longer migrates (a Cloud Run Job / compose
+      `migrate` service does, before traffic shifts). The actual `gcloud` deploy is user-run —
+      see **6.10**.
+- [x] **6.7 Docs polish and launch readiness.** _Done 2026-09-25._
+      Pointers: `README.md` · `docs/business/demo-script.md` · `docs/qa/scorecard.md`.
       Acceptance: README rewritten with value proposition, demo link, bash+PowerShell
-      quickstart, docs map; demo script (5-min/15-min talk tracks) and launch checklist added,
+      quickstart, docs map; demo script (2/5/15-minute talk tracks) and launch checklist added,
       including onramp guide links for USDC-only friction (blocker 5, no onramp code); ROADMAP
       6.x fully ticked; GitBook guide `SUMMARY` updated.
+      Delivered: `docs/guide/advertiser/getting-usdc-on-base.md` (onramp guide, linked from
+      `advertiser/README.md`, `advertiser/buy-a-period.md`, the guide `SUMMARY` and
+      `docs/business/launch-checklist.md`); README "What's in the box" and status line; two more
+      deterministic screenshots (`buy-receipt.png`, `discover-categories.png`); business-doc and
+      `docs/qa/scorecard.md` updates; the ROADMAP Phase 7 backlog below.
+      **Acceptance amended, 2026-09-25:** two corrections to the acceptance text above, to match
+      what was actually built rather than what was originally planned. (1) "ROADMAP 6.x fully
+      ticked" does not hold: **6.10** (the live GCP deployment) is deliberately left open as a
+      user-run step, not something this repository can tick on its own — see 6.10 below; every
+      other 6.x item is `[x]`. (2) The demo script's talk tracks are listed as "2/5/15-minute",
+      not "5-min/15-min" — the 2-minute hallway track already existed going into this step and
+      was missing from the original acceptance wording; it is not a new addition here.
 - [x] **6.8 Auth hardening (SIWE binding, nonce/session hygiene).** _Done 2026-09-25._
       Pointers: ADR-0009 (2026-09-25 amendment) · `docs/threat-model.md` T15, T16 ·
       `api/src/openad/{siwe,ratelimit}.py` · `api/src/openad/services/auth.py` ·
@@ -253,7 +267,78 @@ protocol contract changes in this phase (anything that would need one is recorde
       hop (not just the first URL) re-validated for scheme and, outside dev/test, for a blocked
       hostname (after stripping trailing dots) or an IP literal that is not globally routable or
       is multicast, reserved or IPv6 site-local (including legacy numeric forms and IPv4-mapped
-      IPv6); T17 added; all checks green.
+      IPv6); T17 added; all checks green. Outbound-fetch bounds shipped separately in the
+      outbound-fetch-bounds PR: one overall deadline on media fetches, a per-pass budget for
+      indexer verification, and a domain meta check that releases its DB connection before
+      fetching and is bounded with a per-slot cooldown — recorded as **T18**
+      (`docs/threat-model.md`).
+- [ ] **6.10 Live GCP deployment (user-run).**
+      Pointers: `docs/deploy-gcp.md` · `docs/business/launch-checklist.md`.
+      Acceptance: a GCP project exists and the runbook (§1–§10) has been followed; the Workload
+      Identity Federation secrets are set for CI deploy; contracts are deployed to Base Sepolia
+      and `contracts/deployments/84532.json` is committed; staging smoke checks pass
+      (`/v1/health`, a `/v1/serve/{slot}` response, the embed rendering on a real publisher
+      origin); web and api are mapped under one registrable domain (`docs/deploy-gcp.md` §9); the
+      auth rate limit is turned on once the `X-Forwarded-For` chain is verified in staging (6.8
+      shipped it off by default — follow §11's verify-then-enable steps).
+
+---
+
+## Phase 7 — Post-launch backlog
+
+Found during Phase 6; recorded for later and not blocking launch. No Phase 6 task depends on any
+of these.
+
+- [ ] **7.1 Per-slot Open Graph previews.** Needs server-side or edge rendering — the SPA cannot
+      set crawler-visible meta at request time. Pointers: `web/index.html`,
+      `docs/ARCHITECTURE.md` §5.
+- [ ] **7.2 Publish `@openad/embed` to npm or a CDN.** Today the web build hosts
+      `embed/open-ad.v1.js` itself. Pointers: `embed/package.json`, `docs/ARCHITECTURE.md` §6.
+- [ ] **7.3 Slot listing moderation**, and clearing or flagging a listing on an on-chain slot
+      transfer (a listing survives `Transfer` today, so a new owner inherits text they didn't
+      write, still labelled "Publisher-provided"). Pointers: `api/src/openad/services/offchain.py`,
+      `api/src/openad/indexer/handlers.py`.
+- [ ] **7.4 Listing URL-heuristic gaps.** Spaced dots, `[.]`, bare IPs, `@handles` and U+00B7 all
+      evade the summary's URL check; accepted for now. Pointers:
+      `api/src/openad/services/offchain.py` (`_looks_like_url`).
+- [ ] **7.5 `SupplyPage` slot fallback** when a publisher has no slots (the `['1']` default).
+      Pointers: `web/src/features/publisher/SupplyPage.tsx`.
+- [ ] **7.6 Analytics refinements.** A neutral CTR hint on a CPC slot with impressions but no
+      clicks (today it reuses the LEASE "not tracked" hint); advertiser CTR over CPC impressions
+      only, not diluted by LEASE impressions; a separate "Booked (upcoming)" tile for leases not
+      yet started. Pointers: `api/src/openad/services/analytics.py`, `web/src/lib/analytics.ts`.
+- [ ] **7.7 Migration and lint scope.** `compare_metadata` parity doesn't cover server defaults;
+      widen the ruff scope to include `alembic/` (`0002_cpc.py` is unformatted). Pointers:
+      `api/tests/test_migrations.py`, `api/pyproject.toml`.
+- [ ] **7.8 `useSiwe` in-flight race** on an account switch (real app and demo). Pointers:
+      `web/src/features/auth/useSiwe.ts`.
+- [ ] **7.9 `BuyDialog` unit test** for the `BaseError.shortMessage` error branch. Pointers:
+      `web/src/features/marketplace/components/BuyDialog.tsx`.
+- [ ] **7.10 Independent security audit** before any mainnet deploy. Pointers:
+      `docs/business/launch-checklist.md`.
+- [ ] **7.11 Global auth rate limit** (Cloud Armor on a load balancer) instead of the per-instance
+      limiter. Pointers: `docs/deploy-gcp.md` §9, §11 · `docs/threat-model.md` T16.
+- [ ] **7.12 DNS-rebinding-safe media fetching** (resolve the host once, then fetch by the pinned
+      IP) — the T17 residual risk. Pointers: `api/src/openad/services/media.py`,
+      `docs/threat-model.md` T17.
+- [ ] **7.13 Media-fetch and deploy-guard follow-ups from 6.9.** A prod-mode test that public IP
+      literals (`8.8.8.8`, `[2001:4860:4860::8888]`, `[::ffff:8.8.8.8]`, `ads.example.`) are
+      accepted; `deploy.yml`'s `--only stack` passing real `API_URL`/`WEB_URL` to the same-site
+      guard instead of placeholders; a Public-Suffix-List-aware same-site guard (multi-part
+      suffixes such as `co.uk`, `web.app`); `host_of` verified on a real macOS bash 3.2.
+      Pointers: `api/tests/`, `.github/workflows/deploy.yml`, `scripts/deploy-gcp.sh`.
+- [ ] **7.14 Bounded-concurrency media verification.** The outbound-fetch-bounds PR bounds each
+      fetch and each verification pass, but not how many run concurrently. Pointers:
+      `api/src/openad/indexer/runner.py`.
+- [ ] **7.15 Auth follow-ups from 6.8.** A test that percent-encoded URIs/resources are accepted;
+      OpenAPI still documents FastAPI's default 422 shape for `/v1/auth/verify`; rename
+      `openad.errors.InvalidRequestError`, which clashes conceptually with SQLAlchemy's own; cap
+      `SiweIn.signature` length (about 256); `OPENAD_SESSION_SECRET` is read by no code — drop it
+      or use it. Pointers: `api/src/openad/siwe.py`, `api/src/openad/schemas/dashboard.py`,
+      `api/src/openad/errors.py`, `api/src/openad/config.py`.
+- [ ] **7.16 DNS TXT domain verification.** Add `dnspython` (with a resolver lifetime) so
+      `_check_dns` can actually succeed, or drop the method from the docs. Pointers:
+      `api/src/openad/services/offchain.py`, `docs/ARCHITECTURE.md` §3.6.
 
 ---
 

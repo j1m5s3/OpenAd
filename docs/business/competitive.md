@@ -20,7 +20,7 @@ every number as a typical, publicly cited range for that kind of intermediary, n
 | Pricing mechanism        | Real-time bidding / programmatic auction                                       | Varies (fixed rate, auction, or CPC bid)               | Usually a fixed rate set by the publisher                                     | Negotiated                                          | Dutch auction (LEASE) decaying `start_price` → `floor_price`, or CPC with a publisher floor and advertiser max, matched by generalized second price  |
 | Spend transparency       | Aggregated reporting, often delayed                                            | Varies                                                 | Manual invoices/reporting                                                     | Manual invoices/reporting                           | On-chain transaction for every `buy` and `settle_batch`; off-chain analytics (CTR, eCPM, spend/earnings trend) computed from the same indexed events |
 | Fiat support             | Yes                                                                            | Varies                                                 | Yes                                                                           | Yes                                                 | **No — USDC only today**                                                                                                                             |
-| Audience targeting       | Often granular (behavioral, contextual, demographic)                           | Varies, often slot- or wallet-level                    | Usually just the publisher's own audience                                     | Whatever the deal specifies                         | Slot-level only today (domain, placement, size); publisher-written audience/category listings are in progress on a separate branch                   |
+| Audience targeting       | Often granular (behavioral, contextual, demographic)                           | Varies, often slot- or wallet-level                    | Usually just the publisher's own audience                                     | Whatever the deal specifies                         | Self-described slot listings and categories (ROADMAP 6.3); no audience measurement or verification                                                   |
 | Demand/fill today        | Established, high fill on major networks                                       | Varies widely by network's maturity                    | Depends on the marketplace's publisher/advertiser base                        | Depends on the relationship                         | Early: no established demand pool yet — see "Where OpenAd loses today"                                                                               |
 
 ## Where OpenAd loses today
@@ -30,9 +30,9 @@ every number as a typical, publicly cited range for that kind of intermediary, n
 - **Cold-start demand and fill.** There is no established pool of publishers or advertisers yet;
   a newly minted slot has no guaranteed buyer, and a newly funded campaign has no guaranteed
   supply.
-- **Limited targeting.** Placement is slot-level (domain, size, kind) today; publisher-written
-  audience descriptions and category listings, which would let Discover filter by audience, are
-  in progress on a separate branch (ROADMAP 6.3), not yet on `main`.
+- **Limited targeting.** Self-described slot listings and categories (ROADMAP 6.3); no audience
+  measurement or verification — a listing is whatever the publisher writes, not measured traffic
+  data.
 - **No audited contracts yet.** The protocol has not had an external security audit; see
   `docs/business/launch-checklist.md`.
 - **No independent measurement or IVT vendor.** Click/impression counting and invalid-traffic
@@ -46,9 +46,9 @@ every number as a typical, publicly cited range for that kind of intermediary, n
 - _"No demand yet"_ → the beachhead go-to-market plan (`gtm-marketing.md`) targets a small,
   reachable ICP (crypto-native publishers and advertisers who already hold USDC on Base) and
   seeds both sides manually before any paid acquisition.
-- _"Limited targeting"_ → slot listings and category filters (ROADMAP 6.3, in progress) are the
-  first targeting improvement; further targeting needs its own spec and ADR, since the protocol
-  makes no promises about audience data.
+- _"Limited targeting"_ → slot listings and category filters (ROADMAP 6.3) are the first
+  targeting improvement, self-described and unverified; real audience measurement needs its own
+  spec and ADR, since the protocol makes no promises about audience data.
 - _"No audit"_ → tracked as a launch-checklist item before any mainnet deploy; nothing here
   claims an audit has happened.
 - _"No IVT vendor"_ → the settler batches only "payable" clicks after the platform's own IVT

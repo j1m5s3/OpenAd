@@ -37,7 +37,7 @@ introduce synonyms (e.g. do not say "listing" when you mean "terms", or "space" 
 | **Embed**                | The `<open-ad>` web component a publisher places on a page. Talks only to the serve endpoint.                                                                                                                                 |
 | **Indexer**              | The off-chain worker that turns contract events into database rows. The database is a derived cache; the chain is the source of truth.                                                                                        |
 | **Deployments artifact** | `contracts/deployments/<chainId>.json`: addresses + ABIs + start blocks for one chain. The only hand-off between contracts and the off-chain packages.                                                                        |
-| **Verified domain**      | Off-chain flag: the publisher proved control of `SlotSpec.domain` (DNS TXT or meta tag). Shown as a badge; not enforced on-chain.                                                                                             |
+| **Verified domain**      | Off-chain flag: the publisher proved control of `SlotSpec.domain` (meta tag; DNS TXT is ROADMAP 7.16). Shown as a badge; not enforced on-chain.                                                                                |
 
 ## Units and identifiers
 
