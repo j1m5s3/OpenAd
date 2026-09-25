@@ -56,7 +56,9 @@ class InvalidRequestError(DomainError):
 
 
 class RateLimitedError(DomainError):
-    """429 with ``Retry-After`` (whole seconds): the per-instance auth rate limit was hit."""
+    """429 with ``Retry-After`` (whole seconds): a rate limit or cooldown was hit. Originally the
+    per-instance auth rate limit (ADR-0009 amendment); also used for the per-slot domain-check
+    cooldown (ROADMAP 6.9 step 39, ``services.offchain.check_domain_verification``)."""
 
     status_code = 429
     code = "rate_limited"
