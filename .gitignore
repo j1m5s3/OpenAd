@@ -24,6 +24,7 @@ contracts/deployments/*.local.json
 # --- node ---
 node_modules/
 dist/
+dist-demo/
 *.tsbuildinfo
 web/src/generated/
 .vite/

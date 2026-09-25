@@ -3,4 +3,6 @@ export const routes = {
   slot: (id: string) => `/slots/${id}`,
   supply: '/supply',
   campaigns: '/campaigns',
+  why: '/why',
+  embedDemo: '/embed-demo',
 } as const;

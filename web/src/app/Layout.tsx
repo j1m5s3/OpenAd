@@ -1,19 +1,45 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import type { FormEvent } from 'react';
-import { useState } from 'react';
+import type { ComponentType, FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useSearchParams } from 'react-router';
 
 import { IndexerLagBanner } from '../components/IndexerLagBanner';
 import { WalletRail } from '../components/WalletRail';
+import { DEMO_MODE } from '../demo/flag';
 import { useSiwe } from '../features/auth/useSiwe';
 import { guideUrl } from '../lib/copy';
 import { withDevWalletParam } from '../lib/devWalletQuery';
 import { routes } from './paths';
 
+/** Dynamically imports the demo banner only when `DEMO_MODE` is on, guarded the same way as
+ * `main.tsx`'s dev-wallet/demo boot import, so Rollup drops the `demo/` chunk (and any reference
+ * to it) from normal builds instead of merely not invoking it at runtime. */
+function useDemoBanner(): ComponentType | null {
+  const [Banner, setBanner] = useState<ComponentType | null>(null);
+  useEffect(() => {
+    if (DEMO_MODE) {
+      void import('../demo/DemoBanner').then((m) => setBanner(() => m.DemoBanner));
+    }
+  }, []);
+  return Banner;
+}
+
+/** Same dead-code-elimination pattern as `useDemoBanner`, for the guided tour overlay. */
+function useDemoTour(): ComponentType | null {
+  const [TourComponent, setTourComponent] = useState<ComponentType | null>(null);
+  useEffect(() => {
+    if (DEMO_MODE) {
+      void import('../demo/tour/Tour').then((m) => setTourComponent(() => m.Tour));
+    }
+  }, []);
+  return TourComponent;
+}
+
 const nav = [
   { to: routes.discover, label: 'Discover', end: true },
   { to: routes.supply, label: 'Supply', end: false },
   { to: routes.campaigns, label: 'Campaigns', end: false },
+  { to: routes.why, label: 'Why OpenAd', end: false },
 ];
 
 export function Layout() {
@@ -22,6 +48,8 @@ export function Layout() {
   const navigate = useNavigate();
   const [q, setQ] = useState(params.get('q') ?? '');
   const guideHref = guideUrl();
+  const DemoBanner = useDemoBanner();
+  const DemoTour = useDemoTour();
 
   function onSearch(e: FormEvent) {
     e.preventDefault();
@@ -103,6 +131,8 @@ export function Layout() {
           )}
         </nav>
       </header>
+      {DemoBanner && <DemoBanner />}
+      {DemoTour && <DemoTour />}
       <IndexerLagBanner />
       {error && (
         <p className="border-b border-accent/40 bg-surface px-4 py-2 text-center text-sm text-ink">

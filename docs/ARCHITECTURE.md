@@ -361,6 +361,15 @@ web/src/
 - **Dev wallet injector (ADR-0013).** `?devwallet=pub-3` (sim `#3–#9` only in critique
   sessions) installs `window.ethereum` as a JSON-RPC forwarder to Vite `/anvil` → Anvil.
   Addresses only in `web/`; Anvil unlocked accounts sign. Production builds omit the module.
+- **Demo mode (ADR-0016).** `VITE_DEMO_MODE=1` builds boot `web/src/demo/install.ts` instead of
+  the real providers: in-memory seeded fixtures answer reads (`lib/api.ts` request resolver,
+  6.2 in progress), a wagmi `mock` connector + in-memory EIP-1193 simulator answers writes (6.2
+  in progress), a network guard rejects/throws on `fetch`, `XMLHttpRequest`, `WebSocket`,
+  `EventSource` and `navigator.sendBeacon` for any URL that is not a same-origin static asset
+  (same-origin `/v1` and `/anvil` paths and the configured `VITE_API_URL` origin are denied
+  too), and a persistent `DemoBanner` renders. Never opens an RPC connection, never calls the
+  API, never signs with a real wallet. Tree-shaken out of normal builds; `npm run build:demo`
+  (6.2, in progress) will produce static `web/dist-demo` (SPA fallback).
 - **QA loop.** Headed SME/UX critique lives in `docs/qa/` and `.cursor/skills/sandbox-*-critique/`.
   Playwright MCP is configured in `.cursor/mcp.json` beside `openad-sim`. Scripted YAML stays in `e2e/`.
 
@@ -386,14 +395,15 @@ web/src/
 
 ## 7. Environments
 
-|             | Anvil (local)                                         | Base Sepolia (staging)   | Base (production)       |
-| ----------- | ----------------------------------------------------- | ------------------------ | ----------------------- |
-| Chain       | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC               | public RPC              |
-| USDC        | `MockUSDC`                                            | Circle testnet USDC      | native USDC             |
-| DB          | `docker compose up postgres`                          | managed Postgres         | managed Postgres        |
-| Media cache | local `./.cache/media`                                | GCS (`OPENAD_MEDIA_BACKEND=gcs`) | GCS + CDN in front of serve |
-| Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` (committed) | `8453.json` (committed) |
-| Production (GCP, ADR-0017) | n/a (Compose is the local target) | Cloud Run (`api`/`indexer`/`settler`/`web`) + Cloud SQL, one GCP project | same topology, separate project/instance, manual promotion |
+|             | Anvil (local)                                         | Base Sepolia (staging)   | Base (production)       | Demo (static)             |
+| ----------- | ----------------------------------------------------- | ------------------------ | ----------------------- | -------------------------- |
+| Chain       | `docker compose up anvil`, chain id 31337, 2 s blocks | public RPC               | public RPC              | none (in-memory simulator) |
+| USDC        | `MockUSDC`                                            | Circle testnet USDC      | native USDC             | none (fixture math only)   |
+| DB          | `docker compose up postgres`                          | managed Postgres         | managed Postgres        | none (in-memory fixtures)  |
+| Media cache | local `./.cache/media`                                | GCS (`OPENAD_MEDIA_BACKEND=gcs`) | GCS + CDN in front of serve | none (bundled assets) |
+| Deployments | `contracts/deployments/31337.json` (ignored)          | `84532.json` (committed) | `8453.json` (committed) | none (not read)            |
+| Build       | `npm run dev:web`                                     | `npm run build -w web`   | `npm run build -w web`  | `npm run build:demo` → `web/dist-demo` (hash router, relative base, no server fallback needed; ADR-0016) |
+| Production (GCP, ADR-0017) | n/a (Compose is the local target) | Cloud Run (`api`/`indexer`/`settler`/`web`) + Cloud SQL, one GCP project | same topology, separate project/instance, manual promotion | any static host, or the `web-demo` image |
 
 Local loop (canonical on Windows: `.\scripts\setup.cmd`, `.\scripts\dev-up.cmd`, `.\scripts\dev-down.cmd`;
 `npm run stack:*` is the same if PowerShell can load `npm.ps1`; bash twins on Linux/macOS/WSL

@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "npm run sync:deployments && npm run sync:openapi && vite",
     "build": "npm run sync:deployments && npm run sync:openapi && tsc --noEmit -p tsconfig.json && vite build",
+    "build:demo": "node scripts/build-demo.mjs",
     "preview": "vite preview",
     "typecheck": "npm run sync:deployments && npm run sync:openapi && tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
@@ -15,6 +16,7 @@
     "sync:openapi": "node scripts/sync-openapi.mjs"
   },
   "dependencies": {
+    "@openad/embed": "*",
     "@rainbow-me/rainbowkit": "^2.2.8",
     "@tanstack/react-query": "^5.50.0",
     "react": "^19.0.0",

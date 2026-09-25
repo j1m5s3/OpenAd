@@ -4,6 +4,12 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      // Mirrors the Vite `resolve.alias` in vite.config.ts: `@openad/embed`'s package "exports"
+      // points at its build output, which does not exist without running embed's own build.
+      "@openad/embed": ["../embed/src/open-ad.ts"]
+    },
     "jsx": "react-jsx",
     "types": ["vite/client", "node"],
     "strict": true,
