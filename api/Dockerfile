@@ -26,6 +26,12 @@ ENV OPENAD_DEPLOYMENTS_DIR=/app/contracts/deployments
 # Unset (default) keeps the image identical to before this extra existed.
 ARG UV_EXTRAS=""
 RUN uv sync --no-dev ${UV_EXTRAS:+--extra $UV_EXTRAS}
+# Every process in this image starts through `uv run` (CMD below, infra/gcp/services/*.yaml,
+# infra/gcp/jobs/migrate.yaml, docker-compose.stack.yml). By default `uv run` syncs first: at
+# every container start it installs the dev group (pytest, ruff, mypy) and rebuilds the
+# project, all from PyPI, so a container without a route to PyPI never starts. The environment
+# is complete after the sync above, so `uv run` only runs.
+ENV UV_NO_SYNC=1
 
 ENV OPENAD_ENV=prod
 EXPOSE 8000

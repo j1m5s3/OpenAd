@@ -158,6 +158,13 @@ jobs:
           s = Settings(); assert str(s.deployments_path) == '/app/contracts/deployments', s.deployments_path;
           d = load_deployment(s.deployments_path, 84532); assert d.chain_id == 84532, d.chain_id;
           print('deployments ok:', s.deployments_path, d.chain_id)"
+      # UV_NO_SYNC in the image: without it `uv run` syncs at every start (the dev group and a
+      # project rebuild, from PyPI), and a container with no route to PyPI never starts.
+      - name: Check the api image starts offline, without its dev tools
+        run: |
+          docker run --rm --network none openad-api:ci uv run python -c "import importlib.util as u; dev = [m for m in ('pytest', 'ruff', 'mypy') if u.find_spec(m)]; assert not dev, dev"
+          docker run --rm --network none openad-api:ci uv run alembic --help >/dev/null
+          docker run --rm --network none openad-api:ci uv run uvicorn --version
       - name: Run api image migrations against the service Postgres
         env:
           OPENAD_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/openad_test
