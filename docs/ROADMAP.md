@@ -39,7 +39,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
 - [x] **1.4 Deploy script end-to-end.**
       Pointers: `PROTOCOL.md` §10 · `ARCHITECTURE.md` §4.1 · `contracts/script/deploy.py`.
       Acceptance: `uv run mox run deploy --network anvil` deploys all four contracts in order, wires market/treasury/fee/moderator, mints two demo slots + terms + one approved creative + one purchased period, and writes a valid `deployments/31337.json`. _Done 2026-09-11 (pyevm covered by `test_deploy.py`; Anvil via setup script)._
-- [ ] **1.5 Base Sepolia deployment.** Script + runbook in `docs/deploy-sepolia.md`. Broadcast and committed `84532.json` only when a deployer key is present; not required for local prod-readiness.
+- [x] **1.5 Base Sepolia deployment.** Script + runbook in `docs/deploy-sepolia.md`. Broadcast and committed `84532.json` only when a deployer key is present; not required for local prod-readiness. _Done 2026-09-26 (PR #25): the owner broadcast over Alchemy from block 47313840, behind the canonical-receipt guard (`contracts/script/receipts.py`); addresses in `PROTOCOL.md` §10. `AdSlot.base_uri` stays the deploy script's placeholder until the staging API's lasting URL exists (6.10)._
 
 ## Phase 2 — Indexer, serving edge, embed (end-to-end on Anvil)
 
@@ -292,14 +292,18 @@ protocol contract changes in this phase (anything that would need one is recorde
       shipped it off by default — follow §11's verify-then-enable steps); the settler is a
       dedicated, gas-only EOA (6.13); the `staging` environment's `vars` are set in GitHub
       (6.12); and every "(inferred; verify before deploy)" fact in the runbook has been checked.
-      **Progress (2026-09-26):** the staging project is set up through runbook §1–§5 (APIs,
-      Artifact Registry, the builds and media buckets, service accounts, secrets including the
-      settler key, and a private-IP Cloud SQL instance), and the demo site is live on Cloud Run.
-      The stack (§6–8) waits on the Base Sepolia contracts deploy (`84532.json`). Staging runs on
-      the default `*.run.app` addresses for now, so sign-in stays off until §9 maps a domain;
-      §10 (Workload Identity Federation) is not started. The first demo deploy showed that Cloud
-      Run's front end answers `/healthz` itself, so the web images and their smoke checks now use
-      `/health`; the runbook marks the facts this setup confirmed with its date.
+      **Progress (2026-09-26):** staging runs on Cloud Run through runbook §1–§8. The contracts
+      are on Base Sepolia (1.5); the migration job ran; `openad-api` reports chain 84532, the
+      indexer is caught up, and the settler passed its key checks at startup. The web app, the
+      api and the demo are on the default `*.run.app` addresses, deployed with
+      `--allow-cross-site-auth`, so sign-in stays off until §9 maps a domain. Still open: §9
+      (then a redeploy with the new URLs and `AdSlot.set_base_uri`), §10 (Workload Identity
+      Federation, not started), the `/v1/serve/{slot}` and embed smoke checks (no slot is minted
+      on Base Sepolia yet), §11's verify-then-enable rate limit, and the remaining "(inferred)"
+      runbook facts. The first deploys found that Cloud Run's front end answers `/healthz` itself
+      (the web images now use `/health`, PR #24), that Flashblocks RPCs return pre-confirmation
+      receipts (PR #25), and that `uv run` synced dev tools from PyPI at every container start
+      (PR #26); the runbook marks each fact this setup confirmed with its date.
 - [x] **6.11 The deploy images boot-check in CI (ADR-0017).** _Done 2026-09-25 (PR #20)._
       Pointers: `api/Dockerfile` · `web/Dockerfile` · `web/nginx/default.conf.template` ·
       `infra/gcp/cloudbuild.yaml` · `infra/gcp/services/{web,web-demo}.yaml` ·

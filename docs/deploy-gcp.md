@@ -41,8 +41,8 @@ gcloud services enable \
 `compute.googleapis.com` and `servicenetworking.googleapis.com` are needed for Private Services
 Access and Direct VPC egress (§3) — both underpin every Cloud Run service reaching Cloud SQL's
 private IP. With exactly this list enabled, §3's peering and private-IP instance were created on
-the first staging setup (2026-09-26); Direct VPC egress itself is exercised only by the first
-stack deploy **(inferred; verify before deploy)**.
+the first staging setup (2026-09-26), and the first stack deploy reached the instance over
+Direct VPC egress the same day.
 
 ## 2. Artifact Registry
 
@@ -93,17 +93,18 @@ internet egress, so no Cloud NAT is needed. The subnet (`default` in `<REGION>`)
 free IPs for however many instances these services scale to **(inferred; verify before
 deploy)**.
 
-**Verify-first, before the first real deploy.** The `openad-migrate` job (§7) opens the first
-connection to this instance on every deploy. If the `/cloudsql/…` Unix socket can't reach a
-private-IP-only instance from Cloud Run's Direct VPC egress path, store the connection string
-in TCP form instead — `postgresql+asyncpg://openad:<PASSWORD>@<PRIVATE_IP>:5432/openad` (drop
-`?host=/cloudsql/…`) — in the secret (step 5), where `<PRIVATE_IP>` is:
+**Unix socket first, TCP as the fallback.** The `openad-migrate` job (§7) opens the first
+connection to this instance on every deploy. On the first staging stack deploy (2026-09-26),
+the `/cloudsql/…` Unix-socket form below reached this private-IP-only instance through Direct
+VPC egress: the migration job, `api`, `indexer` and `settler` all connected with it. If a
+setup ever can't connect that way, store the connection string in TCP form instead **(inferred;
+the TCP form hasn't been exercised)** —
+`postgresql+asyncpg://openad:<PASSWORD>@<PRIVATE_IP>:5432/openad` (drop `?host=/cloudsql/…`) —
+in the secret (step 5), where `<PRIVATE_IP>` is:
 
 ```bash
 gcloud sql instances describe openad-<ENV> --format='value(ipAddresses[0].ipAddress)'
 ```
-
-**(inferred; verify before deploy)**.
 
 ```bash
 # max_connections is set explicitly rather than left to the tier default: the connection
@@ -132,7 +133,7 @@ unset DB_PASS
 ```
 
 This is the Unix-socket form. If a later step shows it can't reach this instance (see the
-verify-first note above), the `openad` user already exists and `DB_PASS` is gone, so re-running
+fallback note above), the `openad` user already exists and `DB_PASS` is gone, so re-running
 this block fails at `gcloud sql users create`: use the **Recovery** paragraph below instead, with
 the private-IP TCP host in its connection string.
 
@@ -576,6 +577,16 @@ can wrongly _accept_ a genuinely cross-site pair on domains shaped like these.
 `--allow-cross-site-auth` exists for the documented false-reject case above, not for this
 false-accept gap — a domain on a multi-label public suffix should be checked by hand rather than
 trusted to this heuristic.
+
+**Staging before a domain.** The first staging deploy (2026-09-26) ran without §9: `API_URL`
+and `WEB_URL` were the services' deterministic URLs,
+`https://openad-api-<PROJECT_NUMBER>.<REGION>.run.app` and
+`https://openad-web-<PROJECT_NUMBER>.<REGION>.run.app`, with `--allow-cross-site-auth`.
+Everything except sign-in works that way. Open the web app at exactly that `WEB_URL`: the api
+allows only `WEB_URL` as a CORS origin (`OPENAD_CORS_ORIGINS`), so the same service opened at
+its other address (`openad-web-<hash>-<region code>.a.run.app`) can't reach the api. Once the
+domain is mapped, redeploy with the new `API_URL`/`WEB_URL` and without the flag, and have the
+contract owner point `AdSlot.set_base_uri` at `<API_URL>/v1/slots/` (`docs/PROTOCOL.md` §10).
 
 Optional: put a global HTTPS load balancer in front of `openad-api`, with Cloud CDN for serve
 media. The load balancer fronts **every** api path on the `API_URL` host, and nothing reaches
