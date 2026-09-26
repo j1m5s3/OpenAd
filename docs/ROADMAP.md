@@ -297,7 +297,7 @@ protocol contract changes in this phase (anything that would need one is recorde
       indexer is caught up, and the settler passed its key checks at startup. The web app, the
       api and the demo are on the default `*.run.app` addresses, deployed with
       `--allow-cross-site-auth`, so sign-in stays off until §9 maps a domain. Still open: §9
-      (then a redeploy with the new URLs and `AdSlot.set_base_uri`), §10 (Workload Identity
+      (then a redeploy with the new URLs and `mox run set_base_uri`), §10 (Workload Identity
       Federation, not started), the `/v1/serve/{slot}` and embed smoke checks (no slot is minted
       on Base Sepolia yet), §11's verify-then-enable rate limit, and the remaining "(inferred)"
       runbook facts. The first deploys found that Cloud Run's front end answers `/healthz` itself

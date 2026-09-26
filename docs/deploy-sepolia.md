@@ -126,6 +126,35 @@ network, so run it in a real terminal. The deploy prints the settler it sets, an
 
 Update `docs/PROTOCOL.md` §10 with the live addresses after a successful broadcast.
 
+## Metadata base URI
+
+`AdSlot.tokenURI(id)` is the contract's `base_uri` followed by the id, and the API serves each
+slot's metadata at `GET /v1/slots/{id}`. The deploy leaves Base Sepolia's `base_uri` on a
+placeholder, `https://api.openad.example/v1/slots/`, so wallets and explorers can't load slot
+metadata until the owner points it at the staging API. Do that once the API's URL is the
+lasting one (after `docs/deploy-gcp.md` §9 maps the domain), from the owner's Moccasin wallet:
+
+```text
+cd contracts
+OPENAD_BASE_URI=https://api.<domain>/v1/slots/ uv run mox run set_base_uri --network base-sepolia --account <wallet name>
+```
+
+In PowerShell:
+
+```text
+cd contracts
+$env:BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org"   # or your RPC provider's URL
+$env:OPENAD_BASE_URI = "https://api.<domain>/v1/slots/"
+uv run mox run set_base_uri --network base-sepolia --account <wallet name>
+```
+
+Before it loads the deployment, the script refuses a URI that doesn't end in `/v1/slots/`, is
+longer than the contract's 80 bytes, has a query, fragment or credentials, isn't https, or
+names a host that isn't public (the placeholder, `localhost`, a private address). It also
+refuses a sender that isn't `AdSlot`'s owner. It prints the old and new value, then reads
+`base_uri()` back once the transaction lands. On `base` the owner is a Safe, so it prints the
+Safe transaction instead of sending one.
+
 ## If no key is present
 
 Leave `84532.json` uncommitted. Local Anvil (`31337.json`, git-ignored) is the supported

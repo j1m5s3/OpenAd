@@ -445,7 +445,8 @@ is canonical:
 Deployer (owner, treasury, moderator): `0xB4914DA207321C0E79080eA7a3023e8a5A3cB4f3`. Settler:
 `0x1F7177305521238bFB3C2D1c86C3323742Fd2621`. `base_uri` is still the deploy script's
 placeholder, `https://api.openad.example/v1/slots/`, until the owner calls
-`AdSlot.set_base_uri` with the staging API URL.
+`AdSlot.set_base_uri` with the staging API URL (`contracts/script/set_base_uri.py`,
+`docs/deploy-sepolia.md` "Metadata base URI").
 
 Deploy order: `CreativeRegistry` → `AdSlot` → `Marketplace(USDC, AdSlot, CreativeRegistry)` →
 `CampaignVault(USDC, AdSlot, CreativeRegistry, Marketplace)` → `AdSlot.set_market(Marketplace)` →
