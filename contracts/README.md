@@ -21,6 +21,7 @@ script/
   deploy.py            deploy order per PROTOCOL §10; writes deployments/<chainId>.json
   settler.py           resolve_settler(): who CampaignVault.set_settler gets (PROTOCOL §10)
   set_settler.py       rotates the settler via CampaignVault.set_settler (deploy-sepolia.md)
+  set_base_uri.py      points AdSlot.tokenURI at the API via set_base_uri (deploy-sepolia.md)
   artifacts.py         artifact schema + writer (ARCHITECTURE §4.1)
   receipts.py          waits out Flashblocks pre-confirmation receipts (deploy-sepolia.md)
 tests/

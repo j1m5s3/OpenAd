@@ -586,7 +586,8 @@ Everything except sign-in works that way. Open the web app at exactly that `WEB_
 allows only `WEB_URL` as a CORS origin (`OPENAD_CORS_ORIGINS`), so the same service opened at
 its other address (`openad-web-<hash>-<region code>.a.run.app`) can't reach the api. Once the
 domain is mapped, redeploy with the new `API_URL`/`WEB_URL` and without the flag, and have the
-contract owner point `AdSlot.set_base_uri` at `<API_URL>/v1/slots/` (`docs/PROTOCOL.md` §10).
+contract owner point `AdSlot.set_base_uri` at `<API_URL>/v1/slots/` with
+`uv run mox run set_base_uri` (`docs/deploy-sepolia.md`, "Metadata base URI").
 
 Optional: put a global HTTPS load balancer in front of `openad-api`, with Cloud CDN for serve
 media. The load balancer fronts **every** api path on the `API_URL` host, and nothing reaches
