@@ -442,6 +442,14 @@ fails, or if the RPC's chain id isn't `OPENAD_CHAIN_ID` (`settler.chain_mismatch
 `settler()` (a rotation in progress: batches revert with "not settler" and are retried) or is the
 treasury (fees would sit on a hot key).
 
+A batch counts as settled only once its receipt is in a canonical block
+(`openad.chain.receipts.wait_canonical_receipt`). Flashblocks RPCs (Alchemy's Base endpoints,
+for example) first return a pre-confirmation receipt with an all-zero `blockHash`, while reads
+at `latest` still see the previous sealed block. Taking that receipt as final would mark the
+clicks before the block exists and read the next batch's nonce too early, so the next batch
+would reuse it and be refused. The contract scripts wait the same way
+(`contracts/script/receipts.py`).
+
 ### 3.10 Analytics read model (ROADMAP 6.4)
 
 `api/src/openad/schemas/analytics.py` + `api/src/openad/services/analytics.py`, mounted by

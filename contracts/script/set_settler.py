@@ -31,6 +31,7 @@ from moccasin.config import get_active_network
 
 from script.artifacts import DEPLOYMENTS_DIR, read_artifact
 from script.deploy import _patch_anvil_boa, _purge_anvil_fork_cache
+from script.receipts import require_canonical_receipts
 from script.settler import HEX_ADDRESS, SETTLER_ADDRESS_ENV, resolve_settler
 
 # Networks where the CampaignVault owner is a Safe: print the Safe transaction, never send.
@@ -131,6 +132,9 @@ def moccasin_main() -> str:
     if network.name == "anvil":
         _purge_anvil_fork_cache()
         _patch_anvil_boa()
+    # `rotate_settler` reads settler() right after sending; a pre-confirmation receipt would
+    # leave that read on the previous sealed block (script/receipts.py).
+    require_canonical_receipts(boa.env)
     loaded = load_vault(network.chain_id)
     return rotate_settler(
         loaded.vault,

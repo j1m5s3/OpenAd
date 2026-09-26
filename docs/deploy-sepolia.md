@@ -17,7 +17,13 @@ Hosting the api/indexer/settler/web on GCP once `84532.json` exists: `docs/deplo
    Set `default_account_name` for `[networks.base-sepolia]` in `moccasin.toml`, or pass
    `--account <wallet name>` to the deploy command below instead.
 
-2. `.env` with `BASE_SEPOLIA_RPC_URL` (and optional `BASESCAN_API_KEY` for verify).
+2. `.env` with `BASE_SEPOLIA_RPC_URL` (and optional `BASESCAN_API_KEY` for verify). The public
+   `https://sepolia.base.org` works but rate-limits; a provider URL such as Alchemy's
+   (`https://base-sepolia.g.alchemy.com/v2/<key>`) avoids that. Alchemy's endpoint serves
+   Flashblocks pre-confirmation receipts (all-zero `blockHash`), which titanoboa would take as
+   final and crash on (`'NoneType' object is not subscriptable` after the first transaction).
+   `script/deploy.py` and `script/set_settler.py` wait for each receipt's block to be sealed
+   first (`script/receipts.py`), so either URL works.
 3. Circle testnet USDC at `0x036CbD53842c5426634e7929541eC2318f3dCF7e` (PROTOCOL §10) — verify on the explorer before deploying.
 4. The deployer EOA funded with Base Sepolia ETH. Do **not** put the key in `.env`.
 5. A dedicated settler EOA, and its address in `OPENAD_SETTLER_ADDRESS` (next section).

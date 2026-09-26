@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from web3 import AsyncWeb3
 
 from openad.chain.deployments import Deployment
+from openad.chain.receipts import wait_canonical_receipt
 from openad.health import Liveness
 from openad.logging import get_logger
 from openad.models import Campaign, CampaignSettlement, ProtocolConfig
@@ -119,7 +120,9 @@ class SettlerRunner:
         raw = signed.raw_transaction
         try:
             tx_hash = await self.w3.eth.send_raw_transaction(raw)
-            receipt = await self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+            # Not web3's wait: on Flashblocks RPCs it returns a pre-confirmation, and the next
+            # batch's nonce (read at `latest`) would still be this one's (chain/receipts.py).
+            receipt = await wait_canonical_receipt(self.w3, tx_hash, timeout_s=120)
         except Exception:
             log.exception(
                 "settler.submit_failed", campaign_id=batch.campaign_id, charged=batch.charged

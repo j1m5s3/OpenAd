@@ -1,7 +1,7 @@
 # OpenAd Protocol Specification (v1)
 
 Status: **Implemented** (Anvil via ROADMAP 1.4 for LEASE; ROADMAP 5.2–5.3 for CPC /
-`CampaignVault`). Base Sepolia broadcast is optional — see `docs/deploy-sepolia.md`.
+`CampaignVault`). Live on Base Sepolia (§10; `docs/deploy-sepolia.md`).
 Signatures are canonical in `contracts/src/interfaces/*.vyi`. Semantics are canonical here.
 If you change one, change the other in the same commit.
 
@@ -431,6 +431,21 @@ Property tests (`contracts/tests/`) must cover each of these.
 | `settler`              | deployer, or `OPENAD_SETTLER_ADDRESS`             | dedicated, gas-only EOA in `OPENAD_SETTLER_ADDRESS` (required; never the deployer)           | dedicated, gas-only EOA (`OPENAD_SETTLER_ADDRESS`); never the Safe or a signer       |
 | `AdSlot` name / symbol | `OpenAd Slot` / `OASLT`                           | same                                                                                         | same                                                                                 |
 | `base_uri`             | `http://localhost:8000/v1/slots/`                 | testnet API URL + `/v1/slots/`                                                               | production API URL + `/v1/slots/`                                                    |
+
+**Live on Base Sepolia (84532)** since block 47313840 (2026-09-26); `contracts/deployments/84532.json`
+is canonical:
+
+| Contract           | Address                                      |
+| ------------------ | -------------------------------------------- |
+| `CreativeRegistry` | `0x463336313783c087afc1111Cb75F58248c0877D5` |
+| `AdSlot`           | `0x6Aa6Af46edF7Fa57bF078bb097fa2c8cf59EAA8B` |
+| `Marketplace`      | `0x0D91F009AA4005499FaF837312D7185f30514f91` |
+| `CampaignVault`    | `0xaf41f2570CceB21DCe350DD831172b339b923950` |
+
+Deployer (owner, treasury, moderator): `0xB4914DA207321C0E79080eA7a3023e8a5A3cB4f3`. Settler:
+`0x1F7177305521238bFB3C2D1c86C3323742Fd2621`. `base_uri` is still the deploy script's
+placeholder, `https://api.openad.example/v1/slots/`, until the owner calls
+`AdSlot.set_base_uri` with the staging API URL.
 
 Deploy order: `CreativeRegistry` → `AdSlot` → `Marketplace(USDC, AdSlot, CreativeRegistry)` →
 `CampaignVault(USDC, AdSlot, CreativeRegistry, Marketplace)` → `AdSlot.set_market(Marketplace)` →
