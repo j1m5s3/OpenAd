@@ -1,0 +1,3221 @@
+{
+  "artifactVersion": 1,
+  "chainId": 84532,
+  "network": "base-sepolia",
+  "deployedAt": "2026-09-26T04:13:18Z",
+  "deployer": "0xB4914DA207321C0E79080eA7a3023e8a5A3cB4f3",
+  "contracts": {
+    "AdSlot": {
+      "address": "0x6Aa6Af46edF7Fa57bF078bb097fa2c8cf59EAA8B",
+      "startBlock": 47313840,
+      "abi": [
+        {
+          "name": "SlotMinted",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "owner",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "width",
+              "type": "uint16",
+              "indexed": false
+            },
+            {
+              "name": "height",
+              "type": "uint16",
+              "indexed": false
+            },
+            {
+              "name": "kind",
+              "type": "uint8",
+              "indexed": false
+            },
+            {
+              "name": "domain",
+              "type": "string",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "CalendarSet",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "version",
+              "type": "uint32",
+              "indexed": false
+            },
+            {
+              "name": "period_seconds",
+              "type": "uint64",
+              "indexed": false
+            },
+            {
+              "name": "first_period_start",
+              "type": "uint64",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "LeaseSet",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "period_index",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "user",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "version",
+              "type": "uint32",
+              "indexed": false
+            },
+            {
+              "name": "start",
+              "type": "uint64",
+              "indexed": false
+            },
+            {
+              "name": "end",
+              "type": "uint64",
+              "indexed": false
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "MarketSet",
+          "inputs": [
+            {
+              "name": "market",
+              "type": "address",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "BaseURISet",
+          "inputs": [
+            {
+              "name": "base_uri",
+              "type": "string",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "OwnershipTransferred",
+          "inputs": [
+            {
+              "name": "previous_owner",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "new_owner",
+              "type": "address",
+              "indexed": true
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "RoleMinterChanged",
+          "inputs": [
+            {
+              "name": "minter",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "status",
+              "type": "bool",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "Transfer",
+          "inputs": [
+            {
+              "name": "sender",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "receiver",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "token_id",
+              "type": "uint256",
+              "indexed": true
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "Approval",
+          "inputs": [
+            {
+              "name": "owner",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "approved",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "token_id",
+              "type": "uint256",
+              "indexed": true
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "ApprovalForAll",
+          "inputs": [
+            {
+              "name": "owner",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "operator",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "approved",
+              "type": "bool",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "supportsInterface",
+          "inputs": [
+            {
+              "name": "interface_id",
+              "type": "bytes4"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "balanceOf",
+          "inputs": [
+            {
+              "name": "owner",
+              "type": "address"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "ownerOf",
+          "inputs": [
+            {
+              "name": "token_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "getApproved",
+          "inputs": [
+            {
+              "name": "token_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "isApprovedForAll",
+          "inputs": [
+            {
+              "name": "arg0",
+              "type": "address"
+            },
+            {
+              "name": "arg1",
+              "type": "address"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "stateMutability": "payable",
+          "type": "function",
+          "name": "transferFrom",
+          "inputs": [
+            {
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "name": "token_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "payable",
+          "type": "function",
+          "name": "safeTransferFrom",
+          "inputs": [
+            {
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "name": "token_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "payable",
+          "type": "function",
+          "name": "safeTransferFrom",
+          "inputs": [
+            {
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "name": "token_id",
+              "type": "uint256"
+            },
+            {
+              "name": "data",
+              "type": "bytes"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "payable",
+          "type": "function",
+          "name": "approve",
+          "inputs": [
+            {
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "name": "token_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "setApprovalForAll",
+          "inputs": [
+            {
+              "name": "operator",
+              "type": "address"
+            },
+            {
+              "name": "approved",
+              "type": "bool"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "totalSupply",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "tokenByIndex",
+          "inputs": [
+            {
+              "name": "index",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "tokenOfOwnerByIndex",
+          "inputs": [
+            {
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "name": "index",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "name",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "symbol",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "owner",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "transfer_ownership",
+          "inputs": [
+            {
+              "name": "new_owner",
+              "type": "address"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "renounce_ownership",
+          "inputs": [],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "mint_slot",
+          "inputs": [
+            {
+              "name": "spec",
+              "type": "tuple",
+              "components": [
+                {
+                  "name": "width",
+                  "type": "uint16"
+                },
+                {
+                  "name": "height",
+                  "type": "uint16"
+                },
+                {
+                  "name": "kind",
+                  "type": "uint8"
+                },
+                {
+                  "name": "domain",
+                  "type": "string"
+                }
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_calendar",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            },
+            {
+              "name": "period_seconds",
+              "type": "uint64"
+            },
+            {
+              "name": "first_period_start",
+              "type": "uint64"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_lease",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            },
+            {
+              "name": "period_index",
+              "type": "uint256"
+            },
+            {
+              "name": "user",
+              "type": "address"
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_market",
+          "inputs": [
+            {
+              "name": "market",
+              "type": "address"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_base_uri",
+          "inputs": [
+            {
+              "name": "base_uri",
+              "type": "string"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "tokenURI",
+          "inputs": [
+            {
+              "name": "token_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "spec_of",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "tuple",
+              "components": [
+                {
+                  "name": "width",
+                  "type": "uint16"
+                },
+                {
+                  "name": "height",
+                  "type": "uint16"
+                },
+                {
+                  "name": "kind",
+                  "type": "uint8"
+                },
+                {
+                  "name": "domain",
+                  "type": "string"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "calendar_of",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "tuple",
+              "components": [
+                {
+                  "name": "version",
+                  "type": "uint32"
+                },
+                {
+                  "name": "period_seconds",
+                  "type": "uint64"
+                },
+                {
+                  "name": "first_period_start",
+                  "type": "uint64"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "last_leased_end_of",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint64"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "period_window",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            },
+            {
+              "name": "period_index",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint64"
+            },
+            {
+              "name": "",
+              "type": "uint64"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "current_period",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            },
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "lease_of",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            },
+            {
+              "name": "period_index",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "tuple",
+              "components": [
+                {
+                  "name": "user",
+                  "type": "address"
+                },
+                {
+                  "name": "creative_id",
+                  "type": "uint256"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "userOf",
+          "inputs": [
+            {
+              "name": "tokenId",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "userExpires",
+          "inputs": [
+            {
+              "name": "tokenId",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "market",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "base_uri",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "constructor",
+          "inputs": [
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "symbol",
+              "type": "string"
+            },
+            {
+              "name": "initial_base_uri",
+              "type": "string"
+            }
+          ],
+          "outputs": []
+        }
+      ]
+    },
+    "CampaignVault": {
+      "address": "0xaf41f2570CceB21DCe350DD831172b339b923950",
+      "startBlock": 47313840,
+      "abi": [
+        {
+          "name": "CampaignOpened",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "advertiser",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "slot_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "max_cpc",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "budget",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "valid_from",
+              "type": "uint64",
+              "indexed": false
+            },
+            {
+              "name": "valid_until",
+              "type": "uint64",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "CampaignToppedUp",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "amount",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "remaining",
+              "type": "uint256",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "MaxCpcSet",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "max_cpc",
+              "type": "uint256",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "CampaignPausedSet",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "paused",
+              "type": "bool",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "CloseRequested",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "close_after",
+              "type": "uint64",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "CampaignFinalized",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "refund",
+              "type": "uint256",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "Settled",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "slot_id",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "publisher",
+              "type": "address",
+              "indexed": false
+            },
+            {
+              "name": "payable_clicks",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "charged",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "fee",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "batch_id",
+              "type": "bytes32",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "SettlerSet",
+          "inputs": [
+            {
+              "name": "settler",
+              "type": "address",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "VaultFeeSet",
+          "inputs": [
+            {
+              "name": "fee_bps",
+              "type": "uint16",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "VaultTreasurySet",
+          "inputs": [
+            {
+              "name": "treasury",
+              "type": "address",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "CloseDelaySet",
+          "inputs": [
+            {
+              "name": "seconds",
+              "type": "uint64",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "MaxBatchChargeSet",
+          "inputs": [
+            {
+              "name": "max_batch_charge",
+              "type": "uint256",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "OwnershipTransferred",
+          "inputs": [
+            {
+              "name": "previous_owner",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "new_owner",
+              "type": "address",
+              "indexed": true
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "owner",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "transfer_ownership",
+          "inputs": [
+            {
+              "name": "new_owner",
+              "type": "address"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "renounce_ownership",
+          "inputs": [],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "open_campaign",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            },
+            {
+              "name": "max_cpc",
+              "type": "uint256"
+            },
+            {
+              "name": "budget",
+              "type": "uint256"
+            },
+            {
+              "name": "valid_from",
+              "type": "uint64"
+            },
+            {
+              "name": "valid_until",
+              "type": "uint64"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "open_campaign_with_permit",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            },
+            {
+              "name": "max_cpc",
+              "type": "uint256"
+            },
+            {
+              "name": "budget",
+              "type": "uint256"
+            },
+            {
+              "name": "valid_from",
+              "type": "uint64"
+            },
+            {
+              "name": "valid_until",
+              "type": "uint64"
+            },
+            {
+              "name": "deadline",
+              "type": "uint256"
+            },
+            {
+              "name": "v",
+              "type": "uint8"
+            },
+            {
+              "name": "r",
+              "type": "bytes32"
+            },
+            {
+              "name": "s",
+              "type": "bytes32"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "top_up",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256"
+            },
+            {
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "top_up_with_permit",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256"
+            },
+            {
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "name": "deadline",
+              "type": "uint256"
+            },
+            {
+              "name": "v",
+              "type": "uint8"
+            },
+            {
+              "name": "r",
+              "type": "bytes32"
+            },
+            {
+              "name": "s",
+              "type": "bytes32"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_max_cpc",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256"
+            },
+            {
+              "name": "max_cpc",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_paused",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256"
+            },
+            {
+              "name": "paused",
+              "type": "bool"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "request_close",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "finalize_close",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "settle_batch",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256"
+            },
+            {
+              "name": "payable_clicks",
+              "type": "uint256"
+            },
+            {
+              "name": "charged_usdc",
+              "type": "uint256"
+            },
+            {
+              "name": "batch_id",
+              "type": "bytes32"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_settler",
+          "inputs": [
+            {
+              "name": "settler",
+              "type": "address"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_fee_bps",
+          "inputs": [
+            {
+              "name": "fee_bps",
+              "type": "uint16"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_treasury",
+          "inputs": [
+            {
+              "name": "treasury",
+              "type": "address"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_close_delay",
+          "inputs": [
+            {
+              "name": "seconds",
+              "type": "uint64"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_max_batch_charge",
+          "inputs": [
+            {
+              "name": "max_batch_charge",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "campaign_of",
+          "inputs": [
+            {
+              "name": "campaign_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "tuple",
+              "components": [
+                {
+                  "name": "advertiser",
+                  "type": "address"
+                },
+                {
+                  "name": "slot_id",
+                  "type": "uint256"
+                },
+                {
+                  "name": "creative_id",
+                  "type": "uint256"
+                },
+                {
+                  "name": "max_cpc",
+                  "type": "uint256"
+                },
+                {
+                  "name": "remaining",
+                  "type": "uint256"
+                },
+                {
+                  "name": "valid_from",
+                  "type": "uint64"
+                },
+                {
+                  "name": "valid_until",
+                  "type": "uint64"
+                },
+                {
+                  "name": "paused",
+                  "type": "bool"
+                },
+                {
+                  "name": "close_after",
+                  "type": "uint64"
+                },
+                {
+                  "name": "closed",
+                  "type": "bool"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "open_campaigns_of",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "used_batch",
+          "inputs": [
+            {
+              "name": "batch_id",
+              "type": "bytes32"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "USDC",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "AD_SLOT",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "REGISTRY",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "MARKETPLACE",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "settler",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "fee_bps",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint16"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "treasury",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "close_delay_seconds",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint64"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "max_batch_charge",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "campaign_count",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "constructor",
+          "inputs": [
+            {
+              "name": "usdc",
+              "type": "address"
+            },
+            {
+              "name": "ad_slot",
+              "type": "address"
+            },
+            {
+              "name": "registry",
+              "type": "address"
+            },
+            {
+              "name": "marketplace",
+              "type": "address"
+            }
+          ],
+          "outputs": []
+        }
+      ]
+    },
+    "CreativeRegistry": {
+      "address": "0x463336313783c087afc1111Cb75F58248c0877D5",
+      "startBlock": 47313840,
+      "abi": [
+        {
+          "name": "CreativeRegistered",
+          "inputs": [
+            {
+              "name": "creative_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "advertiser",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "kind",
+              "type": "uint8",
+              "indexed": false
+            },
+            {
+              "name": "content_hash",
+              "type": "bytes32",
+              "indexed": false
+            },
+            {
+              "name": "uri",
+              "type": "string",
+              "indexed": false
+            },
+            {
+              "name": "mime",
+              "type": "string",
+              "indexed": false
+            },
+            {
+              "name": "width",
+              "type": "uint16",
+              "indexed": false
+            },
+            {
+              "name": "height",
+              "type": "uint16",
+              "indexed": false
+            },
+            {
+              "name": "click_url",
+              "type": "string",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "NftCreativeRegistered",
+          "inputs": [
+            {
+              "name": "creative_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "nft_chain_id",
+              "type": "uint64",
+              "indexed": false
+            },
+            {
+              "name": "nft_contract",
+              "type": "address",
+              "indexed": false
+            },
+            {
+              "name": "nft_token_id",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "nft_standard",
+              "type": "uint8",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "ApprovalRequested",
+          "inputs": [
+            {
+              "name": "publisher",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "advertiser",
+              "type": "address",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "ApprovalSet",
+          "inputs": [
+            {
+              "name": "publisher",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "status",
+              "type": "uint8",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "AdvertiserAllowed",
+          "inputs": [
+            {
+              "name": "publisher",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "advertiser",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "allowed",
+              "type": "bool",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "CreativeRevoked",
+          "inputs": [
+            {
+              "name": "creative_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "by",
+              "type": "address",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "ModeratorSet",
+          "inputs": [
+            {
+              "name": "moderator",
+              "type": "address",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "OwnershipTransferred",
+          "inputs": [
+            {
+              "name": "previous_owner",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "new_owner",
+              "type": "address",
+              "indexed": true
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "owner",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "transfer_ownership",
+          "inputs": [
+            {
+              "name": "new_owner",
+              "type": "address"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "renounce_ownership",
+          "inputs": [],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "register_media",
+          "inputs": [
+            {
+              "name": "uri",
+              "type": "string"
+            },
+            {
+              "name": "content_hash",
+              "type": "bytes32"
+            },
+            {
+              "name": "mime",
+              "type": "string"
+            },
+            {
+              "name": "width",
+              "type": "uint16"
+            },
+            {
+              "name": "height",
+              "type": "uint16"
+            },
+            {
+              "name": "click_url",
+              "type": "string"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "register_nft",
+          "inputs": [
+            {
+              "name": "nft_chain_id",
+              "type": "uint64"
+            },
+            {
+              "name": "nft_contract",
+              "type": "address"
+            },
+            {
+              "name": "nft_token_id",
+              "type": "uint256"
+            },
+            {
+              "name": "nft_standard",
+              "type": "uint8"
+            },
+            {
+              "name": "click_url",
+              "type": "string"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "request_approval",
+          "inputs": [
+            {
+              "name": "publisher",
+              "type": "address"
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_approval",
+          "inputs": [
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            },
+            {
+              "name": "approved",
+              "type": "bool"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "revoke_approval",
+          "inputs": [
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_advertiser_allowed",
+          "inputs": [
+            {
+              "name": "advertiser",
+              "type": "address"
+            },
+            {
+              "name": "allowed",
+              "type": "bool"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "moderator_revoke",
+          "inputs": [
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_moderator",
+          "inputs": [
+            {
+              "name": "moderator",
+              "type": "address"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "get_creative",
+          "inputs": [
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "tuple",
+              "components": [
+                {
+                  "name": "advertiser",
+                  "type": "address"
+                },
+                {
+                  "name": "kind",
+                  "type": "uint8"
+                },
+                {
+                  "name": "uri",
+                  "type": "string"
+                },
+                {
+                  "name": "content_hash",
+                  "type": "bytes32"
+                },
+                {
+                  "name": "mime",
+                  "type": "string"
+                },
+                {
+                  "name": "width",
+                  "type": "uint16"
+                },
+                {
+                  "name": "height",
+                  "type": "uint16"
+                },
+                {
+                  "name": "click_url",
+                  "type": "string"
+                },
+                {
+                  "name": "nft_chain_id",
+                  "type": "uint64"
+                },
+                {
+                  "name": "nft_contract",
+                  "type": "address"
+                },
+                {
+                  "name": "nft_token_id",
+                  "type": "uint256"
+                },
+                {
+                  "name": "nft_standard",
+                  "type": "uint8"
+                },
+                {
+                  "name": "revoked",
+                  "type": "bool"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "is_active",
+          "inputs": [
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "is_blocked_for",
+          "inputs": [
+            {
+              "name": "publisher",
+              "type": "address"
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "is_approved_for",
+          "inputs": [
+            {
+              "name": "publisher",
+              "type": "address"
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "approval_status",
+          "inputs": [
+            {
+              "name": "publisher",
+              "type": "address"
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint8"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "is_advertiser_allowed",
+          "inputs": [
+            {
+              "name": "publisher",
+              "type": "address"
+            },
+            {
+              "name": "advertiser",
+              "type": "address"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "next_id",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "moderator",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "constructor",
+          "inputs": [],
+          "outputs": []
+        }
+      ]
+    },
+    "Marketplace": {
+      "address": "0x0D91F009AA4005499FaF837312D7185f30514f91",
+      "startBlock": 47313840,
+      "abi": [
+        {
+          "name": "TermsSet",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "start_price",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "floor_price",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "lead_seconds",
+              "type": "uint64",
+              "indexed": false
+            },
+            {
+              "name": "sale_end",
+              "type": "uint64",
+              "indexed": false
+            },
+            {
+              "name": "approval_mode",
+              "type": "uint8",
+              "indexed": false
+            },
+            {
+              "name": "sale_mode",
+              "type": "uint8",
+              "indexed": false
+            },
+            {
+              "name": "floor_cpc",
+              "type": "uint256",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "CampaignVaultSet",
+          "inputs": [
+            {
+              "name": "vault",
+              "type": "address",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "PausedSet",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "paused",
+              "type": "bool",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "Purchased",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "period_index",
+              "type": "uint256",
+              "indexed": true
+            },
+            {
+              "name": "buyer",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "publisher",
+              "type": "address",
+              "indexed": false
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "price",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "fee",
+              "type": "uint256",
+              "indexed": false
+            },
+            {
+              "name": "approval_mode",
+              "type": "uint8",
+              "indexed": false
+            },
+            {
+              "name": "start",
+              "type": "uint64",
+              "indexed": false
+            },
+            {
+              "name": "end",
+              "type": "uint64",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "FeeSet",
+          "inputs": [
+            {
+              "name": "fee_bps",
+              "type": "uint16",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "TreasurySet",
+          "inputs": [
+            {
+              "name": "treasury",
+              "type": "address",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "OwnershipTransferred",
+          "inputs": [
+            {
+              "name": "previous_owner",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "new_owner",
+              "type": "address",
+              "indexed": true
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "owner",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "transfer_ownership",
+          "inputs": [
+            {
+              "name": "new_owner",
+              "type": "address"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "renounce_ownership",
+          "inputs": [],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_terms",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            },
+            {
+              "name": "start_price",
+              "type": "uint256"
+            },
+            {
+              "name": "floor_price",
+              "type": "uint256"
+            },
+            {
+              "name": "lead_seconds",
+              "type": "uint64"
+            },
+            {
+              "name": "sale_end",
+              "type": "uint64"
+            },
+            {
+              "name": "approval_mode",
+              "type": "uint8"
+            },
+            {
+              "name": "sale_mode",
+              "type": "uint8"
+            },
+            {
+              "name": "floor_cpc",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_paused",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            },
+            {
+              "name": "paused",
+              "type": "bool"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "buy",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            },
+            {
+              "name": "period_index",
+              "type": "uint256"
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            },
+            {
+              "name": "max_price",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "buy_with_permit",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            },
+            {
+              "name": "period_index",
+              "type": "uint256"
+            },
+            {
+              "name": "creative_id",
+              "type": "uint256"
+            },
+            {
+              "name": "max_price",
+              "type": "uint256"
+            },
+            {
+              "name": "deadline",
+              "type": "uint256"
+            },
+            {
+              "name": "v",
+              "type": "uint8"
+            },
+            {
+              "name": "r",
+              "type": "bytes32"
+            },
+            {
+              "name": "s",
+              "type": "bytes32"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_fee_bps",
+          "inputs": [
+            {
+              "name": "fee_bps",
+              "type": "uint16"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_treasury",
+          "inputs": [
+            {
+              "name": "treasury",
+              "type": "address"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_campaign_vault",
+          "inputs": [
+            {
+              "name": "vault",
+              "type": "address"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "terms_of",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "tuple",
+              "components": [
+                {
+                  "name": "start_price",
+                  "type": "uint256"
+                },
+                {
+                  "name": "floor_price",
+                  "type": "uint256"
+                },
+                {
+                  "name": "lead_seconds",
+                  "type": "uint64"
+                },
+                {
+                  "name": "sale_end",
+                  "type": "uint64"
+                },
+                {
+                  "name": "approval_mode",
+                  "type": "uint8"
+                },
+                {
+                  "name": "sale_mode",
+                  "type": "uint8"
+                },
+                {
+                  "name": "floor_cpc",
+                  "type": "uint256"
+                },
+                {
+                  "name": "paused",
+                  "type": "bool"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "price",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            },
+            {
+              "name": "period_index",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "quote",
+          "inputs": [
+            {
+              "name": "slot_id",
+              "type": "uint256"
+            },
+            {
+              "name": "period_index",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "tuple",
+              "components": [
+                {
+                  "name": "sellable",
+                  "type": "bool"
+                },
+                {
+                  "name": "reason",
+                  "type": "string"
+                },
+                {
+                  "name": "price",
+                  "type": "uint256"
+                },
+                {
+                  "name": "fee",
+                  "type": "uint256"
+                },
+                {
+                  "name": "open_at",
+                  "type": "uint64"
+                },
+                {
+                  "name": "start",
+                  "type": "uint64"
+                },
+                {
+                  "name": "end",
+                  "type": "uint64"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "USDC",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "AD_SLOT",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "REGISTRY",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "fee_bps",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint16"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "treasury",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "campaign_vault",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "constructor",
+          "inputs": [
+            {
+              "name": "usdc",
+              "type": "address"
+            },
+            {
+              "name": "ad_slot",
+              "type": "address"
+            },
+            {
+              "name": "registry",
+              "type": "address"
+            }
+          ],
+          "outputs": []
+        }
+      ]
+    },
+    "USDC": {
+      "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "startBlock": 47313840,
+      "abi": [
+        {
+          "name": "OwnershipTransferred",
+          "inputs": [
+            {
+              "name": "previous_owner",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "new_owner",
+              "type": "address",
+              "indexed": true
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "RoleMinterChanged",
+          "inputs": [
+            {
+              "name": "minter",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "status",
+              "type": "bool",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "Transfer",
+          "inputs": [
+            {
+              "name": "sender",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "receiver",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "value",
+              "type": "uint256",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "name": "Approval",
+          "inputs": [
+            {
+              "name": "owner",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "spender",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "name": "value",
+              "type": "uint256",
+              "indexed": false
+            }
+          ],
+          "anonymous": false,
+          "type": "event"
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "totalSupply",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "balanceOf",
+          "inputs": [
+            {
+              "name": "arg0",
+              "type": "address"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "allowance",
+          "inputs": [
+            {
+              "name": "arg0",
+              "type": "address"
+            },
+            {
+              "name": "arg1",
+              "type": "address"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "transfer",
+          "inputs": [
+            {
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "transferFrom",
+          "inputs": [
+            {
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "approve",
+          "inputs": [
+            {
+              "name": "spender",
+              "type": "address"
+            },
+            {
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "name",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "symbol",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "decimals",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint8"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "permit",
+          "inputs": [
+            {
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "name": "spender",
+              "type": "address"
+            },
+            {
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "name": "deadline",
+              "type": "uint256"
+            },
+            {
+              "name": "v",
+              "type": "uint8"
+            },
+            {
+              "name": "r",
+              "type": "bytes32"
+            },
+            {
+              "name": "s",
+              "type": "bytes32"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "nonces",
+          "inputs": [
+            {
+              "name": "arg0",
+              "type": "address"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "DOMAIN_SEPARATOR",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32"
+            }
+          ]
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "mint",
+          "inputs": [
+            {
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "set_minter",
+          "inputs": [
+            {
+              "name": "minter",
+              "type": "address"
+            },
+            {
+              "name": "status",
+              "type": "bool"
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "stateMutability": "view",
+          "type": "function",
+          "name": "owner",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "stateMutability": "payable",
+          "type": "constructor",
+          "inputs": [],
+          "outputs": []
+        }
+      ]
+    }
+  }
+}
