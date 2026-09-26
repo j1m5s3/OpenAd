@@ -33,6 +33,7 @@ from moccasin.boa_tools import VyperContract
 from moccasin.config import get_active_network
 
 from script.artifacts import ContractRecord, build_artifact, write_artifact
+from script.receipts import require_canonical_receipts
 from script.settler import SETTLER_ADDRESS_ENV, resolve_settler
 from src import AdSlot, CreativeRegistry, Marketplace, CampaignVault
 from src.mocks import MockUSDC
@@ -317,6 +318,9 @@ def deploy() -> dict[str, VyperContract]:
     if network_name == "anvil":
         _purge_anvil_fork_cache()
         _patch_anvil_boa()
+    # Before the first broadcast: Flashblocks RPCs (Alchemy on Base) return pre-confirmation
+    # receipts titanoboa can't use (script/receipts.py). A no-op on pyevm.
+    require_canonical_receipts(boa.env)
     # After the Anvil patch binds the deployer, before the first transaction: a missing or
     # bad OPENAD_SETTLER_ADDRESS fails here, before any gas is spent.
     configured = os.environ.get(SETTLER_ADDRESS_ENV)
