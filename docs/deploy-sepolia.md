@@ -14,7 +14,8 @@ Hosting the api/indexer/settler/web on GCP once `84532.json` exists: `docs/deplo
    uv run mox wallet import base-sepolia
    ```
 
-   Set `default_account_name` for `[networks.base-sepolia]` in `moccasin.toml`.
+   Set `default_account_name` for `[networks.base-sepolia]` in `moccasin.toml`, or pass
+   `--account <wallet name>` to the deploy command below instead.
 
 2. `.env` with `BASE_SEPOLIA_RPC_URL` (and optional `BASESCAN_API_KEY` for verify).
 3. Circle testnet USDC at `0x036CbD53842c5426634e7929541eC2318f3dCF7e` (PROTOCOL §10) — verify on the explorer before deploying.
@@ -104,8 +105,18 @@ cd contracts
 OPENAD_SETTLER_ADDRESS=<settler EOA address> uv run mox run deploy --network base-sepolia
 ```
 
-The deploy prints the settler it sets, and writes `contracts/deployments/84532.json` (commit
-this file). Then verify each contract on Basescan if an API key is configured.
+In PowerShell on Windows, set the variables first (a `VAR=value command` prefix is bash only):
+
+```text
+cd contracts
+$env:BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org"   # or your RPC provider's URL
+$env:OPENAD_SETTLER_ADDRESS = "<settler EOA address>"
+uv run mox run deploy --network base-sepolia --account <wallet name>
+```
+
+It asks for the Moccasin wallet's password, and `prompt_live` asks you to confirm the live
+network, so run it in a real terminal. The deploy prints the settler it sets, and writes
+`contracts/deployments/84532.json` (commit this file). Then verify each contract on Basescan if an API key is configured.
 
 Update `docs/PROTOCOL.md` §10 with the live addresses after a successful broadcast.
 

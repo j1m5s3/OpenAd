@@ -467,12 +467,25 @@ fi
 # web.yaml's ingress is always all, so openad-web keeps its *.run.app URL whatever API_INGRESS is.
 SMOKE_OUT="$(API_INGRESS="internal-and-cloud-load-balancing" API_URL="https://api.foo.com" WEB_URL="https://app.foo.com" \
     run_fake deploy-gcp.sh --dry-run --env staging --only all --project p --region r --tag faketag 2>&1)"
-if ! grep -qF 'services describe openad-web ' <<<"$SMOKE_OUT" || ! grep -qF '<openad-web-url>/healthz' <<<"$SMOKE_OUT"; then
+if ! grep -qF 'services describe openad-web ' <<<"$SMOKE_OUT" || ! grep -qE '<openad-web-url>/health$' <<<"$SMOKE_OUT"; then
     fail "deploy-gcp.sh --only all should smoke openad-web at the URL 'services describe openad-web' returns: $SMOKE_OUT"
-elif grep -qF 'https://app.foo.com/healthz' <<<"$SMOKE_OUT"; then
+elif grep -qF 'https://app.foo.com/health' <<<"$SMOKE_OUT"; then
     fail "deploy-gcp.sh --only all smoked WEB_URL, not openad-web's *.run.app URL: $SMOKE_OUT"
 else
-    echo "  ok: smokes <openad-web-url>/healthz, from 'services describe openad-web'"
+    echo "  ok: smokes <openad-web-url>/health, from 'services describe openad-web'"
+fi
+# Cloud Run's front end answers some paths ending in "z" (e.g. /healthz) with its own 404 before
+# the request reaches the container, so no smoke check may fetch one.
+if grep -E '^\+ curl ' <<<"$SMOKE_OUT" | grep -qE 'z$'; then
+    fail "deploy-gcp.sh --only all smoke-checks a path ending in z, which Cloud Run's front end reserves: $SMOKE_OUT"
+else
+    echo "  ok: no smoke check fetches a path ending in z"
+fi
+SMOKE_OUT="$(run_fake deploy-gcp.sh --dry-run --env staging --only demo --project p --region r --tag faketag 2>&1)"
+if ! grep -qF 'services describe openad-web-demo ' <<<"$SMOKE_OUT" || ! grep -qE '<openad-web-demo-url>/health$' <<<"$SMOKE_OUT"; then
+    fail "deploy-gcp.sh --only demo should smoke openad-web-demo at <openad-web-demo-url>/health: $SMOKE_OUT"
+else
+    echo "  ok: --only demo smokes <openad-web-demo-url>/health"
 fi
 for BAD in internal bogus; do
     if OUT="$(API_INGRESS="$BAD" API_URL="https://api.foo.com" WEB_URL="https://app.foo.com" \

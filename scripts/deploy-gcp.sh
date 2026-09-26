@@ -98,8 +98,9 @@ Smoke checks: openad-api's /v1/health is fetched at its own *.run.app URL (statu
 `gcloud run services describe`) while API_INGRESS is all, so a first run works before
 docs/deploy-gcp.md §9 maps any domain. With internal-and-cloud-load-balancing, *.run.app refuses
 outside requests (inferred; verify before deploy), so the check uses API_URL instead.
-openad-web's /healthz is fetched at its *.run.app URL (web.yaml's ingress is always all), and
-openad-web-demo's at WEB_DEMO_URL when set, else at its *.run.app URL.
+openad-web's /health is fetched at its *.run.app URL (web.yaml's ingress is always all), and
+openad-web-demo's at WEB_DEMO_URL when set, else at its *.run.app URL. /health, never
+/healthz: Cloud Run's front end answers /healthz itself with a 404 (docs/deploy-gcp.md §11).
 
 Guards (checked even under --dry-run, before the first gcloud command):
   - --only stack (or all) refuses without contracts/deployments/<chainId>.json for this env's
@@ -642,8 +643,8 @@ if [ "$ONLY" = "demo" ] || [ "$ONLY" = "all" ]; then
     if [ -z "$WEB_DEMO_URL" ]; then
         WEB_DEMO_URL="$(resolve_service_url openad-web-demo)"
     fi
-    step "Smoke check: openad-web-demo /healthz" run curl --fail --silent --show-error \
-        --retry 5 --retry-delay 3 --retry-connrefused "${WEB_DEMO_URL}/healthz"
+    step "Smoke check: openad-web-demo /health" run curl --fail --silent --show-error \
+        --retry 5 --retry-delay 3 --retry-connrefused "${WEB_DEMO_URL}/health"
 fi
 
 if [ "$ONLY" = "all" ]; then
@@ -656,8 +657,8 @@ if [ "$ONLY" = "all" ]; then
     # name a custom domain that docs/deploy-gcp.md §9 only maps after this point. web.yaml's
     # ingress is `all` (not a variable), so its *.run.app URL always answers.
     WEB_LIVE_URL="$(resolve_service_url openad-web)"
-    step "Smoke check: openad-web /healthz" run curl --fail --silent --show-error \
-        --retry 5 --retry-delay 3 --retry-connrefused "${WEB_LIVE_URL}/healthz"
+    step "Smoke check: openad-web /health" run curl --fail --silent --show-error \
+        --retry 5 --retry-delay 3 --retry-connrefused "${WEB_LIVE_URL}/health"
 fi
 
 echo ""

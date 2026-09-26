@@ -15,6 +15,12 @@ real project id, key, or secret value into this file or into a commit — placeh
   mainnet) already committed — see `docs/deploy-sepolia.md` / `docs/deploy-mainnet.md`. GCP
   deploy does not broadcast contracts.
 - The `gcs` extra buildable: `api/pyproject.toml` `[project.optional-dependencies] gcs`.
+- On Windows, run the bash blocks below and `scripts/deploy-gcp.sh` in Git Bash or WSL, not
+  PowerShell: a PowerShell pipe into `gcloud ... --data-file=-` appends a newline to the secret.
+  If `gcloud` in Git Bash stops with "Python was not found", point it at the Python bundled with
+  the SDK: `export CLOUDSDK_PYTHON="<SDK root>/platform/bundledpython/python.exe"`, where
+  `gcloud info --format='value(installation.sdk_root)'` prints the SDK root. Both seen on the
+  first staging setup (2026-09-26).
 
 ## 1. Enable APIs
 
@@ -34,7 +40,9 @@ gcloud services enable \
 
 `compute.googleapis.com` and `servicenetworking.googleapis.com` are needed for Private Services
 Access and Direct VPC egress (§3) — both underpin every Cloud Run service reaching Cloud SQL's
-private IP **(inferred; verify before deploy)**.
+private IP. With exactly this list enabled, §3's peering and private-IP instance were created on
+the first staging setup (2026-09-26); Direct VPC egress itself is exercised only by the first
+stack deploy **(inferred; verify before deploy)**.
 
 ## 2. Artifact Registry
 
@@ -50,7 +58,9 @@ buckets when no `--gcs-source-staging-dir` is given, which needs project-wide li
 **(inferred; verify before deploy)**), it uses a dedicated one instead, named by
 `BUILD_STAGING_BUCKET` (default `<PROJECT_ID>-openad-builds`, `scripts/deploy-gcp.sh`), so the
 deployer SA's storage grant (§10) can be scoped to just that bucket. Pre-create it once, since
-the deployer SA cannot create buckets itself:
+the deployer SA cannot create buckets itself. On the first staging setup (2026-09-26) a
+`gcloud builds submit` run by the project owner with this bucket succeeded, and the build ran as
+the project's default Compute Engine service account with no extra grants:
 
 ```bash
 gcloud storage buckets create gs://<PROJECT_ID>-openad-builds \
@@ -99,7 +109,8 @@ gcloud sql instances describe openad-<ENV> --format='value(ipAddresses[0].ipAddr
 # max_connections is set explicitly rather than left to the tier default: the connection
 # budget below requires at least 100, verified before every deploy.
 # --edition=ENTERPRISE: new Postgres 16 instances default to Enterprise Plus, which doesn't
-# offer db-custom-* tiers (inferred; verify before deploy).
+# offer db-custom-* tiers (inferred). This exact command, with --edition=ENTERPRISE and
+# db-custom-1-3840, succeeded on the first staging setup (2026-09-26).
 gcloud sql instances create openad-<ENV> \
   --database-version=POSTGRES_16 --tier=db-custom-1-3840 --edition=ENTERPRISE \
   --region=<REGION> --no-assign-ip --network=default \
@@ -672,8 +683,11 @@ with a non-zero status (`echo $?`) and leaves your own shell open. Its hosts are
   curl -sf https://app.<domain>/embed-demo   # the real web app's own embed-demo page
 
   # openad-web-demo is a SEPARATE Cloud Run service with its own host (WEB_DEMO_URL, §9) —
-  # check it there at /healthz, never at a "/demo/" path on the real web app's own host.
-  curl -sf https://demo.<domain>/healthz
+  # check it there at /health, never at a "/demo/" path on the real web app's own host. Not
+  # /healthz: Cloud Run's front end answers some paths ending in "z" with its own 404 before the
+  # request reaches the container (seen at a *.run.app URL on the first staging deploy,
+  # 2026-09-26), so the web images serve their health check at /health.
+  curl -sf https://demo.<domain>/health
   echo "smoke checks passed"
 )
 ```
