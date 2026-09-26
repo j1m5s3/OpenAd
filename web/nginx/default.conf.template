@@ -19,7 +19,10 @@ server {
 
     # Repeated verbatim in every location block below (nginx does not merge add_header sets
     # across levels — a location with its own add_header must restate all of them).
-    location = /healthz {
+    # /health, not /healthz: Cloud Run's front end reserves some paths ending in "z" and answers
+    # /healthz on a *.run.app URL with its own 404 before the request reaches this container
+    # (seen on the first staging deploy, 2026-09-26). Don't add a location whose path ends in z.
+    location = /health {
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;

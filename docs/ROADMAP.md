@@ -292,6 +292,14 @@ protocol contract changes in this phase (anything that would need one is recorde
       shipped it off by default — follow §11's verify-then-enable steps); the settler is a
       dedicated, gas-only EOA (6.13); the `staging` environment's `vars` are set in GitHub
       (6.12); and every "(inferred; verify before deploy)" fact in the runbook has been checked.
+      **Progress (2026-09-26):** the staging project is set up through runbook §1–§5 (APIs,
+      Artifact Registry, the builds and media buckets, service accounts, secrets including the
+      settler key, and a private-IP Cloud SQL instance), and the demo site is live on Cloud Run.
+      The stack (§6–8) waits on the Base Sepolia contracts deploy (`84532.json`). Staging runs on
+      the default `*.run.app` addresses for now, so sign-in stays off until §9 maps a domain;
+      §10 (Workload Identity Federation) is not started. The first demo deploy showed that Cloud
+      Run's front end answers `/healthz` itself, so the web images and their smoke checks now use
+      `/health`; the runbook marks the facts this setup confirmed with its date.
 - [x] **6.11 The deploy images boot-check in CI (ADR-0017).** _Done 2026-09-25 (PR #20)._
       Pointers: `api/Dockerfile` · `web/Dockerfile` · `web/nginx/default.conf.template` ·
       `infra/gcp/cloudbuild.yaml` · `infra/gcp/services/{web,web-demo}.yaml` ·

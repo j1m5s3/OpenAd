@@ -187,9 +187,11 @@ jobs:
           --build-arg VITE_CHAIN_ID=84532 -t openad-web:ci .
       - name: Run web container
         run: docker run -d --name web -p 8081:8080 openad-web:ci
-      - name: Wait for openad-web /healthz
+      # /health answers "ok" from its own nginx location; any other path would get the SPA's
+      # index.html with a 200, so the body check is what proves the health location exists.
+      - name: Wait for openad-web /health
         run: curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors
-          http://localhost:8081/healthz
+          http://localhost:8081/health | grep -qx ok
       - name: Check web image CSP img-src is the demo-safe default
         run: |
           curl -sSI http://localhost:8081/ | tr -d '\r' \
@@ -208,9 +210,9 @@ jobs:
         run: docker build -f web/Dockerfile --build-arg VITE_DEMO_MODE=1 -t openad-web-demo:ci .
       - name: Run web-demo container
         run: docker run -d --name web-demo -p 8080:8080 openad-web-demo:ci
-      - name: Wait for /healthz
+      - name: Wait for /health
         run: curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors
-          http://localhost:8080/healthz
+          http://localhost:8080/health | grep -qx ok
       - name: Check / returns 200
         run: |
           code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/)"
